@@ -2,6 +2,31 @@
 
 #define LINKER_BASE 0x600000
 
+bool
+shiva_build_auxv_stack(struct shiva_ctx *ctx)
+{
+	uint64_t *esp, *envp, *argv;
+	uint64_t esp_start;
+	int i, count, totalsize, stroffset, len, argc;
+	void *stack;
+	Elf64_auxv_t *auxv;
+
+	count += sizeof(argc);
+	count += ctx->argc * sizeof(char *);
+	count += sizeof(void *);
+}
+
+void
+shiva_save_stack(struct shiva_ctx *ctx)
+{
+	size_t sz, i, j, tmp;
+	char **envpp = ctx->envp;
+
+	for (i = 0, sz = 0, tmp = ctx->argc; tmp > 0; tmp--, i++)
+		sz += strlen(ctx->argv[i]) + 1;
+	ctx->ulexec.arglen = sz;
+}
+
 static inline int
 shiva_ulexec_make_prot(uint32_t p_flags)
 {

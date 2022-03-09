@@ -77,6 +77,15 @@ typedef struct shiva_ctx {
 		uint64_t entry_point;
 		uint64_t base_vaddr;
 		uint64_t phdr_vaddr; // vaddr of phdr table for mapped binary
+		size_t arglen;
+		size_t envpcount;
+		size_t envplen;
+		char *envstr;
+		struct {
+			size_t sz;
+			size_t count;
+			uint8_t *vector;
+		} auxv;
 		/*
 		 * mapped LDSO specific data
 		 */
