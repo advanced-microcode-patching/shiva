@@ -69,7 +69,7 @@ build_target_argv(struct shiva_ctx *ctx, char **argv, int argc)
 	return true;
 }
 
-int main(int argc, char **argv)
+int main(int argc, char **argv, char **envp)
 {
 	shiva_ctx_t ctx;
 	int opt, i, subend;
@@ -91,6 +91,10 @@ int main(int argc, char **argv)
 		printf("Example: shiva -sbr /bin/ls -lR\n");
 		exit(EXIT_FAILURE);
 	}
+
+	ctx.argc = argc;
+	ctx.argv = argv;
+	ctx.envp = envp;
 
 	if (build_target_argv(&ctx, argv, argc) == false) {
 		fprintf(stderr, "build_target_argv failed\n");

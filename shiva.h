@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,7 +32,10 @@
 #define SHIVA_F_STRING_ARGS		(1UL << 1)
 #define SHIVA_F_RETURN_FLOW		(1UL << 2)
 
-int global_pid;
+#define SHIVA_STACK_SIZE	(PAGE_SIZE * 100)
+
+#define SHIVA_LDSO_BASE		0x600000
+#define SHIVA_TARGET_BASE	0x1000000
 
 typedef enum shiva_branch_type {
 	SHIVA_BRANCH_JMP = 0,
@@ -49,7 +53,10 @@ struct shiva_branch_site {
 
 typedef struct shiva_ctx {
 	char *path;
+	int argc;
 	char **args;
+	char **argv;
+	char **envp;
 	int argcount;
 	elfobj_t elfobj;
 	uint64_t flags;
@@ -70,6 +77,14 @@ typedef struct shiva_ctx {
 		uint64_t entry_point;
 		uint64_t base_vaddr;
 		uint64_t phdr_vaddr; // vaddr of phdr table for mapped binary
+		/*
+		 * mapped LDSO specific data
+		 */
+		struct {
+			uint64_t entry_point;
+			uint64_t base_vaddr;
+			uint64_t phdr_vaddr;
+		} ldso;
 	} ulexec;
 	struct {
 		SLIST_HEAD(, shiva_branch_site) branch_list;

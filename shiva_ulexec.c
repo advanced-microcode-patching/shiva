@@ -59,10 +59,18 @@ shiva_ulexec_segment_copy(elfobj_t *elfobj, uint8_t *dst,
 	return true;
 }
 
-bool
-shiva_ulexec(struct shiva_ctx *ctx)
+static uint8_t *
+shiva_ulxec_allocstack(struct shiva_ctx *ctx)
 {
-	elfobj_t *elfobj = &ctx->elfobj;
+	ctx->ulexec.stack = mmap(NULL, SHIVA_STACK_SIZE, PROT_READ|PROT_WRITE,
+	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_GROWSDOWN, -1, 0);
+	assert(ctx->ulexec.stack != MAP_FAILED);
+	return ctx->ulexec.stack;
+}
+
+bool
+shiva_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool interpreter)
+{
 	uint64_t vaddr;
 	bool res;
 	elf_iterator_res_t ires;
@@ -94,7 +102,7 @@ shiva_ulexec(struct shiva_ctx *ctx)
 		if (elfprot & PROT_EXEC)
 			shiva_debug("PROT_EXEC\n");
 		if (phdr.offset == 0) {
-			base_vaddr = LINKER_BASE;
+			base_vaddr = SHIVA_TARGET_BASE;
 			shiva_debug("Attempting to map %#lx\n", base_vaddr);
 			mem = mmap((void *)base_vaddr, phdr.memsz, PROT_READ|PROT_WRITE, MAP_PRIVATE|
 			    MAP_ANONYMOUS|MAP_FIXED, -1, 0);
@@ -157,8 +165,14 @@ shiva_ulexec(struct shiva_ctx *ctx)
 		last_memsz = phdr.memsz;
 		last_offset = phdr.offset;
 	}
-	ctx->ulexec.entry_point = base_vaddr + elf_entry_point(elfobj);
-	ctx->ulexec.base_vaddr = base_vaddr;
-	ctx->ulexec.phdr_vaddr = base_vaddr + elf_phoff(elfobj);
+	if (interpreter == false) {
+		ctx->ulexec.entry_point = base_vaddr + elf_entry_point(elfobj);
+		ctx->ulexec.base_vaddr = base_vaddr;
+		ctx->ulexec.phdr_vaddr = base_vaddr + elf_phoff(elfobj);
+	} else {
+		ctx->ulexec.ldso.entry_point = base_vaddr + elf_entry_point(elfobj);
+		ctx->ulexec.ldso.base_vaddr = base_vaddr;
+		ctx->ulexec.ldso.phdr_vaddr = base_vaddr + elf_phoff(elfobj);
+	}
 	return true;
 }
