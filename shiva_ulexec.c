@@ -21,10 +21,32 @@ shiva_save_stack(struct shiva_ctx *ctx)
 {
 	size_t sz, i, j, tmp;
 	char **envpp = ctx->envp;
+	char *s;
 
 	for (i = 0, sz = 0, tmp = ctx->argc; tmp > 0; tmp--, i++)
 		sz += strlen(ctx->argv[i]) + 1;
 	ctx->ulexec.arglen = sz;
+
+	for (i = 0, sz = 0; *envpp != NULL; envpp++, i++)
+		sz += strlen(*envpp) + 1;
+
+	ctx->ulexec.envpcount = i;
+	ctx->ulexec.envplen = sz;
+	assert((ctx->ulexec.envstr = malloc(ctx->ulexec.envplen)) != NULL);
+	assert((ctx->ulexec.argstr = malloc(ctx->ulexec.arglen)) != NULL);
+
+	for (s = ctx->ulexec.argstr, j = 0, i = 0; i < ctx->argc; i++) {
+		while (j < strlen(ctx->argv[i]))
+			s[j] = ctx->argv[i][j++];
+		s[j] = '\0';
+		s += strlen(ctx->argv[i]) + 1;
+		j = 0;
+	}
+	for (i = 0; *ctx->envp != NULL; ctx->envp++) {
+		strcpy(&ctx->ulexec.envstr[i], *ctx->envp);
+		i += strlen(*ctx->envp) + 1;
+	}
+	return;
 }
 
 static inline int

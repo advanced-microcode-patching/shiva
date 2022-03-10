@@ -81,6 +81,7 @@ typedef struct shiva_ctx {
 		size_t envpcount;
 		size_t envplen;
 		char *envstr;
+		char *argstr;
 		struct {
 			size_t sz;
 			size_t count;
