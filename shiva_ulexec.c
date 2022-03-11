@@ -1,23 +1,87 @@
 #include "shiva.h"
 
-#define LINKER_BASE 0x600000
+#define SHIVA_AUXV_COUNT 7
 
-bool
-shiva_build_auxv_stack(struct shiva_ctx *ctx)
+static uint8_t *
+shiva_ulexec_allocstack(struct shiva_ctx *ctx)
 {
-	uint64_t *esp, *envp, *argv;
+        ctx->ulexec.stack = mmap(NULL, SHIVA_STACK_SIZE, PROT_READ|PROT_WRITE,
+            MAP_PRIVATE|MAP_ANONYMOUS|MAP_GROWSDOWN, -1, 0);
+        assert(ctx->ulexec.stack != MAP_FAILED);
+        return ctx->ulexec.stack;
+}
+/*
+ * Remember the layout:
+ * 	argc, argv[0], argv[N], NULL, envp[0], envp[N], auxv_entry[0], auxv_entry[N], .ascii data
+ * 	           \______________________________________________________________________/
+ *
+ */
+
+static bool
+shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx)
+{
+	uint64_t *esp, *sp, *envp, *argv;
 	uint64_t esp_start;
 	int i, count, totalsize, stroffset, len, argc;
-	void *stack;
+	uint8_t *stack;
 	Elf64_auxv_t *auxv;
+	char *strdata, *s;
 
 	count += sizeof(argc);
 	count += ctx->argc * sizeof(char *);
 	count += sizeof(void *);
+	count += ctx->ulexec.envpcount * sizeof(char *);
+	count += sizeof(void *);
+	count += SHIVA_AUXV_COUNT * sizeof(Elf64_auxv_t);
+	count = (count + 16) & ~(16 - 1);
+	totalsize = count + ctx->ulexec.envplen + ctx->ulexec.arglen;
+	totalsize = (totalsize + 16) & ~(16 - 1);
+
+	stack = shiva_ulexec_allocstack(ctx);
+	if (stack == NULL) {
+		fprintf(stderr, "Unable to allocate stack\n");
+		return false;
+	}
+	esp = (uint64_t *)stack;
+	sp = esp = esp - (totalsize / sizeof(void *));
+	esp_start = (uint64_t)esp;
+	/*
+	 * strdata points to the end of the auxiliary vector
+	 * where it must copy the ascii data into place. This
+	 * data was copied into ctx->ulexec.argstr earlier in
+	 * the shiva_ulexec_save_stack() function.
+	 */
+	strdata = (char *)(esp_start + count);
+	s = ctx->ulexec.argstr;
+	*esp++ = ctx->argc;
+	for (argc = ctx->argc; argc > 0; argc--) {
+		strcpy(strdata, s);
+		len = strlen(s) + 1;
+		s += len;
+		*esp++ = (uintptr_t)strdata; /* set argv[n] = (char *)"arg_string" */
+		strdata += len;
+	}
+	/*
+	 * Append NULL after last argv ptr
+	 */
+	*esp++ = (uintptr_t)0; // Our stack currently: argc, argv[0], argv[n], NULL
+
+	/*
+	 * Copyin envp pointers and envp ascii data
+	 */
+	for (s = ctx->ulexec.envstr, i = 0; i < ctx->ulexec.envpcount; i++) {
+		strcpy(strdata, s);
+		len = strlen(s) + 1;
+		s += len;
+		*esp++ = (uintptr_t)strdata;
+		strdata += len;
+	}
+	*esp++ = (uintptr_t)0;
+	//memcpy((void *)esp, (void *)ctx->ulexec.auxv.vector
 }
 
-void
-shiva_save_stack(struct shiva_ctx *ctx)
+static bool
+shiva_ulexec_save_stack(struct shiva_ctx *ctx)
 {
 	size_t sz, i, j, tmp;
 	char **envpp = ctx->envp;
@@ -32,9 +96,16 @@ shiva_save_stack(struct shiva_ctx *ctx)
 
 	ctx->ulexec.envpcount = i;
 	ctx->ulexec.envplen = sz;
-	assert((ctx->ulexec.envstr = malloc(ctx->ulexec.envplen)) != NULL);
-	assert((ctx->ulexec.argstr = malloc(ctx->ulexec.arglen)) != NULL);
-
+	ctx->ulexec.envstr = malloc(ctx->ulexec.envplen);
+	if (ctx->ulexec.envstr == NULL) {
+		perror("malloc");
+		return false;
+	}
+	ctx->ulexec.argstr = malloc(ctx->ulexec.arglen);
+	if (ctx->ulexec.argstr == NULL) {
+		perror("malloc");
+		return false;
+	}
 	for (s = ctx->ulexec.argstr, j = 0, i = 0; i < ctx->argc; i++) {
 		while (j < strlen(ctx->argv[i]))
 			s[j] = ctx->argv[i][j++];
@@ -46,7 +117,7 @@ shiva_save_stack(struct shiva_ctx *ctx)
 		strcpy(&ctx->ulexec.envstr[i], *ctx->envp);
 		i += strlen(*ctx->envp) + 1;
 	}
-	return;
+	return true;
 }
 
 static inline int
@@ -106,17 +177,8 @@ shiva_ulexec_segment_copy(elfobj_t *elfobj, uint8_t *dst,
 	return true;
 }
 
-static uint8_t *
-shiva_ulxec_allocstack(struct shiva_ctx *ctx)
-{
-	ctx->ulexec.stack = mmap(NULL, SHIVA_STACK_SIZE, PROT_READ|PROT_WRITE,
-	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_GROWSDOWN, -1, 0);
-	assert(ctx->ulexec.stack != MAP_FAILED);
-	return ctx->ulexec.stack;
-}
-
 bool
-shiva_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool interpreter)
+shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool interpreter)
 {
 	uint64_t vaddr;
 	bool res;

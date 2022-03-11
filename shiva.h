@@ -37,6 +37,24 @@
 #define SHIVA_LDSO_BASE		0x600000
 #define SHIVA_TARGET_BASE	0x1000000
 
+typedef enum shiva_iterator_res {
+	SHIVA_ITER_OK = 0,
+	SHIVA_ITER_DONE,
+	SHIVA_ITER_ERROR
+} shiva_iterator_res_t;
+
+typedef struct shiva_auxv_iterator {
+	unsigned int index;
+	struct shiva_ctx *ctx;
+	Elf64_auxv_t *auxv;
+} shiva_auxv_iterator_t;
+
+typedef struct shiva_auxv_entry {
+	uint64_t value;
+	int type;
+	char *string;
+} shiva_auxv_entry_t;
+
 typedef enum shiva_branch_type {
 	SHIVA_BRANCH_JMP = 0,
 	SHIVA_BRANCH_CALL,
@@ -114,3 +132,11 @@ void * shiva_malloc(size_t);
  */
 
 void shiva_sighandle(int);
+
+/*
+ * shiva_iter.c
+ */
+bool shiva_auxv_iterator_init(struct shiva_ctx *, struct shiva_auxv_iterator *);
+shiva_iterator_res_t shiva_auxv_iterator_next(struct shiva_auxv_iterator *, struct shiva_auxv_entry *);
+bool shiva_auxv_set_value(struct shiva_auxv_iterator *, long);
+

@@ -1,4 +1,4 @@
-#include "shiva_interp.h"
+#include "shiva.h"
 #include "shiva_debug.h"
 
 #define ERRONEOUS_AUXV_COUNT 4096
@@ -29,15 +29,15 @@ shiva_auxv_iterator_next(struct shiva_auxv_iterator *iter, struct shiva_auxv_ent
 	struct shiva_ctx *ctx = 0;
 
 	if (iter->auxv[iter->index].a_type == AT_NULL)
-		return LP_ITER_DONE;
+		return SHIVA_ITER_DONE;
 
 	entry->type = iter->auxv[iter->index].a_type;
 	entry->value = iter->auxv[iter->index].a_un.a_val;
 	if (iter->auxv[iter->index].a_type == AT_EXECFN)
 		entry->string = (char *)entry->value;
 	if (iter->index++ >= ERRONEOUS_AUXV_COUNT)
-		return LP_ITER_ERROR;
-	return LP_ITER_OK;
+		return SHIVA_ITER_ERROR;
+	return SHIVA_ITER_OK;
 }
 
 /*
