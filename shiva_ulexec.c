@@ -118,6 +118,15 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out)
 		case AT_ENTRY:
 			auxv->a_un.a_val = ctx->ulexec.entry_point;
 			break;
+		case AT_FLAGS:
+			/*
+			 * SPECIAL NOTE: We overwrite the flags entry with
+			 * a saved pointer to the shiva_ctx_t *ctx. This is
+			 * then passed into %rdi before calling the module
+			 * code.
+			 */
+			auxv->a_un.a_val = (uint64_t)ctx;
+			break;
 		default:
 			auxv->a_un.a_val = a_entry.value;
 			break;
@@ -391,6 +400,7 @@ shiva_ulexec(struct shiva_ctx *ctx)
 	shiva_debug("Passing control to ldso entry point: %#lx with rsp: %#lx "
 	    "and target entry: %#lx\n",
 	    ctx->ulexec.ldso.entry_point, ctx->ulexec.rsp_start, ctx->ulexec.entry_point);
+
 
 	LDSO_TRANSFER(ctx->ulexec.rsp_start, ctx->ulexec.ldso.entry_point,
 	    ctx->ulexec.entry_point);
