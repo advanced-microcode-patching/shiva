@@ -29,7 +29,7 @@ shiva_ulexec_allocstack(struct shiva_ctx *ctx)
 	assert(ctx->ulexec.stack != MAP_FAILED);
 	shiva_debug("STACK: %#lx - %#lx\n", (uint64_t)ctx->ulexec.stack,
 	    (uint64_t)ctx->ulexec.stack + (size_t)SHIVA_STACK_SIZE);
-	return (uint64_t *)(ctx->ulexec.stack + SHIVA_STACK_SIZE);
+	return (ctx->ulexec.stack + SHIVA_STACK_SIZE);
 }
 /*
  * Remember the layout:
@@ -76,15 +76,11 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out)
 	 */
 	strdata = (char *)(esp_start + count);
 	s = ctx->ulexec.argstr;
-	printf("Argstr: %s\n", ctx->ulexec.argstr);
 	*esp++ = ctx->argc;
-	printf("strdata: %p\n", strdata);
 	for (argc = ctx->argc; argc > 0; argc--) {
-		printf("Copying s: %s to strdata\n", s);
 		strcpy(strdata, s);
 		len = strlen(s) + 1;
 		s += len;
-		printf("pointing %#lx to strdata: %s\n", esp, strdata);
 		*esp++ = (uintptr_t)strdata; /* set argv[n] = (char *)"arg_string" */
 		strdata += len;
 	}
@@ -168,9 +164,7 @@ shiva_ulexec_save_stack(struct shiva_ctx *ctx)
 			s[j] = ctx->argv[i][j];
 			j++;
 		}
-		printf("s[%d] = 0\n", j);
 		s[j] = '\0';
-		printf("s: %s\n", s);
 		s += strlen(ctx->argv[i]) + 1;
 		j = 0;
 	}
