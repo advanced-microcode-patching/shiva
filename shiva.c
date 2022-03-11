@@ -1,14 +1,13 @@
 #include "shiva.h"
 
 bool
-load_trace_data(struct shiva_ctx *ctx)
+shiva_build_trace_data(struct shiva_ctx *ctx)
 {
 	elf_error_t error;
 	struct elf_section section;
 	uint64_t mode;
 	uint8_t *code;
 
-#if 0
 	if (elf_open_object(ctx->path, &ctx->elfobj, ELF_LOAD_F_FORENSICS,
 	    &error) == false) {
 	    fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n", ctx->path,
@@ -43,12 +42,11 @@ load_trace_data(struct shiva_ctx *ctx)
 	for (i = 0; i < ctx->disas.count; i++) {
 		printf("op_str: %s\n", ctx->disas.insn[i].op_str);
 	}
-#endif
 	return true;
 }
 
 bool
-build_target_argv(struct shiva_ctx *ctx, char **argv, int argc)
+shiva_build_target_argv(struct shiva_ctx *ctx, char **argv, int argc)
 {
 	char **p;
 	int addend, i;
@@ -66,6 +64,8 @@ build_target_argv(struct shiva_ctx *ctx, char **argv, int argc)
 		*(ctx->args + i) = shiva_strdup(*p);
 	*(ctx->args + i) = NULL;
 	ctx->argcount = i;
+	ctx->argv = &argv[addend];
+	ctx->argc = argc - addend;
 	return true;
 }
 
@@ -83,6 +83,8 @@ int main(int argc, char **argv, char **envp)
 	sigemptyset(&set);
 	sigaddset(&set, SIGINT);
 
+	memset(&ctx, 0, sizeof(ctx));
+
 	if ((argc < 2) || (argc == 2 && argv[1][0] == '-')) {
 		printf("Usage: %s [-sbr] <prog> [<prog> args]\n", argv[0]);
 		printf("[-s] string values\n");
@@ -92,12 +94,15 @@ int main(int argc, char **argv, char **envp)
 		exit(EXIT_FAILURE);
 	}
 
-	ctx.argc = argc;
-	ctx.argv = argv;
 	ctx.envp = envp;
 
-	if (build_target_argv(&ctx, argv, argc) == false) {
+	if (shiva_build_target_argv(&ctx, argv, argc) == false) {
 		fprintf(stderr, "build_target_argv failed\n");
+		return false;
+	}
+
+	if (access(ctx.path, F_OK) != 0) {
+		fprintf(stderr, "Could not access binary path: %s\n", ctx.path);
 		return false;
 	}
 
@@ -127,9 +132,13 @@ int main(int argc, char **argv, char **envp)
 		printf("%s ", ctx.args[i]);
 	}
 #endif
-	if (load_trace_data(&ctx) == false) {
-		fprintf(stderr, "load_trace_data(%p) failed\n", &ctx);
-		exit(EXIT_FAILURE);
+	if (shiva_build_trace_data(&ctx) == false) {
+		fprintf(stderr, "shiva_build_trace_data() failed\n");
+		return false;
 	}
+	if (shiva_ulexec(&ctx) == false) {
+		fprintf(stderr, "shiva_ulexec() failed\n");
+		return false;
+	}
+	return true;
 }
-

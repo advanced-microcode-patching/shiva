@@ -1,31 +1,53 @@
 #include "shiva.h"
 
-#define SHIVA_AUXV_COUNT 7
+#define SHIVA_AUXV_COUNT 19
+
+#define LDSO_TRANSFER(stack, addr, entry) __asm__ __volatile__("mov %0, %%rsp\n" \
+                                            "push %1\n" \
+                                            "mov %2, %%rax\n" \
+                                            "mov $0, %%rbx\n" \
+                                            "mov $0, %%rcx\n" \
+                                            "mov $0, %%rdx\n" \
+                                            "mov $0, %%rsi\n" \
+                                            "mov $0, %%rdi\n" \
+                                            "mov $0, %%rbp\n" \
+                                            "mov $0, %%r8\n" \
+                                            "mov $0, %%r9\n" \
+                                            "mov $0, %%r10\n" \
+                                            "mov $0, %%r11\n" \
+                                            "mov $0, %%r12\n" \
+                                            "mov $0, %%r13\n" \
+                                            "mov $0, %%r14\n" \
+                                            "mov $0, %%r15\n" \
+                                            "ret" :: "r" (stack), "g" (addr), "g"(entry))
 
 static uint8_t *
 shiva_ulexec_allocstack(struct shiva_ctx *ctx)
 {
-        ctx->ulexec.stack = mmap(NULL, SHIVA_STACK_SIZE, PROT_READ|PROT_WRITE,
-            MAP_PRIVATE|MAP_ANONYMOUS|MAP_GROWSDOWN, -1, 0);
-        assert(ctx->ulexec.stack != MAP_FAILED);
-        return ctx->ulexec.stack;
+	ctx->ulexec.stack = mmap(NULL, SHIVA_STACK_SIZE, PROT_READ|PROT_WRITE,
+	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_GROWSDOWN, -1, 0);
+	assert(ctx->ulexec.stack != MAP_FAILED);
+	shiva_debug("STACK: %#lx - %#lx\n", (uint64_t)ctx->ulexec.stack,
+	    (uint64_t)ctx->ulexec.stack + (size_t)SHIVA_STACK_SIZE);
+	return (uint64_t *)(ctx->ulexec.stack + SHIVA_STACK_SIZE);
 }
 /*
  * Remember the layout:
- * 	argc, argv[0], argv[N], NULL, envp[0], envp[N], auxv_entry[0], auxv_entry[N], .ascii data
- * 	           \______________________________________________________________________/
+ *	argc, argv[0], argv[N], NULL, envp[0], envp[N], auxv_entry[0], auxv_entry[N], .ascii data
+ *		   \______________________________________________________________________/
  *
  */
 
 static bool
-shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx)
+shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out)
 {
 	uint64_t *esp, *sp, *envp, *argv;
 	uint64_t esp_start;
 	int i, count, totalsize, stroffset, len, argc;
 	uint8_t *stack;
-	Elf64_auxv_t *auxv;
 	char *strdata, *s;
+	shiva_auxv_iterator_t a_iter;
+	struct shiva_auxv_entry a_entry;
 
 	count += sizeof(argc);
 	count += ctx->argc * sizeof(char *);
@@ -42,6 +64,7 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx)
 		fprintf(stderr, "Unable to allocate stack\n");
 		return false;
 	}
+	shiva_debug("STACK: %p\n", stack);
 	esp = (uint64_t *)stack;
 	sp = esp = esp - (totalsize / sizeof(void *));
 	esp_start = (uint64_t)esp;
@@ -53,11 +76,15 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx)
 	 */
 	strdata = (char *)(esp_start + count);
 	s = ctx->ulexec.argstr;
+	printf("Argstr: %s\n", ctx->ulexec.argstr);
 	*esp++ = ctx->argc;
+	printf("strdata: %p\n", strdata);
 	for (argc = ctx->argc; argc > 0; argc--) {
+		printf("Copying s: %s to strdata\n", s);
 		strcpy(strdata, s);
 		len = strlen(s) + 1;
 		s += len;
+		printf("pointing %#lx to strdata: %s\n", esp, strdata);
 		*esp++ = (uintptr_t)strdata; /* set argv[n] = (char *)"arg_string" */
 		strdata += len;
 	}
@@ -77,7 +104,36 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx)
 		strdata += len;
 	}
 	*esp++ = (uintptr_t)0;
-	//memcpy((void *)esp, (void *)ctx->ulexec.auxv.vector
+	Elf64_auxv_t *auxv = (Elf64_auxv_t *)esp;
+	shiva_auxv_iterator_init(ctx, &a_iter);
+	while (shiva_auxv_iterator_next(&a_iter, &a_entry) == SHIVA_ITER_OK) {
+		auxv->a_type = a_entry.type;
+		switch(a_entry.type) {
+		case AT_PHDR:
+			auxv->a_un.a_val = ctx->ulexec.phdr_vaddr;
+			break;
+		case AT_PHNUM:
+			auxv->a_un.a_val = elf_segment_count(&ctx->elfobj);
+			break;
+		case AT_BASE:
+			shiva_debug("ldso base: %#lx\n", ctx->ulexec.ldso.base_vaddr);
+			auxv->a_un.a_val = ctx->ulexec.ldso.base_vaddr;
+			break;
+		case AT_ENTRY:
+			auxv->a_un.a_val = ctx->ulexec.entry_point;
+			break;
+		default:
+			auxv->a_un.a_val = a_entry.value;
+			break;
+		}
+		auxv++;
+	}
+	/*
+	 * Set the out value to the stack address that is &argc -- the beginning
+	 * of our stack setup.
+	 */
+	*out = (uint64_t)esp_start;
+	return esp_start;
 }
 
 static bool
@@ -107,9 +163,14 @@ shiva_ulexec_save_stack(struct shiva_ctx *ctx)
 		return false;
 	}
 	for (s = ctx->ulexec.argstr, j = 0, i = 0; i < ctx->argc; i++) {
-		while (j < strlen(ctx->argv[i]))
-			s[j] = ctx->argv[i][j++];
+		shiva_debug("Copying bytes from %s\n", ctx->argv[i]);
+		while (j < strlen(ctx->argv[i])) {
+			s[j] = ctx->argv[i][j];
+			j++;
+		}
+		printf("s[%d] = 0\n", j);
 		s[j] = '\0';
+		printf("s: %s\n", s);
 		s += strlen(ctx->argv[i]) + 1;
 		j = 0;
 	}
@@ -123,15 +184,15 @@ shiva_ulexec_save_stack(struct shiva_ctx *ctx)
 static inline int
 shiva_ulexec_make_prot(uint32_t p_flags)
 {
-        int prot = 0;
+	int prot = 0;
 
-        if (p_flags & PF_R)
-                prot |= PROT_READ;
-        if (p_flags & PF_W)
-                prot |= PROT_WRITE;
-        if (p_flags & PF_X)
-                prot |= PROT_EXEC;
-        return prot;
+	if (p_flags & PF_R)
+		prot |= PROT_READ;
+	if (p_flags & PF_W)
+		prot |= PROT_WRITE;
+	if (p_flags & PF_X)
+		prot |= PROT_EXEC;
+	return prot;
 }
 
 /*
@@ -142,16 +203,16 @@ static bool
 shiva_ulexec_segment_copy(elfobj_t *elfobj, uint8_t *dst,
     struct elf_segment segment)
 {
-        size_t len = segment.filesz / sizeof(uint64_t);
-        size_t rem = len % sizeof(uint64_t);
-        uint64_t qword;
-        bool res;
-        uint8_t byte;
-        size_t i = 0;
+	size_t len = segment.filesz / sizeof(uint64_t);
+	size_t rem = len % sizeof(uint64_t);
+	uint64_t qword;
+	bool res;
+	uint8_t byte;
+	size_t i = 0;
 
-        shiva_debug("Reading from address %#lx - %#lx\n", segment.vaddr,
-            segment.vaddr + segment.filesz);
-        for (i = 0; i < segment.filesz; i += sizeof(uint64_t)) {
+	shiva_debug("Reading from address %#lx - %#lx\n", segment.vaddr,
+	    segment.vaddr + segment.filesz);
+	for (i = 0; i < segment.filesz; i += sizeof(uint64_t)) {
 		if (i + sizeof(uint64_t) >= segment.filesz) {
 			size_t j;
 
@@ -167,13 +228,13 @@ shiva_ulexec_segment_copy(elfobj_t *elfobj, uint8_t *dst,
 			}
 			break;
 		}
-                res = elf_read_address(elfobj, segment.vaddr + i, &qword, ELF_QWORD);
-                if (res == false) {
-                        shiva_debug("elf_read_address failed at %#lx\n", segment.vaddr + i);
-                        return false;
-                }
-                *(uint64_t *)&dst[i] = qword;
-        }
+		res = elf_read_address(elfobj, segment.vaddr + i, &qword, ELF_QWORD);
+		if (res == false) {
+			shiva_debug("elf_read_address failed at %#lx\n", segment.vaddr + i);
+			return false;
+		}
+		*(uint64_t *)&dst[i] = qword;
+	}
 	return true;
 }
 
@@ -211,7 +272,7 @@ shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool inter
 		if (elfprot & PROT_EXEC)
 			shiva_debug("PROT_EXEC\n");
 		if (phdr.offset == 0) {
-			base_vaddr = SHIVA_TARGET_BASE;
+			base_vaddr = (interpreter == false ? SHIVA_TARGET_BASE : SHIVA_LDSO_BASE);
 			shiva_debug("Attempting to map %#lx\n", base_vaddr);
 			mem = mmap((void *)base_vaddr, phdr.memsz, PROT_READ|PROT_WRITE, MAP_PRIVATE|
 			    MAP_ANONYMOUS|MAP_FIXED, -1, 0);
@@ -275,13 +336,73 @@ shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool inter
 		last_offset = phdr.offset;
 	}
 	if (interpreter == false) {
+		shiva_debug("Setting entry point for target: %#lx\n", base_vaddr + elf_entry_point(elfobj));
 		ctx->ulexec.entry_point = base_vaddr + elf_entry_point(elfobj);
 		ctx->ulexec.base_vaddr = base_vaddr;
 		ctx->ulexec.phdr_vaddr = base_vaddr + elf_phoff(elfobj);
 	} else {
+		shiva_debug("Setting entry point for ldso: %#lx\n", base_vaddr + elf_entry_point(elfobj));
 		ctx->ulexec.ldso.entry_point = base_vaddr + elf_entry_point(elfobj);
 		ctx->ulexec.ldso.base_vaddr = base_vaddr;
 		ctx->ulexec.ldso.phdr_vaddr = base_vaddr + elf_phoff(elfobj);
 	}
+	return true;
+}
+
+bool
+shiva_ulexec(struct shiva_ctx *ctx)
+{
+	char *interp = NULL;
+	elf_error_t error;
+
+	if (elf_type(&ctx->elfobj) == ET_DYN) {
+		interp = elf_interpreter_path(&ctx->elfobj);
+		if (interp != NULL) {
+			shiva_debug("Interp path: %s\n", interp);
+			ctx->ulexec.flags |= SHIVA_F_ULEXEC_LDSO_NEEDED;
+			if (elf_open_object(interp, &ctx->ldsobj, ELF_LOAD_F_STRICT, &error)
+			    == false) {
+				fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n",
+				    interp, elf_error_msg(&error));
+				return false;
+			}
+		}
+	}
+	shiva_debug("Loading ELF binary: %s\n", elf_pathname(&ctx->elfobj));
+	if (shiva_ulexec_load_elf_binary(ctx, &ctx->elfobj, false) == false) {
+		fprintf(stderr, "shiva_ulexec_load_elf_binary(%p, %s, false) failed\n",
+		    ctx, elf_pathname(&ctx->elfobj));
+		return false;
+	}
+	if (ctx->ulexec.flags & SHIVA_F_ULEXEC_LDSO_NEEDED) {
+		shiva_debug("Loading LDSO: %s\n", elf_pathname(&ctx->ldsobj));
+		if (shiva_ulexec_load_elf_binary(ctx, &ctx->ldsobj, true) == false) {
+			fprintf(stderr, "shiva_ulexec_load_elf_binary(%p, %s, true) failed\n",
+			    ctx, elf_pathname(&ctx->ldsobj));
+			    return false;
+		}
+	}
+	shiva_debug("Saving stack data from &argc foward\n");
+	if (shiva_ulexec_save_stack(ctx) == false) {
+		fprintf(stderr, "shiva_ulexec_save_stack() failed\n");
+		return false;
+	}
+
+	shiva_debug("Building auxiliary vector\n");
+	if (shiva_ulexec_build_auxv_stack(ctx, &ctx->ulexec.rsp_start) == false) {
+		fprintf(stderr, "shiva_ulexec_build_auxv_stack() failed\n");
+		return false;
+	}
+
+	shiva_debug("Passing control to ldso entry point: %#lx with rsp: %#lx "
+	    "and target entry: %#lx\n",
+	    ctx->ulexec.ldso.entry_point, ctx->ulexec.rsp_start, ctx->ulexec.entry_point);
+
+	LDSO_TRANSFER(ctx->ulexec.rsp_start, ctx->ulexec.ldso.entry_point,
+	    ctx->ulexec.entry_point);
+
+	/*
+	 * Won't ever get here :)
+	 */
 	return true;
 }

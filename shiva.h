@@ -14,6 +14,7 @@
 #include <sys/ptrace.h>
 #include <sys/queue.h>
 #include <elf.h>
+#include <errno.h>
 
 #include <capstone/capstone.h>
 #include "/opt/elfmaster/include/libelfmaster.h"
@@ -31,6 +32,8 @@
 #define SHIVA_F_JMP_CFLOW		(1UL << 0)
 #define SHIVA_F_STRING_ARGS		(1UL << 1)
 #define SHIVA_F_RETURN_FLOW		(1UL << 2)
+
+#define SHIVA_F_ULEXEC_LDSO_NEEDED	(1UL << 0)
 
 #define SHIVA_STACK_SIZE	(PAGE_SIZE * 100)
 
@@ -77,6 +80,7 @@ typedef struct shiva_ctx {
 	char **envp;
 	int argcount;
 	elfobj_t elfobj;
+	elfobj_t ldsobj;
 	uint64_t flags;
 	int pid;
 	struct {
@@ -92,6 +96,7 @@ typedef struct shiva_ctx {
 		 */
 		uint8_t *stack;
 		uint8_t *mem;
+		uint64_t rsp_start;
 		uint64_t entry_point;
 		uint64_t base_vaddr;
 		uint64_t phdr_vaddr; // vaddr of phdr table for mapped binary
@@ -113,6 +118,7 @@ typedef struct shiva_ctx {
 			uint64_t base_vaddr;
 			uint64_t phdr_vaddr;
 		} ldso;
+		uint64_t flags; // SHIVA_F_ULEXEC_* flags
 	} ulexec;
 	struct {
 		SLIST_HEAD(, shiva_branch_site) branch_list;
@@ -140,3 +146,7 @@ bool shiva_auxv_iterator_init(struct shiva_ctx *, struct shiva_auxv_iterator *);
 shiva_iterator_res_t shiva_auxv_iterator_next(struct shiva_auxv_iterator *, struct shiva_auxv_entry *);
 bool shiva_auxv_set_value(struct shiva_auxv_iterator *, long);
 
+/*
+ * shiva_ulexec.c
+ */
+bool shiva_ulexec(shiva_ctx_t *);
