@@ -2,25 +2,6 @@
 
 #define SHIVA_AUXV_COUNT 19
 
-#define LDSO_TRANSFER(stack, addr, entry) __asm__ __volatile__("mov %0, %%rsp\n" \
-                                            "push %1\n" \
-                                            "mov %2, %%rax\n" \
-                                            "mov $0, %%rbx\n" \
-                                            "mov $0, %%rcx\n" \
-                                            "mov $0, %%rdx\n" \
-                                            "mov $0, %%rsi\n" \
-                                            "mov $0, %%rdi\n" \
-                                            "mov $0, %%rbp\n" \
-                                            "mov $0, %%r8\n" \
-                                            "mov $0, %%r9\n" \
-                                            "mov $0, %%r10\n" \
-                                            "mov $0, %%r11\n" \
-                                            "mov $0, %%r12\n" \
-                                            "mov $0, %%r13\n" \
-                                            "mov $0, %%r14\n" \
-                                            "mov $0, %%r15\n" \
-                                            "ret" :: "r" (stack), "g" (addr), "g"(entry))
-
 static uint8_t *
 shiva_ulexec_allocstack(struct shiva_ctx *ctx)
 {
@@ -353,7 +334,7 @@ shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool inter
 }
 
 bool
-shiva_ulexec(struct shiva_ctx *ctx)
+shiva_ulexec_prep(struct shiva_ctx *ctx)
 {
 	char *interp = NULL;
 	elf_error_t error;
@@ -401,10 +382,10 @@ shiva_ulexec(struct shiva_ctx *ctx)
 	    "and target entry: %#lx\n",
 	    ctx->ulexec.ldso.entry_point, ctx->ulexec.rsp_start, ctx->ulexec.entry_point);
 
-
+#if 0
 	LDSO_TRANSFER(ctx->ulexec.rsp_start, ctx->ulexec.ldso.entry_point,
 	    ctx->ulexec.entry_point);
-
+#endif
 	/*
 	 * Won't ever get here :)
 	 */

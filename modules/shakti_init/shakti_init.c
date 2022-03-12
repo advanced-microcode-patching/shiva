@@ -4,9 +4,12 @@
  * set to the shiva_ctx_t struct pointer, to the module
  * function main()
  */
+#include "../../shiva.h"
+
+int shakti_main(shiva_ctx_t *) __attribute__((weak));
 
 void
-shiva_module_init(int argc, char **argv, char **envp)
+shakti_module_init(int argc, char **argv, char **envp)
 {
 	int i;
 	Elf64_auxv_t *auxv;
@@ -15,8 +18,8 @@ shiva_module_init(int argc, char **argv, char **envp)
 		;
 	auxv = (Elf64_auxv_t *)&envp[i + 1];
 	while (auxv[i].a_un.a_val != AT_NULL) {
-		if (auxv[i].type == AT_FLAGS) {
-			main((shiva_ctx_t *)auxv[i].a_un.a_val);
+		if (auxv[i].a_type == AT_FLAGS) {
+			shakti_main((shiva_ctx_t *)auxv[i].a_un.a_val);
 		}
 	}
 	return;

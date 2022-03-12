@@ -40,6 +40,25 @@
 #define SHIVA_LDSO_BASE		0x600000
 #define SHIVA_TARGET_BASE	0x1000000
 
+#define SHIVA_ULEXEC_LDSO_TRANSFER(stack, addr, entry) __asm__ __volatile__("mov %0, %%rsp\n" \
+                                            "push %1\n" \
+                                            "mov %2, %%rax\n" \
+                                            "mov $0, %%rbx\n" \
+                                            "mov $0, %%rcx\n" \
+                                            "mov $0, %%rdx\n" \
+                                            "mov $0, %%rsi\n" \
+                                            "mov $0, %%rdi\n" \
+                                            "mov $0, %%rbp\n" \
+                                            "mov $0, %%r8\n" \
+                                            "mov $0, %%r9\n" \
+                                            "mov $0, %%r10\n" \
+                                            "mov $0, %%r11\n" \
+                                            "mov $0, %%r12\n" \
+                                            "mov $0, %%r13\n" \
+                                            "mov $0, %%r14\n" \
+                                            "mov $0, %%r15\n" \
+                                            "ret" :: "r" (stack), "g" (addr), "g"(entry))
+
 typedef enum shiva_iterator_res {
 	SHIVA_ITER_OK = 0,
 	SHIVA_ITER_DONE,
@@ -72,6 +91,56 @@ struct shiva_branch_site {
 	SLIST_ENTRY(shiva_branch_site) _linkage;
 };
 
+typedef enum shiva_module_section_map_attr {
+        LP_SECTION_TEXTSEGMENT = 0,
+        LP_SECTION_DATASEGMENT,
+        LP_SECTION_UNKNOWN
+} shiva_module_section_map_attr_t;
+
+struct shiva_module_section_mapping {
+        struct elf_section section;
+        shiva_module_section_map_attr_t map_attribute;
+        uint64_t vaddr; /* Which memory address the section contents is placed in */
+        uint64_t offset;
+        uint64_t size;
+        char *name;
+        TAILQ_ENTRY(shiva_module_section_mapping) _linkage;
+};
+
+#define SHIVA_MODULE_MAX_PLT_COUNT 4096
+
+struct shiva_module_plt_entry {
+        char *symname;
+        uint64_t vaddr;
+        size_t offset;
+        TAILQ_ENTRY(shiva_module_plt_entry) _linkage;
+};
+
+struct shiva_module {
+        int fd;
+        uint8_t *text_mem;
+        uint8_t *data_mem; /* Includes .bss */
+        uintptr_t *pltgot;
+        uintptr_t *plt;
+        size_t pltgot_size;
+        size_t plt_size;
+        size_t plt_off;
+        size_t plt_count;
+        size_t pltgot_off;
+        size_t text_size;
+        size_t data_size;
+        uint64_t text_vaddr;
+        uint64_t data_vaddr;
+        elfobj_t elfobj;
+        struct {
+                TAILQ_HEAD(, shiva_module_section_mapping) section_maplist;
+                TAILQ_HEAD(, shiva_module_plt_entry) plt_list;
+        } tailq;
+        struct {
+                struct hsearch_data plt;
+        } cache;
+};
+
 typedef struct shiva_ctx {
 	char *path;
 	int argc;
@@ -83,6 +152,10 @@ typedef struct shiva_ctx {
 	elfobj_t ldsobj;
 	uint64_t flags;
 	int pid;
+	struct {
+		struct shiva_module runtime;
+		struct shiva_module initcode;
+	} module;
 	struct {
 		csh handle;
 		cs_insn *insn;
@@ -149,59 +222,10 @@ bool shiva_auxv_set_value(struct shiva_auxv_iterator *, long);
 /*
  * shiva_ulexec.c
  */
-bool shiva_ulexec(shiva_ctx_t *);
+bool shiva_ulexec_prep(shiva_ctx_t *);
 
 /*
  * shiva_module.c
  */
-typedef enum shiva_module_section_map_attr {
-	LP_SECTION_TEXTSEGMENT = 0,
-	LP_SECTION_DATASEGMENT,
-	LP_SECTION_UNKNOWN
-} shiva_module_section_map_attr_t;
-
-struct shiva_module_section_mapping {
-	struct elf_section section;
-	shiva_module_section_map_attr_t map_attribute;
-	uint64_t vaddr; /* Which memory address the section contents is placed in */
-	uint64_t offset;
-	uint64_t size;
-	char *name;
-	TAILQ_ENTRY(shiva_module_section_mapping) _linkage;
-};
-
-#define SHIVA_MODULE_MAX_PLT_COUNT 4096
-
-struct shiva_module_plt_entry {
-	char *symname;
-	uint64_t vaddr;
-	size_t offset;
-	TAILQ_ENTRY(shiva_module_plt_entry) _linkage;
-};
-
-
-struct shiva_module {
-	int fd;
-	uint8_t *text_mem;
-	uint8_t *data_mem; /* Includes .bss */
-	uintptr_t *pltgot;
-	uintptr_t *plt;
-	size_t pltgot_size;
-	size_t plt_size;
-	size_t plt_off;
-	size_t plt_count;
-	size_t pltgot_off;
-	size_t text_size;
-	size_t data_size;
-	uint64_t text_vaddr;
-	uint64_t data_vaddr;
-	elfobj_t elfobj;
-	struct {
-		TAILQ_HEAD(, shiva_module_section_mapping) section_maplist;
-		TAILQ_HEAD(, shiva_module_plt_entry) plt_list;
-	} tailq;
-	struct {
-		struct hsearch_data plt;
-	} cache;
-};
+bool shiva_module_loader(const char *, struct shiva_module **);
 

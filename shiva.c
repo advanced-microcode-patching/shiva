@@ -98,12 +98,12 @@ int main(int argc, char **argv, char **envp)
 
 	if (shiva_build_target_argv(&ctx, argv, argc) == false) {
 		fprintf(stderr, "build_target_argv failed\n");
-		return false;
+		exit(EXIT_FAILURE);
 	}
 
 	if (access(ctx.path, F_OK) != 0) {
 		fprintf(stderr, "Could not access binary path: %s\n", ctx.path);
-		return false;
+		exit(EXIT_FAILURE);
 	}
 
 	if (argv[1][0] == '-') {
@@ -134,11 +134,19 @@ int main(int argc, char **argv, char **envp)
 #endif
 	if (shiva_build_trace_data(&ctx) == false) {
 		fprintf(stderr, "shiva_build_trace_data() failed\n");
-		return false;
+		exit(EXIT_FAILURE);
 	}
-	if (shiva_ulexec(&ctx) == false) {
-		fprintf(stderr, "shiva_ulexec() failed\n");
-		return false;
+	if (shiva_ulexec_prep(&ctx) == false) {
+		fprintf(stderr, "shiva_ulexec_prep() failed\n");
+		exit(EXIT_FAILURE);
 	}
+	if (shiva_module_loader("./modules/shakti_runtime.o", &ctx.module.runtime) == false) {
+		fprintf(stderr, "shiva_module_loader failed\n");
+		exit(EXIT_FAILURE);
+	}
+
+	SHIVA_ULEXEC_LDSO_TRANSFER(ctx.ulexec.rsp_start, ctx.ulexec.ldso.entry_point,
+            ctx.ulexec.entry_point);
+
 	return true;
 }
