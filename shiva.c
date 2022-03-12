@@ -140,7 +140,8 @@ int main(int argc, char **argv, char **envp)
 		fprintf(stderr, "shiva_ulexec_prep() failed\n");
 		exit(EXIT_FAILURE);
 	}
-	if (shiva_module_loader("./modules/shakti_runtime.o", &ctx.module.runtime) == false) {
+	if (shiva_module_loader("./modules/shakti_runtime.o",
+	    &ctx.module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");
 		exit(EXIT_FAILURE);
 	}

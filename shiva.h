@@ -40,6 +40,9 @@
 #define SHIVA_LDSO_BASE		0x600000
 #define SHIVA_TARGET_BASE	0x1000000
 
+#define SHIVA_MODULE_F_RUNTIME	(1UL << 0)
+#define SHIVA_MODULE_F_INIT	(1UL << 1)
+
 #define SHIVA_ULEXEC_LDSO_TRANSFER(stack, addr, entry) __asm__ __volatile__("mov %0, %%rsp\n" \
                                             "push %1\n" \
                                             "mov %2, %%rax\n" \
@@ -118,6 +121,7 @@ struct shiva_module_plt_entry {
 
 struct shiva_module {
         int fd;
+	uint64_t flags;
         uint8_t *text_mem;
         uint8_t *data_mem; /* Includes .bss */
         uintptr_t *pltgot;
@@ -153,8 +157,8 @@ typedef struct shiva_ctx {
 	uint64_t flags;
 	int pid;
 	struct {
-		struct shiva_module runtime;
-		struct shiva_module initcode;
+		struct shiva_module *runtime;
+		struct shiva_module *initcode;
 	} module;
 	struct {
 		csh handle;
@@ -227,5 +231,5 @@ bool shiva_ulexec_prep(shiva_ctx_t *);
 /*
  * shiva_module.c
  */
-bool shiva_module_loader(const char *, struct shiva_module **);
+bool shiva_module_loader(const char *, struct shiva_module **, uint64_t);
 
