@@ -62,6 +62,7 @@
                                             "mov $0, %%r15\n" \
                                             "ret" :: "r" (stack), "g" (addr), "g"(entry))
 
+
 typedef enum shiva_iterator_res {
 	SHIVA_ITER_OK = 0,
 	SHIVA_ITER_DONE,
@@ -79,6 +80,33 @@ typedef struct shiva_auxv_entry {
 	int type;
 	char *string;
 } shiva_auxv_entry_t;
+
+#define SHIVA_TRACE_THREAD_F_TRACED	(1UL << 0)	// thread is traced by SHIVA
+#define SHIVA_TRACE_THREAD_F_PAUSED	(1UL << 1)	// pause thread
+#define SHIVA_TRACE_THREAD_F_EXTERN_TRACER	(1UL << 2) // thread is traced by ptrace
+#define SHIVA_TRACE_THREAD_F_COREDUMPING	(1UL << 3)
+
+typedef enum shiva_trace_op {
+        SHIVA_TRACE_OP_CONT = 0,
+        SHIVA_TRACE_OP_POKE,
+        SHIVA_TRACE_OP_PEEK,
+        SHIVA_TRACE_OP_GETREGS,
+        SHIVA_TRACE_OP_SETREGS,
+        SHIVA_TRACE_OP_SETFPREGS,
+        SHIVA_TRACE_OP_GETSIGINFO,
+        SHIVA_TRACE_OP_SETSIGINFO
+} shiva_trace_op_t;
+
+struct shiva_trace_thread {
+	char *name;
+	uid_t uid;
+	gid_t gid;
+	pid_t pid;
+	pid_t ppid;
+	pid_t external_tracer_pid;
+	uint64_t flags;
+	TAILQ_ENTRY(shiva_trace_thread) _linkage;
+};
 
 typedef enum shiva_branch_type {
 	SHIVA_BRANCH_JMP = 0,
@@ -198,8 +226,11 @@ typedef struct shiva_ctx {
 		uint64_t flags; // SHIVA_F_ULEXEC_* flags
 	} ulexec;
 	struct {
-		SLIST_HEAD(, shiva_branch_site) branch_list;
-	} list;
+		SLIST_HEAD(, shiva_branch_site) branch_slist;
+	} slist;
+	struct {
+		TAILQ_HEAD(, shiva_trace_thread) thread_tqlist;
+	} tailq;
 } shiva_ctx_t;
 
 /*

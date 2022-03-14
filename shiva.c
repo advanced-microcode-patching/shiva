@@ -85,6 +85,9 @@ int main(int argc, char **argv, char **envp)
 	sigemptyset(&set);
 	sigaddset(&set, SIGINT);
 
+	/*
+	 * Initialize everything in the context.
+	 */
 	memset(&ctx, 0, sizeof(ctx));
 
 	if ((argc < 2) || (argc == 2 && argv[1][0] == '-')) {
