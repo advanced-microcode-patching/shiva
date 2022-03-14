@@ -39,9 +39,11 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 		fprintf(stderr, "cs_disasm_ex failed\n");
 		return false;
 	}
+#if 0
 	for (i = 0; i < ctx->disas.count; i++) {
 		printf("op_str: %s\n", ctx->disas.insn[i].op_str);
 	}
+#endif
 	return true;
 }
 
