@@ -22,6 +22,13 @@ shiva_trace_op_attach(struct shiva_ctx *ctx, pid_t pid, shiva_trace_op_t op,
 	return true;
 }
 
+bool
+shiva_trace_op_cont(struct shiva_ctx *ctx, pid_t pid, shiva_trace_op_t op,
+    void *addr, void *data)
+{
+
+	return true;
+}
 /*
  * shiva_trace_op_t types:
  * SHIVA_TRACE_OP_ATTACH
@@ -45,15 +52,15 @@ shiva_trace(struct shiva_ctx *ctx, pid_t pid, shiva_trace_op_t op,
 	case SHIVA_TRACE_OP_ATTACH:
 		res = shiva_trace_op_attach(ctx, pid, op, addr, data);
 		break;
-#if 0
 	case SHIVA_TRACE_OP_CONT:
 		res = shiva_trace_op_cont(ctx, pid, op, addr, data);
 		break;
+#if 0
 	case SHIVA_TRACE_OP_POKE:
-		res = shiva_trace_op_cont(ctx, pid, op, addr, data);
+		res = shiva_trace_op_poke(ctx, pid, op, addr, data);
 		break;
 	case SHIVA_TRACE_OP_PEEK:
-		res = shiva_trace_op_cont(ctx, pid, op, addr, data);
+		res = shiva_trace_op_peek(ctx, pid, op, addr, data);
 		break;
 	case SHIVA_TRACE_OP_GETREGS:
 		res = shiva_trace_op_getregs(ctx, pid, op, addr, data);
