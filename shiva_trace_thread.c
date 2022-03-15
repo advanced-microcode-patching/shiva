@@ -49,6 +49,7 @@ shiva_trace_thread_status(struct shiva_ctx *ctx, pid_t pid,
 			thread->flags |= SHIVA_TRACE_THREAD_F_COREDUMPING;
 		}
 	}
+	thread->flags |= SHIVA_TRACE_THREAD_F_NEW;
 	return true;
 }
 				
@@ -91,6 +92,9 @@ shiva_trace_thread_insert(struct shiva_ctx *ctx, pid_t pid, uint64_t *out)
 			}
 		}
 	}
-	TAILQ_INSERT_TAIL(&ctx->tailq.thread_tqlist, thread, _linkage);
+	if (thread->flags & SHIVA_TRACE_THREAD_F_NEW) {
+		TAILQ_INSERT_TAIL(&ctx->tailq.thread_tqlist, thread, _linkage);
+		thread->flags &= ~SHIVA_TRACE_THREAD_F_NEW;
+	}
 	return true;
 }

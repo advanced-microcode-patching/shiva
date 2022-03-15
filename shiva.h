@@ -85,7 +85,7 @@ typedef struct shiva_auxv_entry {
 #define SHIVA_TRACE_THREAD_F_PAUSED	(1UL << 1)	// pause thread
 #define SHIVA_TRACE_THREAD_F_EXTERN_TRACER	(1UL << 2) // thread is traced by ptrace
 #define SHIVA_TRACE_THREAD_F_COREDUMPING	(1UL << 3)
-
+#define SHIVA_TRACE_THREAD_F_NEW		(1UL << 4) // newly added into thread list
 typedef enum shiva_trace_op {
         SHIVA_TRACE_OP_CONT = 0,
 	SHIVA_TRACE_OP_ENTER,
