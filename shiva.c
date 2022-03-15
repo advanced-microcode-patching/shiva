@@ -29,10 +29,6 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 		fprintf(stderr, "cs_open failed\n");
 		return false;
 	}
-	int i;
-	for (i = 0; i < section.size; i++) {
-		printf("%02x ", ctx->disas.textptr[i]);
-	}
 	ctx->disas.count = cs_disasm(ctx->disas.handle, ctx->disas.textptr, section.size,
 	    section.address, 0, &ctx->disas.insn);
 	if (ctx->disas.count < 1) {

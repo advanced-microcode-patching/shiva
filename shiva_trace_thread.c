@@ -27,7 +27,7 @@ shiva_trace_thread_status(struct shiva_ctx *ctx, pid_t pid,
 		while (*p == ' ')
 			p++;
 		if (strncmp(buf, "Name:", 5) == 0) {
-			thread->name = strdup(buf);
+			thread->name = shiva_strdup(buf);
 			if (thread->name == NULL) {
 				perror("strdup");
 				return false;
