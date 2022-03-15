@@ -145,12 +145,15 @@ int main(int argc, char **argv, char **envp)
 		fprintf(stderr, "shiva_ulexec_prep() failed\n");
 		exit(EXIT_FAILURE);
 	}
+	if (shiva_maps_build_list(&ctx) == false) {
+		fprintf(stderr, "shiva_maps_build_list() failed\n");
+		exit(EXIT_FAILURE);
+	}
 	if (shiva_module_loader("./modules/shakti_runtime.o",
 	    &ctx.module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");
 		exit(EXIT_FAILURE);
 	}
-
 	SHIVA_ULEXEC_LDSO_TRANSFER(ctx.ulexec.rsp_start, ctx.ulexec.ldso.entry_point,
             ctx.ulexec.entry_point);
 

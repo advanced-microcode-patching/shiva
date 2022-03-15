@@ -93,7 +93,6 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out)
 			auxv->a_un.a_val = elf_segment_count(&ctx->elfobj);
 			break;
 		case AT_BASE:
-			shiva_debug("ldso base: %#lx\n", ctx->ulexec.ldso.base_vaddr);
 			auxv->a_un.a_val = ctx->ulexec.ldso.base_vaddr;
 			break;
 		case AT_ENTRY:

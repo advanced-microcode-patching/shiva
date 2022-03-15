@@ -156,6 +156,15 @@ struct shiva_module_plt_entry {
         TAILQ_ENTRY(shiva_module_plt_entry) _linkage;
 };
 
+typedef struct shiva_mmap_entry {
+	uint64_t base;
+	size_t len;
+	uint32_t prot;    // mapping prot
+	uint32_t mapping; // shared, private
+	bool debugger_mapping;
+	TAILQ_ENTRY(shiva_mmap_entry) _linkage;
+} shiva_mmap_entry_t;
+
 struct shiva_module {
         int fd;
 	uint64_t flags;
@@ -177,9 +186,6 @@ struct shiva_module {
                 TAILQ_HEAD(, shiva_module_section_mapping) section_maplist;
                 TAILQ_HEAD(, shiva_module_plt_entry) plt_list;
         } tailq;
-        struct {
-                struct hsearch_data plt;
-        } cache;
 };
 
 typedef struct shiva_ctx {
@@ -239,6 +245,7 @@ typedef struct shiva_ctx {
 	} slist;
 	struct {
 		TAILQ_HEAD(, shiva_trace_thread) thread_tqlist;
+		TAILQ_HEAD(, shiva_mmap_entry) mmap_tqlist;
 	} tailq;
 } shiva_ctx_t;
 
@@ -286,3 +293,8 @@ bool shiva_trace_thread_insert(shiva_ctx_t *, pid_t, uint64_t *);
  * shiva_error.c
  */
 bool shiva_error_set(shiva_error_t *, const char *, ...);
+
+/*
+ * shiva_maps.c
+ */
+bool shiva_maps_build_list(shiva_ctx_t *);
