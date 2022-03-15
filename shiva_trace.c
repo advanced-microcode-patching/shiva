@@ -49,6 +49,13 @@ shiva_trace_op_poke(struct shiva_ctx *ctx, pid_t pid,
 	uintptr_t *ptr = addr;
 	uintptr_t *value = data;
 
+	if (shiva_maps_validate_addr(ctx, (uint64_t)addr) == false) {
+		shiva_error_set(error, "poke pid (%d) at %#lx failed: "
+		   "cannot write to debugger memory\n", pid, (uint64_t)addr);
+		return false;
+	}
+	*ptr = *value;
+	return true;
 }
 
 /*

@@ -298,3 +298,4 @@ bool shiva_error_set(shiva_error_t *, const char *, ...);
  * shiva_maps.c
  */
 bool shiva_maps_build_list(shiva_ctx_t *);
+bool shiva_maps_validate_addr(shiva_ctx_t *, uint64_t);
