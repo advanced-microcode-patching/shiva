@@ -64,6 +64,7 @@ shiva_trace_thread_insert(struct shiva_ctx *ctx, pid_t pid)
 	}
 	if (shiva_trace_thread_status(ctx, pid, thread) == false) {
 		fprintf(stderr, "shiva_pthread_thread_status() failed on pid: %d\n", pid);
+		free(thread);
 		return false;
 	}
 	/*
@@ -76,8 +77,10 @@ shiva_trace_thread_insert(struct shiva_ctx *ctx, pid_t pid)
 	 */
 	if (pid != 0) {
 		if ((thread->flags & SHIVA_TRACE_THREAD_F_EXTERN_TRACER) ||
-		    (thread->flags & SHIVA_TRACE_THREAD_F_COREDUMPING))
+		    (thread->flags & SHIVA_TRACE_THREAD_F_COREDUMPING)) {
+			free(thread);
 			return false;
+		}
 	}
 	TAILQ_INSERT_TAIL(&ctx->tailq.thread_tqlist, thread, _linkage);
 	return true;

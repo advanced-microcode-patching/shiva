@@ -88,6 +88,7 @@ typedef struct shiva_auxv_entry {
 
 typedef enum shiva_trace_op {
         SHIVA_TRACE_OP_CONT = 0,
+	SHIVA_TRACE_OP_ATTACH,
         SHIVA_TRACE_OP_POKE,
         SHIVA_TRACE_OP_PEEK,
         SHIVA_TRACE_OP_GETREGS,
@@ -264,3 +265,11 @@ bool shiva_ulexec_prep(shiva_ctx_t *);
  */
 bool shiva_module_loader(const char *, struct shiva_module **, uint64_t);
 
+/*
+ * shiva_trace.c
+ */
+
+/*
+ * shiva_trace_thread.c
+ */
+bool shiva_trace_thread_insert(struct shiva_ctx *ctx, pid_t pid);
