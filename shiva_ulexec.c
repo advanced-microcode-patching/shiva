@@ -222,6 +222,9 @@ shiva_ulexec_segment_copy(elfobj_t *elfobj, uint8_t *dst,
 	return true;
 }
 
+/*
+ * XXX -- We currently only support PIE binaries. This is very temporary.
+ */
 bool
 shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool interpreter)
 {
@@ -260,20 +263,11 @@ shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool inter
 			shiva_debug("Attempting to map %#lx\n", base_vaddr);
 			mem = mmap((void *)base_vaddr, phdr.memsz, PROT_READ|PROT_WRITE, MAP_PRIVATE|
 			    MAP_ANONYMOUS|MAP_FIXED, -1, 0);
-			shiva_debug("Mapped at %p\n", mem);
-
 			if (mem == MAP_FAILED) {
 				perror("mmap");
 				exit(EXIT_FAILURE);
 			}
 			mem = (uint8_t *)base_vaddr;
-			shiva_debug("Mapped segment at %p\n", mem);
-					   if (mem == MAP_FAILED) {
-				perror("mmap");
-				exit(EXIT_FAILURE);
-			}
-			mem = (uint8_t *)base_vaddr;
-			shiva_debug("Mapped segment at %p\n", mem);
 			res = shiva_ulexec_segment_copy(elfobj, mem, phdr);
 			if (res == false) {
 				shiva_debug("shiva_ulexec_segment_copy(%p, %p, %p) failed\n",
@@ -377,11 +371,11 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 		fprintf(stderr, "shiva_ulexec_build_auxv_stack() failed\n");
 		return false;
 	}
-
+#if 0
 	shiva_debug("Passing control to ldso entry point: %#lx with rsp: %#lx "
 	    "and target entry: %#lx\n",
 	    ctx->ulexec.ldso.entry_point, ctx->ulexec.rsp_start, ctx->ulexec.entry_point);
-
+#endif
 #if 0
 	LDSO_TRANSFER(ctx->ulexec.rsp_start, ctx->ulexec.ldso.entry_point,
 	    ctx->ulexec.entry_point);

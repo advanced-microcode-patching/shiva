@@ -71,7 +71,7 @@ int main(int argc, char **argv, char **envp)
 {
 	shiva_ctx_t ctx;
 	int opt, i, subend;
-
+	struct elf_section section;
 	struct sigaction act;
 	sigset_t set;
 	act.sa_handler = shiva_sighandle;
@@ -136,6 +136,10 @@ int main(int argc, char **argv, char **envp)
 	if (shiva_build_trace_data(&ctx) == false) {
 		fprintf(stderr, "shiva_build_trace_data() failed\n");
 		exit(EXIT_FAILURE);
+	}
+	if (elf_section_by_name(&ctx.elfobj, ".rela.text", &section) == true) {
+		fprintf(stderr, "Warning: Found .text relocations in '%s'. This may alter"
+		    " the effects of breakpoint debugging\n", elf_pathname(&ctx.elfobj));
 	}
 	if (shiva_ulexec_prep(&ctx) == false) {
 		fprintf(stderr, "shiva_ulexec_prep() failed\n");
