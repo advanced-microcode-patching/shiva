@@ -3,13 +3,18 @@
  * debugging engine.
  */
 
-#pragma once
 #include "../shiva.h"
 
-	int
+int
+shakti_handler(shiva_ctx *ctx)
+{
+
+}
+
+int
 shakti_main(shiva_ctx_t *ctx)
 {
-	printf("I am the debugging module\n");
+	printf("I am the debugging module init\n");
 
 }
 

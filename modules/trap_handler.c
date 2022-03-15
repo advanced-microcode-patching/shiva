@@ -5,6 +5,8 @@ extern shiva_ctx_t *ctx;
  * debugging engine.
  */
 
+#pragma once
+#include "../shiva.h"
 
 	int
 shakti_main(shiva_ctx_t *ctx)

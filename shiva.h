@@ -88,6 +88,7 @@ typedef struct shiva_auxv_entry {
 
 typedef enum shiva_trace_op {
         SHIVA_TRACE_OP_CONT = 0,
+	SHIVA_TRACE_OP_ENTER,
 	SHIVA_TRACE_OP_ATTACH,
         SHIVA_TRACE_OP_POKE,
         SHIVA_TRACE_OP_PEEK,
@@ -98,7 +99,14 @@ typedef enum shiva_trace_op {
         SHIVA_TRACE_OP_SETSIGINFO
 } shiva_trace_op_t;
 
-struct shiva_trace_thread {
+#define SHIVA_TRACE_MAX_ERROR_STRLEN 4096
+
+typedef struct shiva_error {
+	char string[SHIVA_TRACE_MAX_ERROR_STRLEN];
+	int _errno;
+} shiva_error_t;
+
+typedef struct shiva_trace_thread {
 	char *name;
 	uid_t uid;
 	gid_t gid;
@@ -107,7 +115,7 @@ struct shiva_trace_thread {
 	pid_t external_tracer_pid;
 	uint64_t flags;
 	TAILQ_ENTRY(shiva_trace_thread) _linkage;
-};
+} shiva_trace_thread_t;
 
 typedef enum shiva_branch_type {
 	SHIVA_BRANCH_JMP = 0,
@@ -268,8 +276,13 @@ bool shiva_module_loader(const char *, struct shiva_module **, uint64_t);
 /*
  * shiva_trace.c
  */
-
+bool shiva_trace(shiva_ctx_t *, pid_t, shiva_trace_op_t, void *, void *, shiva_error_t *);
 /*
  * shiva_trace_thread.c
  */
-bool shiva_trace_thread_insert(struct shiva_ctx *ctx, pid_t pid);
+bool shiva_trace_thread_insert(shiva_ctx_t *, pid_t, uint64_t *);
+
+/*
+ * shiva_error.c
+ */
+bool shiva_error_set(shiva_error_t *, const char *, ...);

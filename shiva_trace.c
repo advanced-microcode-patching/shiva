@@ -1,30 +1,42 @@
 #include "shiva.h"
 
 bool
-shiva_trace_op_attach(struct shiva_ctx *ctx, pid_t pid, shiva_trace_op_t op,
-    void *addr, void *data)
+shiva_trace_op_attach(struct shiva_ctx *ctx, pid_t pid,
+    void *addr, void *data, shiva_error_t *error)
 {
 	bool res;
-
-	(void)op;
+	uint64_t status;
 
 	if (pid == 0) {
-		res = shiva_trace_thread_insert(ctx, pid);
+		res = shiva_trace_thread_insert(ctx, pid, &status);
 		if (res == false) {
-			fprintf(stderr, "attach pid(%d) failed: Unknown error\n", pid);
-			return false;
+			if (status & SHIVA_TRACE_THREAD_F_EXTERN_TRACER) {
+				shiva_error_set(error, "attach pid (%d) failed:"
+				    " thread is being traced by another process\n", pid);
+				return false;
+			} else if (status & SHIVA_TRACE_THREAD_F_COREDUMPING) {
+				shiva_error_set(error, "attach pid (%d) failed:"
+				    " thread is coredumping\n", pid);
+				return false;
+			} else {
+				shiva_error_set(error, "attach pid (%d) failed: reason unknown\n", pid);
+				return false;
+			}
 		}
+
 	} else {
 		/*
 		 * TODO for multiple threads
 		 */
+		shiva_error_set(error, "attach pid (%d) failed: no support for multiple threads\n", pid);
+		return false;
 	}
 	return true;
 }
 
 bool
-shiva_trace_op_cont(struct shiva_ctx *ctx, pid_t pid, shiva_trace_op_t op,
-    void *addr, void *data)
+shiva_trace_op_cont(struct shiva_ctx *ctx, pid_t pid,
+    void *addr, void *data, shiva_error_t *error)
 {
 
 	return true;
@@ -44,16 +56,19 @@ shiva_trace_op_cont(struct shiva_ctx *ctx, pid_t pid, shiva_trace_op_t op,
 
 bool
 shiva_trace(struct shiva_ctx *ctx, pid_t pid, shiva_trace_op_t op,
-    void *addr, void *data)
+    void *addr, void *data, shiva_error_t *error)
 {
 	bool res;
 
 	switch(op) {
+	case SHIVA_TRACE_OP_ENTER:
+		res = shiva_trace_op_attach(ctx, pid, addr, data, error);
+		break;
 	case SHIVA_TRACE_OP_ATTACH:
-		res = shiva_trace_op_attach(ctx, pid, op, addr, data);
+		res = shiva_trace_op_attach(ctx, pid, addr, data, error);
 		break;
 	case SHIVA_TRACE_OP_CONT:
-		res = shiva_trace_op_cont(ctx, pid, op, addr, data);
+		res = shiva_trace_op_cont(ctx, pid, addr, data, error);
 		break;
 #if 0
 	case SHIVA_TRACE_OP_POKE:

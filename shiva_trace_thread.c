@@ -53,9 +53,10 @@ shiva_trace_thread_status(struct shiva_ctx *ctx, pid_t pid,
 }
 				
 bool
-shiva_trace_thread_insert(struct shiva_ctx *ctx, pid_t pid)
+shiva_trace_thread_insert(struct shiva_ctx *ctx, pid_t pid, uint64_t *out)
 {
 	struct shiva_trace_thread *thread;
+	shiva_error_t error;
 
 	thread = calloc(1, sizeof(*thread));
 	if (thread == NULL) {
@@ -76,10 +77,18 @@ shiva_trace_thread_insert(struct shiva_ctx *ctx, pid_t pid)
 	 * if it is being ptrace'd.
 	 */
 	if (pid != 0) {
-		if ((thread->flags & SHIVA_TRACE_THREAD_F_EXTERN_TRACER) ||
-		    (thread->flags & SHIVA_TRACE_THREAD_F_COREDUMPING)) {
-			free(thread);
-			return false;
+		if (thread->flags & SHIVA_TRACE_THREAD_F_EXTERN_TRACER) {
+			if (out != NULL) {
+				*out |= SHIVA_TRACE_THREAD_F_EXTERN_TRACER;
+				free(thread);
+				return false;
+			}
+		} else if (thread->flags & SHIVA_TRACE_THREAD_F_COREDUMPING) {
+			if (out != NULL) {
+				*out |= SHIVA_TRACE_THREAD_F_COREDUMPING;
+				free(thread);
+				return false;
+			}
 		}
 	}
 	TAILQ_INSERT_TAIL(&ctx->tailq.thread_tqlist, thread, _linkage);
