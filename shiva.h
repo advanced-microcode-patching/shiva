@@ -69,6 +69,11 @@ typedef enum shiva_iterator_res {
 	SHIVA_ITER_ERROR
 } shiva_iterator_res_t;
 
+typedef struct shiva_maps_iterator {
+	struct shiva_ctx *ctx;
+	struct shiva_mmap_entry *current;
+} shiva_maps_iterator_t;
+
 typedef struct shiva_auxv_iterator {
 	unsigned int index;
 	struct shiva_ctx *ctx;
@@ -278,7 +283,7 @@ bool shiva_ulexec_prep(shiva_ctx_t *);
 /*
  * shiva_module.c
  */
-bool shiva_module_loader(const char *, struct shiva_module **, uint64_t);
+bool shiva_module_loader(shiva_ctx_t *, const char *, struct shiva_module **, uint64_t);
 
 /*
  * shiva_trace.c
@@ -293,9 +298,13 @@ bool shiva_trace_thread_insert(shiva_ctx_t *, pid_t, uint64_t *);
  * shiva_error.c
  */
 bool shiva_error_set(shiva_error_t *, const char *, ...);
+const char * shiva_error_msg(shiva_error_t *);
 
 /*
  * shiva_maps.c
  */
+bool shiva_maps_prot_by_addr(struct shiva_ctx *, uint64_t, int *);
 bool shiva_maps_build_list(shiva_ctx_t *);
 bool shiva_maps_validate_addr(shiva_ctx_t *, uint64_t);
+void shiva_maps_iterator_init(shiva_ctx_t *, shiva_maps_iterator_t *);
+shiva_iterator_res_t shiva_maps_iterator_next(shiva_maps_iterator_t *, struct shiva_mmap_entry *);

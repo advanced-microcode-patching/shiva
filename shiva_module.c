@@ -18,8 +18,9 @@
 uint8_t plt_stub[6] = "\xff\x25\x00\x00\x00\x00";
 
 static inline void
-transfer_to_module(struct shiva_module *linker, uint64_t entry)
+transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
 {
+	__asm__ __volatile__ ("mov %0, %%rdi\n" :: "r"(ctx));
 	__asm__ __volatile__ ("mov %0, %%rax\n"
 			      "call *%%rax" :: "r" (entry));
 	return;
@@ -555,7 +556,7 @@ create_text_image(struct shiva_module *linker)
  * NOTE: const char *path: path to the ELF module
  */
 bool
-shiva_module_loader(const char *path, struct shiva_module **linkerptr, uint64_t flags)
+shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module **linkerptr, uint64_t flags)
 {
 	struct shiva_module *linker;
 	elf_error_t error;
@@ -615,7 +616,7 @@ shiva_module_loader(const char *path, struct shiva_module **linkerptr, uint64_t 
 		return false;
 	}
 	shiva_debug("Entry point address: %#lx\n", entry);
-	transfer_to_module(linker, entry);
+	transfer_to_module(ctx, entry);
 	shiva_debug("Successfully executed module\n");
 	return true;
 }

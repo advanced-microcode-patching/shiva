@@ -55,7 +55,6 @@ shiva_maps_build_list(struct shiva_ctx *ctx)
 		p = strchr(buf, '-');
 		assert(p != NULL);
 		*p = '\0';
-		q = p + 1;
 		entry->base = strtoul(buf, NULL, 16);
 		end = strtoul(p + 1, NULL, 16);
 		assert(end > entry->base);
@@ -67,6 +66,9 @@ shiva_maps_build_list(struct shiva_ctx *ctx)
 				entry->debugger_mapping = true;
 			}
 		}
+		q = strchr(p + 1, ' ');
+		assert(q != NULL);
+		p = q + 1;
 		while (*p != ' ') {
 			switch(*p) {
 			case 'r':
@@ -93,4 +95,40 @@ shiva_maps_build_list(struct shiva_ctx *ctx)
 		TAILQ_INSERT_TAIL(&ctx->tailq.mmap_tqlist, entry, _linkage);
 	}
 	return true;
+}
+
+void
+shiva_maps_iterator_init(struct shiva_ctx *ctx, struct shiva_maps_iterator *iter)
+{
+	int i = 0;
+
+	iter->current = TAILQ_FIRST(&ctx->tailq.mmap_tqlist);
+	iter->ctx = ctx;
+	return;
+}
+
+shiva_iterator_res_t
+shiva_maps_iterator_next(struct shiva_maps_iterator *iter, struct shiva_mmap_entry *e)
+{
+	if (iter->current == NULL)
+		return SHIVA_ITER_DONE;
+	memcpy(e, iter->current, sizeof(*e));
+	iter->current = TAILQ_NEXT(iter->current, _linkage);
+	return ELF_ITER_OK;
+}
+
+bool
+shiva_maps_prot_by_addr(struct shiva_ctx *ctx, uint64_t addr, int *prot)
+{
+	shiva_maps_iterator_t mmap_iter;
+	struct shiva_mmap_entry mmap_entry;
+
+	shiva_maps_iterator_init(ctx, &mmap_iter);
+	while (shiva_maps_iterator_next(&mmap_iter, &mmap_entry) == SHIVA_ITER_OK) {
+		if (addr >= mmap_entry.base && addr < mmap_entry.base + mmap_entry.len) {
+			*prot = mmap_entry.prot;
+			return true;
+		}
+	}
+	return false;
 }

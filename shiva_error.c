@@ -15,3 +15,9 @@ shiva_error_set(shiva_error_t *error, const char *fmt, ...)
         return true;
 }
 
+const char *
+shiva_error_msg(shiva_error_t *error)
+{
+	return (const char *)error->string;
+}
+
