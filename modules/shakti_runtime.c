@@ -35,7 +35,9 @@ shakti_main(shiva_ctx_t *ctx)
 		printf("shiva_trace 2 failed: %s\n", shiva_error_msg(&error));
 		return -1;
 	}
-	fprintf(stderr, "Read value: %#lx\n", out);
+	printf("hello\n");
+	printf("Read value: %#lx\n", out);
+	printf("\n");
 	return 0;
 }
 
