@@ -14,7 +14,7 @@ all:
 	$(CC) $(GCC_OPTS) shiva_trace_thread.c -o shiva_trace_thread.o
 	$(CC) $(GCC_OPTS) shiva_error.c	-o	shiva_error.o
 	$(CC) $(GCC_OPTS) shiva_maps.c -o	shiva_maps.o
-	$(CC) -static $(OBJ_LIST) $(STATIC_LIBS) -o shiva
+	$(CC) -static -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o shiva
 test:
 	gcc test.c -o test
 clean:
