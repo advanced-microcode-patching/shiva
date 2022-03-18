@@ -14,7 +14,12 @@ shiva_trace_thread_status(struct shiva_ctx *ctx, pid_t pid,
 			return true;
 		}
 	}
-	snprintf(filepath, 64, "/proc/%d/status", pid);
+	if (pid == 0) {
+		snprintf(filepath, 64, "/proc/self/status");
+	} else {
+		snprintf(filepath, 64, "/proc/%d/status", pid);
+	}
+	shiva_debug("Opening: %s\n", filepath);
 	fp = fopen(filepath, "r");
 	if (fp == NULL) {
 		perror("fopen");
@@ -27,29 +32,35 @@ shiva_trace_thread_status(struct shiva_ctx *ctx, pid_t pid,
 		while (*p == ' ')
 			p++;
 		if (strncmp(buf, "Name:", 5) == 0) {
-			thread->name = shiva_strdup(buf);
+			shiva_debug("Thread name: %s\n", p);
+			thread->name = shiva_strdup(p);
 			if (thread->name == NULL) {
 				perror("strdup");
 				return false;
 			}
 		} else if (strncmp(buf, "Gid", 3) == 0) {
-			thread->gid = strtoul(buf, NULL, 10);
+			thread->gid = strtoul(p, NULL, 10);
+			shiva_debug("Thread gid: %d\n", thread->gid);
 		} else if (strncmp(buf, "TracerPid", 9) == 0) {
-			thread->external_tracer_pid = strtoul(buf, NULL, 10);
+			thread->external_tracer_pid = strtoul(p, NULL, 10);
+			shiva_debug("Thread tracer pid: %d\n", thread->external_tracer_pid);
 			if (thread->external_tracer_pid != 0) {
 				thread->flags |= SHIVA_TRACE_THREAD_F_EXTERN_TRACER;
 			} else {
 				thread->flags |= SHIVA_TRACE_THREAD_F_TRACED;
 			}
 		} else if (strncmp(buf, "Uid", 3) == 0) {
-			thread->uid = strtoul(buf, NULL, 10);
+			thread->uid = strtoul(p, NULL, 10);
+			shiva_debug("Thread uid: %d\n", thread->uid);
 		} else if (strncmp(buf, "PPid", 4) == 0) {
-			thread->ppid = strtoul(buf, NULL, 10);
+			thread->ppid = strtoul(p, NULL, 10);
+			shiva_debug("Thread ppid: %d\n", thread->ppid);
 		} else if (strncmp(buf, "CoreDumping", 11) == 0) {
 			thread->flags |= SHIVA_TRACE_THREAD_F_COREDUMPING;
 		}
 	}
 	thread->flags |= SHIVA_TRACE_THREAD_F_NEW;
+	shiva_debug("Returning true\n");
 	return true;
 }
 				
@@ -77,24 +88,29 @@ shiva_trace_thread_insert(struct shiva_ctx *ctx, pid_t pid, uint64_t *out)
 	 * means that we can shiva_trace() the main debuggee process even
 	 * if it is being ptrace'd.
 	 */
+	*out = 0;
 	if (pid != 0) {
 		if (thread->flags & SHIVA_TRACE_THREAD_F_EXTERN_TRACER) {
 			if (out != NULL) {
 				*out |= SHIVA_TRACE_THREAD_F_EXTERN_TRACER;
 				free(thread);
+				shiva_debug("has external tracer, ret false\n");
 				return false;
 			}
 		} else if (thread->flags & SHIVA_TRACE_THREAD_F_COREDUMPING) {
 			if (out != NULL) {
 				*out |= SHIVA_TRACE_THREAD_F_COREDUMPING;
 				free(thread);
+				shiva_debug("coredumping, ret false\n");
 				return false;
 			}
 		}
 	}
 	if (thread->flags & SHIVA_TRACE_THREAD_F_NEW) {
+		shiva_debug("Inserting new thread\n");
 		TAILQ_INSERT_TAIL(&ctx->tailq.thread_tqlist, thread, _linkage);
 		thread->flags &= ~SHIVA_TRACE_THREAD_F_NEW;
 	}
+	shiva_debug("Returning true\n");
 	return true;
 }

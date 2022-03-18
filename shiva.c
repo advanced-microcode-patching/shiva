@@ -1,5 +1,13 @@
 #include "shiva.h"
 
+void
+shiva_init_lists(struct shiva_ctx *ctx)
+{
+	TAILQ_INIT(&ctx->tailq.mmap_tqlist);
+	TAILQ_INIT(&ctx->tailq.thread_tqlist);
+	return;
+}
+
 bool
 shiva_build_trace_data(struct shiva_ctx *ctx)
 {
@@ -101,6 +109,8 @@ int main(int argc, char **argv, char **envp)
 		fprintf(stderr, "build_target_argv failed\n");
 		exit(EXIT_FAILURE);
 	}
+
+	shiva_init_lists(&ctx);
 
 	if (access(ctx.path, F_OK) != 0) {
 		fprintf(stderr, "Could not access binary path: %s\n", ctx.path);

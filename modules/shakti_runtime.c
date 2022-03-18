@@ -22,6 +22,12 @@ shakti_main(shiva_ctx_t *ctx)
 	printf("Shakti debugging module\n");
 	printf("ctx: %p\n", ctx);
 
+	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_ATTACH,
+	    NULL, NULL, &error);
+	if (res == false) {
+		printf("shiva_trace failed: %s\n", shiva_error_msg(&error));
+		return -1;
+	}
 	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_POKE,
 	    (void *)ctx->ulexec.base_vaddr, &data, &error);
 	if (res == false) {
@@ -35,7 +41,6 @@ shakti_main(shiva_ctx_t *ctx)
 		printf("shiva_trace 2 failed: %s\n", shiva_error_msg(&error));
 		return -1;
 	}
-	printf("hello\n");
 	printf("Read value: %#lx\n", out);
 	printf("\n");
 	return 0;
