@@ -86,41 +86,12 @@ typedef struct shiva_auxv_entry {
 	char *string;
 } shiva_auxv_entry_t;
 
-#define SHIVA_TRACE_THREAD_F_TRACED	(1UL << 0)	// thread is traced by SHIVA
-#define SHIVA_TRACE_THREAD_F_PAUSED	(1UL << 1)	// pause thread
-#define SHIVA_TRACE_THREAD_F_EXTERN_TRACER	(1UL << 2) // thread is traced by ptrace
-#define SHIVA_TRACE_THREAD_F_COREDUMPING	(1UL << 3)
-#define SHIVA_TRACE_THREAD_F_NEW		(1UL << 4) // newly added into thread list
-typedef enum shiva_trace_op {
-        SHIVA_TRACE_OP_CONT = 0,
-	SHIVA_TRACE_OP_ENTER,
-	SHIVA_TRACE_OP_ATTACH,
-        SHIVA_TRACE_OP_POKE,
-        SHIVA_TRACE_OP_PEEK,
-        SHIVA_TRACE_OP_GETREGS,
-        SHIVA_TRACE_OP_SETREGS,
-        SHIVA_TRACE_OP_SETFPREGS,
-        SHIVA_TRACE_OP_GETSIGINFO,
-        SHIVA_TRACE_OP_SETSIGINFO
-} shiva_trace_op_t;
-
 #define SHIVA_TRACE_MAX_ERROR_STRLEN 4096
 
 typedef struct shiva_error {
 	char string[SHIVA_TRACE_MAX_ERROR_STRLEN];
 	int _errno;
 } shiva_error_t;
-
-typedef struct shiva_trace_thread {
-	char *name;
-	uid_t uid;
-	gid_t gid;
-	pid_t pid;
-	pid_t ppid;
-	pid_t external_tracer_pid;
-	uint64_t flags;
-	TAILQ_ENTRY(shiva_trace_thread) _linkage;
-} shiva_trace_thread_t;
 
 typedef enum shiva_branch_type {
 	SHIVA_BRANCH_JMP = 0,
@@ -284,15 +255,6 @@ bool shiva_ulexec_prep(shiva_ctx_t *);
  * shiva_module.c
  */
 bool shiva_module_loader(shiva_ctx_t *, const char *, struct shiva_module **, uint64_t);
-
-/*
- * shiva_trace.c
- */
-bool shiva_trace(shiva_ctx_t *, pid_t, shiva_trace_op_t, void *, void *, shiva_error_t *);
-/*
- * shiva_trace_thread.c
- */
-bool shiva_trace_thread_insert(shiva_ctx_t *, pid_t, uint64_t *);
 
 /*
  * shiva_error.c

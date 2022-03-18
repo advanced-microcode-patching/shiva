@@ -400,7 +400,6 @@ create_data_image(struct shiva_module *linker)
 
 			if (section.size == 0)
 				continue;
-
 			shiva_debug("Attempting to map section %s(offset: %zu) into data segment"
 			    " at address %p\n", section.name, off, linker->data_mem + off);
 			res = elf_section_map(&linker->elfobj, linker->data_mem,
@@ -466,6 +465,16 @@ create_text_image(struct shiva_module *linker)
 			 * If we made it here then the section should be
 			 * placed into the text segment :)
 			 */
+			if (section.size == 0)
+				continue;
+			if (strcmp(section.name, ".eh_frame") == 0) {
+                                shiva_debug("Skipping section .eh_frame (Unused)\n");
+                                continue;
+                        }
+			if (strstr(section.name, ".note") != NULL) {
+                                shiva_debug("Skipping note sections\n");
+                                continue;
+                        }
 			shiva_debug("Attempting to map section %s(offset: %zu) into text segment"
 			    " at address %p\n", section.name, off, linker->text_mem + off);
 			res = elf_section_map(&linker->elfobj, linker->text_mem,

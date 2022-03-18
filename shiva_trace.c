@@ -1,4 +1,4 @@
-#include "shiva.h"
+#include "shiva_trace.h"
 
 bool
 shiva_trace_op_attach(struct shiva_ctx *ctx, pid_t pid,
@@ -6,7 +6,7 @@ shiva_trace_op_attach(struct shiva_ctx *ctx, pid_t pid,
 {
 	bool res;
 	uint64_t status;
-
+#if 0
 	if (pid == 0) {
 		res = shiva_trace_thread_insert(ctx, pid, &status);
 		if (res == false) {
@@ -31,6 +31,7 @@ shiva_trace_op_attach(struct shiva_ctx *ctx, pid_t pid,
 		shiva_error_set(error, "attach pid (%d) failed: no support for multiple threads\n", pid);
 		return false;
 	}
+#endif
 	return true;
 }
 
@@ -51,6 +52,7 @@ shiva_trace_op_poke(struct shiva_ctx *ctx, pid_t pid,
 	size_t pokelen = 0;
 	int o_prot, ret;
 
+	shiva_debug("attempting to write to %p\n", addr);
 	if (shiva_maps_validate_addr(ctx, (uint64_t)addr) == false) {
 		shiva_error_set(error, "poke pid (%d) at %#lx failed: "
 		   "cannot write to debugger memory\n", pid, (uint64_t)addr);
@@ -128,9 +130,6 @@ shiva_trace(struct shiva_ctx *ctx, pid_t pid, shiva_trace_op_t op,
 	bool res;
 
 	switch(op) {
-	case SHIVA_TRACE_OP_ENTER:
-		res = shiva_trace_op_attach(ctx, pid, addr, data, error);
-		break;
 	case SHIVA_TRACE_OP_ATTACH:
 		res = shiva_trace_op_attach(ctx, pid, addr, data, error);
 		break;
