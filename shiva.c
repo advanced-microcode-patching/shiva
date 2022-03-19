@@ -13,8 +13,8 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 {
 	elf_error_t error;
 	struct elf_section section;
-	uint64_t mode;
 	uint8_t *code;
+	int i, bits;
 
 	if (elf_open_object(ctx->path, &ctx->elfobj, ELF_LOAD_F_FORENSICS,
 	    &error) == false) {
@@ -26,28 +26,26 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 		fprintf(stderr, "elf_section_by_name failed to find \".text\"\n");
 		return false;
 	}
-	mode = elf_class(&ctx->elfobj) == elfclass64 ? CS_MODE_64 : CS_MODE_32;
+	bits = elf_class(&ctx->elfobj) == elfclass64 ? 64 : 32;
 	ctx->disas.textptr = elf_address_pointer(&ctx->elfobj, section.address);
 	if (ctx->disas.textptr == NULL) {
 		fprintf(stderr, "elf_address_pointer(%p, %#lx) failed\n",
 		    &ctx->elfobj, section.address);
 		return false;
 	}
-	if (cs_open(CS_ARCH_X86, mode, &ctx->disas.handle) != CS_ERR_OK) {
-		fprintf(stderr, "cs_open failed\n");
-		return false;
+	ctx->disas.base = section.address;
+	for (i = 0; i < section.size; i++)
+		printf("%02x", ctx->disas.textptr[i]);
+	printf("\n");
+	ud_init(&ctx->disas.ud_obj);
+	ud_set_input_buffer(&ctx->disas.ud_obj, ctx->disas.textptr, section.size);
+	ud_set_mode(&ctx->disas.ud_obj, bits);
+	ud_set_syntax(&ctx->disas.ud_obj, UD_SYN_INTEL);
+	while (ud_disassemble(&ctx->disas.ud_obj) != 0) {
+		printf("%-20s %s\n", ud_insn_hex(&ctx->disas.ud_obj),
+		    ud_insn_asm(&ctx->disas.ud_obj));
 	}
-	ctx->disas.count = cs_disasm(ctx->disas.handle, ctx->disas.textptr, section.size,
-	    section.address, 0, &ctx->disas.insn);
-	if (ctx->disas.count < 1) {
-		fprintf(stderr, "cs_disasm_ex failed\n");
-		return false;
-	}
-#if 0
-	for (i = 0; i < ctx->disas.count; i++) {
-		printf("op_str: %s\n", ctx->disas.insn[i].op_str);
-	}
-#endif
+
 	return true;
 }
 

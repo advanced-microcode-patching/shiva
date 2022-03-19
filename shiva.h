@@ -16,7 +16,7 @@
 #include <elf.h>
 #include <errno.h>
 
-#include <capstone/capstone.h>
+#include <udis86.h>
 #include "/opt/elfmaster/include/libelfmaster.h"
 #include "shiva_debug.h"
 
@@ -180,10 +180,9 @@ typedef struct shiva_ctx {
 		struct shiva_module *initcode;
 	} module;
 	struct {
-		csh handle;
-		cs_insn *insn;
+		ud_t ud_obj;
 		uint8_t *textptr;
-		size_t count;
+		uint64_t base;
 	} disas;
 	struct {
 		/*

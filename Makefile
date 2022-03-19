@@ -2,7 +2,8 @@ GCC_OPTS=-DDEBUG -fPIC -c -ggdb
 OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_iter.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o
 
-STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a libcapstone.a
+STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a udis86/libudis86/.libs/libudis86.a
+
 all:
 	$(CC) $(GCC_OPTS) shiva.c -o		shiva.o
 	$(CC) $(GCC_OPTS) shiva_util.c -o 	shiva_util.o
