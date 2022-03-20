@@ -1,0 +1,19 @@
+#include "shiva.h"
+
+void
+shiva_callsite_iterator_init(struct shiva_ctx *ctx, struct shiva_callsite_iterator *iter)
+{
+
+	iter->current = TAILQ_FIRST(&ctx->tailq.branch_tqlist);
+	return;
+}
+
+shiva_iterator_res_t
+shiva_callsite_iterator_next(struct shiva_callsite_iterator *iter, struct shiva_branch_site *e)
+{
+	if (iter->current == NULL)
+		return SHIVA_ITER_DONE;
+	memcpy(e, iter->current, sizeof(*e));
+	iter->current = TAILQ_NEXT(iter->current, _linkage);
+	return ELF_ITER_OK;
+}

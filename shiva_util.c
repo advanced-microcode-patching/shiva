@@ -12,7 +12,7 @@ shiva_strdup(const char *s)
 }
 
 char *
-shiva_fmtstrdup(char *fmt, ...)
+shiva_xfmtstrdup(char *fmt, ...)
 {
 	char buf[512];
 	char *s;

@@ -74,6 +74,10 @@ typedef struct shiva_maps_iterator {
 	struct shiva_mmap_entry *current;
 } shiva_maps_iterator_t;
 
+typedef struct shiva_callsite_iterator {
+	struct shiva_branch_site *current;
+} shiva_callsite_iterator_t;
+
 typedef struct shiva_auxv_iterator {
 	unsigned int index;
 	struct shiva_ctx *ctx;
@@ -104,7 +108,7 @@ struct shiva_branch_site {
 	shiva_branch_type_t branch_type;
 	uint64_t target_vaddr;
 	uint64_t branch_site;
-	SLIST_ENTRY(shiva_branch_site) _linkage;
+	TAILQ_ENTRY(shiva_branch_site) _linkage;
 };
 
 typedef enum shiva_module_section_map_attr {
@@ -216,11 +220,9 @@ typedef struct shiva_ctx {
 		uint64_t flags; // SHIVA_F_ULEXEC_* flags
 	} ulexec;
 	struct {
-		SLIST_HEAD(, shiva_branch_site) branch_slist;
-	} slist;
-	struct {
 		TAILQ_HEAD(, shiva_trace_thread) thread_tqlist;
 		TAILQ_HEAD(, shiva_mmap_entry) mmap_tqlist;
+		TAILQ_HEAD(, shiva_branch_site) branch_tqlist;
 	} tailq;
 } shiva_ctx_t;
 
@@ -229,7 +231,7 @@ typedef struct shiva_ctx {
  */
 
 char * shiva_strdup(const char *);
-char * shiva_fmtstrdup(char *, ...);
+char * shiva_xfmtstrdup(char *, ...);
 void * shiva_malloc(size_t);
 
 /*
