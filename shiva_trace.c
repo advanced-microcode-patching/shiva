@@ -6,7 +6,7 @@ shiva_trace_op_attach(struct shiva_ctx *ctx, pid_t pid,
 {
 	bool res;
 	uint64_t status;
-#if 0
+
 	if (pid == 0) {
 		res = shiva_trace_thread_insert(ctx, pid, &status);
 		if (res == false) {
@@ -31,7 +31,6 @@ shiva_trace_op_attach(struct shiva_ctx *ctx, pid_t pid,
 		shiva_error_set(error, "attach pid (%d) failed: no support for multiple threads\n", pid);
 		return false;
 	}
-#endif
 	return true;
 }
 

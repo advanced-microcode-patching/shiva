@@ -76,6 +76,7 @@ typedef struct shiva_maps_iterator {
 
 typedef struct shiva_callsite_iterator {
 	struct shiva_branch_site *current;
+	struct shiva_ctx *ctx;
 } shiva_callsite_iterator_t;
 
 typedef struct shiva_auxv_iterator {
