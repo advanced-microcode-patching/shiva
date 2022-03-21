@@ -14,6 +14,10 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 	int64_t call_offset;
 	int bits;
 
+	if (elf_section_by_name(&ctx->elfobj, ".text", &section) == false) {
+		fprintf(stderr, "elf_section_by_name() failed\n");
+		return false;
+	}
 	bits = elf_class(&ctx->elfobj) == elfclass64 ? 64 : 32;
 	ud_init(&ctx->disas.ud_obj);
 	ud_set_input_buffer(&ctx->disas.ud_obj, ctx->disas.textptr, section.size);
@@ -22,7 +26,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 	while (ud_disassemble(&ctx->disas.ud_obj) != 0) {
 		struct shiva_branch_site *tmp;
 		size_t insn_len = ud_insn_len(&ctx->disas.ud_obj);
-		
+
 		memset(&symbol, 0, sizeof(symbol));
 
 		if (ud_insn_mnemonic(&ctx->disas.ud_obj) != UD_Icall) {
