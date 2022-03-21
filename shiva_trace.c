@@ -1,6 +1,42 @@
 #include "shiva_trace.h"
 
 bool
+shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(struct shiva_ctx *),
+    uint64_t flags, shiva_error_t *error)
+{
+
+	struct shiva_trace_handler *handler_struct;
+	/*
+	 * Let's confirm that the specified handler doesn't exist in the debugger
+	 * memory.
+	 */
+	if (shiva_maps_validate_addr(ctx, (uint64_t)handler_fn) == false) {
+		shiva_error_set(error, "failed to register handler (%p): "
+		   "cannot write to debugger memory\n", handler_fn);
+		return false;
+	}
+
+	handler_struct = calloc(1, sizeof(*handler_struct));
+	if (handler_struct == NULL) {
+		shiva_error_set(error, "memory allocation failed: %s\n", strerror(errno));
+		return false;
+	}
+	handler_struct->handler_fn = handler_fn;
+	handler_struct->flags = flags;
+	TAILQ_INIT(&handler_struct->bp_tqlist);
+
+	TAILQ_INSERT_TAIL(&ctx->tailq.trace_handlers_tqlist, handler_struct, _linkage);
+	return true;
+}
+
+bool
+shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct shiva_ctx *),
+    shiva_error_t *error)
+{
+
+}
+
+bool
 shiva_trace_op_attach(struct shiva_ctx *ctx, pid_t pid,
     void *addr, void *data, shiva_error_t *error)
 {

@@ -226,6 +226,7 @@ typedef struct shiva_ctx {
 		TAILQ_HEAD(, shiva_trace_thread) thread_tqlist;
 		TAILQ_HEAD(, shiva_mmap_entry) mmap_tqlist;
 		TAILQ_HEAD(, shiva_branch_site) branch_tqlist;
+		TAILQ_HEAD(, shiva_trace_handler) trace_handlers_tqlist;
 	} tailq;
 } shiva_ctx_t;
 

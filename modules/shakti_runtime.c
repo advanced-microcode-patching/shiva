@@ -5,10 +5,10 @@
 
 #include "../shiva_trace.h"
 
-int
+void *
 shakti_handler(shiva_ctx_t *ctx)
 {
-	
+
 }
 
 int
@@ -18,11 +18,18 @@ shakti_main(shiva_ctx_t *ctx)
 	shiva_error_t error;
 	shiva_callsite_iterator_t call_iter;
 	struct shiva_branch_site branch;
+	struct shiva_trace_handler trace_handler;
+
+	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_ATTACH,
+	    NULL, NULL, &error);
+	if (res == false) {
+		printf("shiva_trace failed: %s\n", shiva_error_msg(&error));
 
 	shiva_callsite_iterator_init(ctx, &call_iter);
 	while (shiva_callsite_iterator_next(&call_iter, &branch) == ELF_ITER_OK) {
 		printf("callsite (%#lx) -> %s\n", branch.branch_site, branch.symbol.name);
-		//shiva_trace_set_bp(ctx, &branch, SHIVA_TRACE_BP_CALL);
+		shiva_trace_register_breakpoint(
+		
 	}
 #if 0
 	printf("Shakti debugging module\n");

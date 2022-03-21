@@ -24,6 +24,10 @@
 #define SHIVA_TRACE_THREAD_F_COREDUMPING	(1UL << 3)
 #define SHIVA_TRACE_THREAD_F_NEW		(1UL << 4) // newly added into thread list
 
+#define SHIVA_TRACE_HANDLER_F_CALL	(1UL << 0) // handler is invoked via  call
+#define SHIVA_TRACE_HANDLER_F_JMP	(1UL << 1) // handler is invoked via jmp
+#define SHIVA_TRACE_HANDLER_F_INT3	(1UL << 2) // handler is invoked via int3
+
 typedef enum shiva_trace_op {
 	SHIVA_TRACE_OP_CONT = 0,
 	SHIVA_TRACE_OP_ATTACH,
@@ -52,10 +56,10 @@ typedef struct shiva_trace_bp {
 } shiva_trace_bp_t;
 
 typedef struct shiva_trace_handler {
-	char *name; // handler name
-	int (*handler_fn)(shiva_ctx_t *); // points to handler triggered by BP
-	TAILQ_HEAD(, shiva_trace_bp) bp_tqlist; // list of current bp's
 	uint64_t flags;
+	void * (*handler_fn)(shiva_ctx_t *); // points to handler triggered by BP
+	TAILQ_HEAD(, shiva_trace_bp) bp_tqlist; // list of current bp's
+	TAILQ_ENTRY(shiva_trace_handler) _linkage;
 } shiva_trace_handler_t;
 
 typedef struct shiva_trace_thread {
@@ -70,5 +74,11 @@ typedef struct shiva_trace_thread {
 } shiva_trace_thread_t;
 
 bool shiva_trace(shiva_ctx_t *, pid_t, shiva_trace_op_t, void *, void *, shiva_error_t *);
-bool shiva_trace_thread_insert(shiva_ctx_t *, pid_t, uint64_t *);
+bool shiva_trace_register_handler(shiva_ctx_t *, void * (*)(shiva_ctx_t *), uint64_t,
+    shiva_error_t *);
+bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(shiva_ctx_t *), shiva_error_t *);
 
+/*
+ * shiva_trace_thread.c
+ */
+bool shiva_trace_thread_insert(shiva_ctx_t *, pid_t, uint64_t *);
