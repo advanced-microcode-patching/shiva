@@ -5,6 +5,7 @@ shiva_init_lists(struct shiva_ctx *ctx)
 {
 	TAILQ_INIT(&ctx->tailq.mmap_tqlist);
 	TAILQ_INIT(&ctx->tailq.thread_tqlist);
+	TAILQ_INIT(&ctx->tailq.branch_tqlist);
 	return;
 }
 
@@ -37,6 +38,7 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 	for (i = 0; i < section.size; i++)
 		printf("%02x", ctx->disas.textptr[i]);
 	printf("\n");
+#if 0
 	ud_init(&ctx->disas.ud_obj);
 	ud_set_input_buffer(&ctx->disas.ud_obj, ctx->disas.textptr, section.size);
 	ud_set_mode(&ctx->disas.ud_obj, bits);
@@ -45,7 +47,7 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 		printf("%-20s %s\n", ud_insn_hex(&ctx->disas.ud_obj),
 		    ud_insn_asm(&ctx->disas.ud_obj));
 	}
-
+#endif
 	return true;
 }
 
@@ -155,6 +157,15 @@ int main(int argc, char **argv, char **envp)
 	}
 	if (shiva_maps_build_list(&ctx) == false) {
 		fprintf(stderr, "shiva_maps_build_list() failed\n");
+		exit(EXIT_FAILURE);
+	}
+	/*
+	 * Now that we've got the target binary (The debugee) loaded
+	 * into memory, we can run some analyzers on it to acquire
+	 * information (i.e. callsite locations).
+	 */
+	if (shiva_analyze_run(&ctx) == false) {
+		fprintf(stderr, "Failed to run the analyzers\n");
 		exit(EXIT_FAILURE);
 	}
 	if (shiva_module_loader(&ctx, "./modules/shakti_runtime.o",

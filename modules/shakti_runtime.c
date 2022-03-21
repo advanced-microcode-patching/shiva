@@ -21,6 +21,7 @@ shakti_main(shiva_ctx_t *ctx)
 
 	shiva_callsite_iterator_init(ctx, &call_iter);
 	while (shiva_callsite_iterator_next(&call_iter, &branch) == ELF_ITER_OK) {
+		printf("callsite (%#lx) -> %s\n", branch.branch_site, branch.symbol.name);
 		//shiva_trace_set_bp(ctx, &branch, SHIVA_TRACE_BP_CALL);
 	}
 #if 0

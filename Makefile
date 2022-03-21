@@ -20,7 +20,7 @@ all:
 	$(CC) $(GCC_OPTS) shiva_callsite.c -o 	shiva_callsite.o
 	$(CC) -static -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o shiva
 test:
-	gcc test.c -o test
+	gcc test.c -o test -fcf-protection=none
 clean:
 	rm -f test
 	rm -f *.o

@@ -29,6 +29,8 @@
 #define ELF_PAGEOFFSET(_v) ((_v) & (ELF_MIN_ALIGN-1))
 #define ELF_PAGEALIGN(_v, _a) (((_v) + _a - 1) & ~(_a - 1))
 
+#define SHIVA_RUNTIME_ADDR(addr) (addr + ctx->ulexec.base)
+
 #define SHIVA_F_JMP_CFLOW		(1UL << 0)
 #define SHIVA_F_STRING_ARGS		(1UL << 1)
 #define SHIVA_F_RETURN_FLOW		(1UL << 2)
@@ -272,3 +274,15 @@ bool shiva_maps_build_list(shiva_ctx_t *);
 bool shiva_maps_validate_addr(shiva_ctx_t *, uint64_t);
 void shiva_maps_iterator_init(shiva_ctx_t *, shiva_maps_iterator_t *);
 shiva_iterator_res_t shiva_maps_iterator_next(shiva_maps_iterator_t *, struct shiva_mmap_entry *);
+
+/*
+ * shiva_callsite.c
+ */
+void shiva_callsite_iterator_init(struct shiva_ctx *, struct shiva_callsite_iterator *);
+shiva_iterator_res_t shiva_callsite_iterator_next(shiva_callsite_iterator_t *, struct shiva_branch_site *);
+
+/*
+ * shiva_analyze.c
+ */
+bool shiva_analyze_find_calls(shiva_ctx_t *);
+bool shiva_analyze_run(shiva_ctx_t *);
