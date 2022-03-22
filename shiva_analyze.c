@@ -41,24 +41,15 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			current_address += insn_len;
 			continue;
 		}
-		printf("Found a call instruction\n");
 		tmp = calloc(1, sizeof(*tmp));
 		if (tmp == NULL) {
 			perror("calloc");
 			return false;
 		}
-		int i;
-		for (i = 0; i < 5; i++) {
-			printf("%02x ", ptr[i]);
-		}
-		printf("\n");
 		call_offset = *(uint32_t *)&ptr[1];
-		printf("call_offset: %#lx\n", call_offset);
 		call_site = current_address;
-		printf("call_site: %#lx\n", call_site);
 		call_addr = call_site + call_offset + 5;
 		call_addr &= 0xffffffff;
-		printf("call_addr: %#lx\n", call_addr);
 		if (elf_symbol_by_value(&ctx->elfobj, call_addr,
 		    &symbol) == false) {
 			/*
@@ -71,7 +62,6 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 
 			elf_plt_iterator_init(&ctx->elfobj, &plt_iter);
 			while (elf_plt_iterator_next(&plt_iter, &plt_entry) == ELF_ITER_OK) {
-				printf("Comparing %#lx to call_addr: %#lx\n", plt_entry.addr, call_addr);
 				if (plt_entry.addr == call_addr) {
 					symbol.name = shiva_xfmtstrdup("%s@plt", plt_entry.symname);
 					symbol.type = STT_FUNC;
@@ -92,7 +82,6 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 				symbol.bind = STB_GLOBAL;
 			}
 		}
-		printf("symbol name: %s\n", symbol.name);
 		memcpy(&tmp->symbol, &symbol, sizeof(symbol));
 		tmp->branch_type = SHIVA_BRANCH_CALL;
 		tmp->target_vaddr = runtime_addr;

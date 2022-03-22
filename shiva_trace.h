@@ -40,6 +40,16 @@ typedef enum shiva_trace_op {
 	SHIVA_TRACE_OP_SETSIGINFO
 } shiva_trace_op_t;
 
+#define SHIVA_MAX_INST_LEN 15
+
+typedef struct shiva_trace_insn
+{
+	uint8_t o_insn[SHIVA_MAX_INST_LEN];
+	uint8_t n_insn[SHIVA_MAX_INST_LEN];
+	size_t o_insn_len;
+	size_t n_insn_len;
+} shiva_trace_insn_t;
+
 typedef enum shiva_trace_bp_type {
 	SHIVA_TRACE_BP_JMP = 0,
 	SHIVA_TRACE_BP_CALL,
@@ -52,11 +62,13 @@ typedef struct shiva_trace_bp {
 	size_t bp_len;
 	uint8_t *inst_ptr;
 	struct elf_symbol symbol;
+	bool symbol_location;
+	struct shiva_trace_insn insn;
 	TAILQ_ENTRY(shiva_trace_bp) _linkage;
 } shiva_trace_bp_t;
 
 typedef struct shiva_trace_handler {
-	uint64_t flags;
+	shiva_trace_bp_type_t type;
 	void * (*handler_fn)(shiva_ctx_t *); // points to handler triggered by BP
 	TAILQ_HEAD(, shiva_trace_bp) bp_tqlist; // list of current bp's
 	TAILQ_ENTRY(shiva_trace_handler) _linkage;
@@ -74,9 +86,9 @@ typedef struct shiva_trace_thread {
 } shiva_trace_thread_t;
 
 bool shiva_trace(shiva_ctx_t *, pid_t, shiva_trace_op_t, void *, void *, shiva_error_t *);
-bool shiva_trace_register_handler(shiva_ctx_t *, void * (*)(shiva_ctx_t *), uint64_t,
+bool shiva_trace_register_handler(shiva_ctx_t *, void * (*)(shiva_ctx_t *), shiva_trace_bp_type_t,
     shiva_error_t *);
-bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(shiva_ctx_t *), shiva_error_t *);
+bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(shiva_ctx_t *), uint64_t, shiva_error_t *);
 
 /*
  * shiva_trace_thread.c

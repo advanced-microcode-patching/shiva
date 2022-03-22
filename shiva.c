@@ -35,9 +35,6 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 		return false;
 	}
 	ctx->disas.base = section.address;
-	for (i = 0; i < section.size; i++)
-		printf("%02x", ctx->disas.textptr[i]);
-	printf("\n");
 #if 0
 	ud_init(&ctx->disas.ud_obj);
 	ud_set_input_buffer(&ctx->disas.ud_obj, ctx->disas.textptr, section.size);

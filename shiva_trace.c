@@ -2,7 +2,7 @@
 
 bool
 shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(struct shiva_ctx *),
-    uint64_t flags, shiva_error_t *error)
+    shiva_trace_bp_type_t bp_type, shiva_error_t *error)
 {
 
 	struct shiva_trace_handler *handler_struct;
@@ -22,7 +22,7 @@ shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(struct 
 		return false;
 	}
 	handler_struct->handler_fn = handler_fn;
-	handler_struct->flags = flags;
+	handler_struct->type = bp_type;
 	TAILQ_INIT(&handler_struct->bp_tqlist);
 
 	TAILQ_INSERT_TAIL(&ctx->tailq.trace_handlers_tqlist, handler_struct, _linkage);
@@ -31,9 +31,59 @@ shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(struct 
 
 bool
 shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct shiva_ctx *),
-    shiva_error_t *error)
+    uint64_t target_addr, shiva_error_t *error)
 {
+	struct shiva_trace_handler *current;
+	struct shiva_trace_bp *bp;
+	uint8_t *inst_ptr = (uint8_t *)target_addr;
+	int bits;
+	size_t insn_len;
+	struct elf_symbol symbol;
+	uint8_t call_inst[5] = "\xe8\x00\x00\x00\x00";
+	uint64_t call_offset;
+	bool res;
+	int pid;
 
+	TAILQ_FOREACH(current, &ctx->tailq.trace_handlers_tqlist, _linkage) {
+		if (current->handler_fn == handler_fn) {
+			shiva_debug("found handler: %p\n", handler_fn);
+			switch(current->type) {
+			case SHIVA_TRACE_BP_JMP:
+				break;
+			case SHIVA_TRACE_BP_INT3:
+				break;
+			case SHIVA_TRACE_BP_CALL:
+				/*
+				 * Get the original inst
+				 */
+				ud_set_input_buffer(&ctx->disas.ud_obj, inst_ptr, SHIVA_MAX_INST_LEN);
+				bits = elf_class(&ctx->elfobj) == elfclass64 ? 64 : 32;
+				insn_len = ud_insn_len(&ctx->disas.ud_obj);
+				assert(insn_len <= 15);
+				TAILQ_INIT(&current->bp_tqlist);
+				bp = calloc(1, sizeof(*bp));
+				if (bp == NULL) {
+					shiva_error_set(error, "memory allocation failed: %s\n",
+					    strerror(errno));
+					return false;
+				}
+				/*
+				 * backup the original instruction.
+				 */
+				memcpy(&bp->insn.o_insn[0], (void *)target_addr, insn_len);
+				bp->bp_type = current->type;
+				bp->bp_addr = target_addr;
+				bp->bp_len = 5; // length of breakpoint is size of imm call insn
+
+				if (elf_symbol_by_value(&ctx->elfobj, target_addr, &symbol) == false) {
+					bp->symbol_location = true;
+					memcpy(&bp->symbol, &symbol, sizeof(symbol));
+				}
+				*(uint64_t *)&call_inst[1] = call_offset;
+			}
+		}
+	}
+	return true;
 }
 
 bool
