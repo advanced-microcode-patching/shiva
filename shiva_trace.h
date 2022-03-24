@@ -89,7 +89,7 @@ bool shiva_trace(shiva_ctx_t *, pid_t, shiva_trace_op_t, void *, void *, shiva_e
 bool shiva_trace_register_handler(shiva_ctx_t *, void * (*)(shiva_ctx_t *), shiva_trace_bp_type_t,
     shiva_error_t *);
 bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(shiva_ctx_t *), uint64_t, shiva_error_t *);
-
+bool shiva_trace_write(struct shiva_ctx *, pid_t, void *, const void *, size_t, shiva_error_t *);
 /*
  * shiva_trace_thread.c
  */

@@ -6,6 +6,7 @@ shiva_init_lists(struct shiva_ctx *ctx)
 	TAILQ_INIT(&ctx->tailq.mmap_tqlist);
 	TAILQ_INIT(&ctx->tailq.thread_tqlist);
 	TAILQ_INIT(&ctx->tailq.branch_tqlist);
+	TAILQ_INIT(&ctx->tailq.trace_handlers_tqlist);
 	return;
 }
 

@@ -1,5 +1,35 @@
 #include "shiva_trace.h"
 
+/*
+ * This function is a wrapper around shiva_trace_op_poke
+ */
+bool
+shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
+    const void *src, size_t len, shiva_error_t *error)
+{
+	size_t rem = len % sizeof(void *);
+	size_t quot = len / sizeof(void *);
+	uint8_t *s = (uint8_t *)src;
+	uint8_t *d = (uint8_t *)dst;
+	bool res;
+
+	while (quot--) {
+		res = shiva_trace(ctx, pid, SHIVA_TRACE_OP_POKE, d, s,
+		   error);
+		if (res == false)
+			return false;
+		s += sizeof(void *);
+		d += sizeof(void *);
+	}
+	if (rem > 0) {
+		res = shiva_trace(ctx, pid, SHIVA_TRACE_OP_POKE, d, s,
+		    error);
+		if (res == false)
+			return false;
+	}
+	return true;
+}
+
 bool
 shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(struct shiva_ctx *),
     shiva_trace_bp_type_t bp_type, shiva_error_t *error)
@@ -10,12 +40,13 @@ shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(struct 
 	 * Let's confirm that the specified handler doesn't exist in the debugger
 	 * memory.
 	 */
+#if 0
 	if (shiva_maps_validate_addr(ctx, (uint64_t)handler_fn) == false) {
 		shiva_error_set(error, "failed to register handler (%p): "
 		   "cannot write to debugger memory\n", handler_fn);
 		return false;
 	}
-
+#endif
 	handler_struct = calloc(1, sizeof(*handler_struct));
 	if (handler_struct == NULL) {
 		shiva_error_set(error, "memory allocation failed: %s\n", strerror(errno));
@@ -40,7 +71,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 	size_t insn_len;
 	struct elf_symbol symbol;
 	uint8_t call_inst[5] = "\xe8\x00\x00\x00\x00";
-	uint64_t call_offset;
+	uint64_t call_offset, call_site;
 	bool res;
 	int pid;
 
@@ -79,7 +110,19 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 					bp->symbol_location = true;
 					memcpy(&bp->symbol, &symbol, sizeof(symbol));
 				}
-				*(uint64_t *)&call_inst[1] = call_offset;
+				call_site = target_addr; // we are creating a call_site at target_vadr
+				call_offset = (uint64_t)current->handler_fn - call_site - sizeof(uint32_t);
+				printf("calloff = %#lx - %#lx - 4 = %#lx\n",
+                                    current->handler_fn, call_site, call_offset);
+				*(uint32_t *)&call_inst[1] = call_offset;
+				res = shiva_trace_write(ctx, pid, (void *)target_addr, call_inst, bp->bp_len,
+				    error);
+				if (res == false) {
+					free(bp);
+					return false;
+				}
+				TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
+				break;
 			}
 		}
 	}
@@ -177,6 +220,7 @@ shiva_trace_op_poke(struct shiva_ctx *ctx, pid_t pid,
 		    "mprotect failure: %s\n", pid, (uint64_t)addr, strerror(errno));
 		return false;
 	}
+	
 
 	return true;
 }

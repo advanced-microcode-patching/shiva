@@ -387,7 +387,7 @@ create_data_image(struct shiva_module *linker)
 	data_size_aligned = ELF_PAGEALIGN(linker->data_size, PAGE_SIZE);
 	shiva_debug("ELF data segment len: %zu\n", data_size_aligned);
 	linker->data_mem = mmap(NULL, data_size_aligned, PROT_READ|PROT_WRITE,
-	    MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT, -1, 0);
 	if (linker->data_mem == MAP_FAILED) {
 		shiva_debug("mmap failed: %s\n", strerror(errno));
 		return false;
@@ -448,7 +448,7 @@ create_text_image(struct shiva_module *linker)
 
 	text_size_aligned = ELF_PAGEALIGN(linker->text_size, PAGE_SIZE);
 	linker->text_mem = mmap(NULL, text_size_aligned, PROT_READ|PROT_WRITE|PROT_EXEC,
-	    MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT, -1, 0);
 	if (linker->text_mem == MAP_FAILED) {
 		shiva_debug("mmap failed: %s\n", strerror(errno));
 		return false;
