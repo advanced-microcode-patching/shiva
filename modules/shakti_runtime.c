@@ -22,7 +22,7 @@ shakti_main(shiva_ctx_t *ctx)
 	struct shiva_trace_handler trace_handler;
 	uint64_t data = 0xdeadbeef;
 	uint64_t out;
-
+#if 0
 	printf("shakti_handler is at %#lx\n", shakti_handler);
 	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_ATTACH,
 	    NULL, NULL, &error);
@@ -30,6 +30,7 @@ shakti_main(shiva_ctx_t *ctx)
 		printf("shiva_trace failed: %s\n", shiva_error_msg(&error));
 		return -1;
 	}
+#endif
 	res = shiva_trace_register_handler(ctx, &shakti_handler,
 	    SHIVA_TRACE_BP_CALL, &error);
 	if (res == false) {
@@ -37,6 +38,9 @@ shakti_main(shiva_ctx_t *ctx)
 		    shiva_error_msg(&error));
 		return -1;
 	}
+	printf("SHAKTI MAIN: %p\n", &shakti_main);
+	printf("HANDLER: %p\n", &shakti_handler);
+
 	shiva_callsite_iterator_init(ctx, &call_iter);
 	while (shiva_callsite_iterator_next(&call_iter, &branch) == ELF_ITER_OK) {
 		printf("callsite (%#lx) -> %s\n", branch.branch_site, branch.symbol.name);

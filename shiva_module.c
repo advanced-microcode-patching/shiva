@@ -99,12 +99,12 @@ resolve_pltgot_entries(struct shiva_module *linker)
 			continue;
 		}
 		if (elf_symbol_by_name(&self, rel.symname, &symbol) == false) {
-	    	    shiva_debug("Could not resolve symbol '%s'."
-	            " runtime-linkage failure\n", rel.symname);
+		    shiva_debug("Could not resolve symbol '%s'."
+		    " runtime-linkage failure\n", rel.symname);
 			return false;
 		}
 		shiva_debug("Setting [%#lx] GOT entry '%s' to %#lx\n", gotaddr, rel.symname,
-	    	    symbol.value);
+		    symbol.value);
 		GOT = (uint64_t *)gotaddr;
 		*GOT = symbol.value;
 		gotaddr += sizeof(uint64_t);
@@ -196,14 +196,32 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 				if (strcmp(smap_current->name, rel.symname) != 0)
 					continue;
 				symval = smap_current->vaddr;
+				rel_unit = &linker->text_mem[smap.offset + rel.offset];
+				rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+				rel_val = symval + rel.addend - rel_addr;
+				shiva_debug("Section: %s (%#lx)\n", rel.symname);
+				shiva_debug("rel_val = %#lx + %#lx - %#lx\n", symval, rel.addend, rel_addr);
+				shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
+				*(uint32_t *)&rel_unit[0] = rel_val;
+				return true;
 			}
+		} else {
+			if (elf_symbol_by_name(&linker->elfobj, rel.symname,
+			    &symbol) == false) {
+				fprintf(stderr, "elf_symbol_by_name(%p, %s, ...) failed\n",
+				    &linker->elfobj, rel.symname);
+				return false;
+			}
+			symval = linker->text_vaddr + symbol.value;
+			rel_unit = &linker->text_mem[smap.offset + rel.offset];
+			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+			rel_val = symval + rel.addend - rel_addr;
+			shiva_debug("Symbol: %s (%#lx)\n", rel.symname);
+			shiva_debug("rel_val = %#lx + %#lx - %#lx\n", symval, rel.addend, rel_addr);
+			shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
+			*(uint32_t *)&rel_unit[0] = rel_val;
+			return true;
 		}
-		rel_unit = &linker->text_mem[smap.offset + rel.offset];
-		rel_addr = linker->text_vaddr + smap.offset + rel.offset;
-		rel_val = symval + rel.addend - rel_addr;
-		shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
-		*(uint32_t *)&rel_unit[0] = rel_val;
-		return true;
 	}
 	return false;
 }
@@ -413,7 +431,7 @@ create_data_image(struct shiva_module *linker)
 				shiva_debug("malloc failed\n");
 				return false;
 			}
-			n->map_attribute = LP_SECTION_TEXTSEGMENT;
+			n->map_attribute = LP_SECTION_DATASEGMENT;
 			n->vaddr = (unsigned long)linker->data_mem + count;
 			n->offset = count; // offset within data segment that section lives at
 			n->size = section.size;
@@ -468,13 +486,13 @@ create_text_image(struct shiva_module *linker)
 			if (section.size == 0)
 				continue;
 			if (strcmp(section.name, ".eh_frame") == 0) {
-                                shiva_debug("Skipping section .eh_frame (Unused)\n");
-                                continue;
-                        }
+				shiva_debug("Skipping section .eh_frame (Unused)\n");
+				continue;
+			}
 			if (strstr(section.name, ".note") != NULL) {
-                                shiva_debug("Skipping note sections\n");
-                                continue;
-                        }
+				shiva_debug("Skipping note sections\n");
+				continue;
+			}
 			shiva_debug("Attempting to map section %s(offset: %zu) into text segment"
 			    " at address %p\n", section.name, off, linker->text_mem + off);
 			res = elf_section_map(&linker->elfobj, linker->text_mem,

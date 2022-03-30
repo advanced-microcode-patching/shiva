@@ -11,9 +11,13 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 	size_t quot = len / sizeof(void *);
 	uint8_t *s = (uint8_t *)src;
 	uint8_t *d = (uint8_t *)dst;
+	uint64_t aligned_vaddr;
+	uint64_t addr = (uint64_t)dst;
 	bool res;
-
+	int ret, o_prot;
+#if 0
 	while (quot--) {
+		printf("poking\n");
 		res = shiva_trace(ctx, pid, SHIVA_TRACE_OP_POKE, d, s,
 		   error);
 		if (res == false)
@@ -22,10 +26,43 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 		d += sizeof(void *);
 	}
 	if (rem > 0) {
+		printf("rem > 0\n");
 		res = shiva_trace(ctx, pid, SHIVA_TRACE_OP_POKE, d, s,
 		    error);
 		if (res == false)
 			return false;
+	}
+#endif
+
+	if (shiva_maps_prot_by_addr(ctx, (uint64_t)addr, &o_prot) == false) {
+       	    shiva_error_set(error, "poke pid (%d) at %#lx failed: "
+            "cannot find memory protection\n", pid, (uint64_t)addr);
+		return false;
+        }
+
+	aligned_vaddr = (uint64_t)addr;
+	aligned_vaddr &= ~4095;
+	/*
+	 * Make virtual address writable if it is not.
+	 */
+	ret = mprotect((void *)aligned_vaddr, 4096, PROT_READ|PROT_WRITE);
+	if (ret < 0) {
+		shiva_error_set(error, "poke pid (%d) at %#lx failed: "
+		    "mprotect failure: %s\n", pid, (uint64_t)addr, strerror(errno));
+		return false;
+	}
+	/*
+	 * Copy data to target addr
+	 */
+	memcpy(d, s, len);
+	/*
+	 * Reset memory protection
+	 */
+	ret = mprotect((void *)aligned_vaddr, 4096, o_prot);
+	if (ret < 0) {
+		shiva_error_set(error, "poke pid (%d) at %#lx failed: "
+		    "mprotect failure: %s\n", pid, (uint64_t)addr, strerror(errno));
+		return false;
 	}
 	return true;
 }
@@ -111,9 +148,9 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 					memcpy(&bp->symbol, &symbol, sizeof(symbol));
 				}
 				call_site = target_addr; // we are creating a call_site at target_vadr
-				call_offset = (uint64_t)current->handler_fn - call_site - sizeof(uint32_t);
+				call_offset = (uint64_t)current->handler_fn - call_site - 5;
 				printf("calloff = %#lx - %#lx - 4 = %#lx\n",
-                                    current->handler_fn, call_site, call_offset);
+				    current->handler_fn, call_site, call_offset);
 				*(uint32_t *)&call_inst[1] = call_offset;
 				res = shiva_trace_write(ctx, pid, (void *)target_addr, call_inst, bp->bp_len,
 				    error);
