@@ -111,6 +111,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 	uint64_t call_offset, call_site;
 	bool res;
 	int pid;
+	uint64_t o_call_offset;
 
 	TAILQ_FOREACH(current, &ctx->tailq.trace_handlers_tqlist, _linkage) {
 		if (current->handler_fn == handler_fn) {
@@ -138,11 +139,18 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 				/*
 				 * backup the original instruction.
 				 */
-				memcpy(&bp->insn.o_insn[0], (void *)target_addr, insn_len);
+				/*
+				 * XXX look into why insn_len is 0 after ud_insn_len.
+				 */
+				memcpy(&bp->insn.o_insn[0], (void *)target_addr, 5);
+				o_call_offset = *(uint32_t *)&bp->insn.o_insn[1];
+				printf("o_call_offset: %#lx\n", o_call_offset);
+				bp->o_target = target_addr + o_call_offset + 5;
+				printf("old call target: %#lx\n", bp->o_target);
 				bp->bp_type = current->type;
 				bp->bp_addr = target_addr;
 				bp->bp_len = 5; // length of breakpoint is size of imm call insn
-
+				bp->retaddr = target_addr + bp->bp_len;
 				if (elf_symbol_by_value(&ctx->elfobj, target_addr, &symbol) == false) {
 					bp->symbol_location = true;
 					memcpy(&bp->symbol, &symbol, sizeof(symbol));

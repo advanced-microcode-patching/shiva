@@ -61,6 +61,8 @@ typedef struct shiva_trace_bp {
 	uint64_t bp_addr;
 	size_t bp_len;
 	uint8_t *inst_ptr;
+	uint64_t retaddr;
+	uint64_t o_target;
 	struct elf_symbol symbol;
 	bool symbol_location;
 	struct shiva_trace_insn insn;

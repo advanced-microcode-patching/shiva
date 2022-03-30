@@ -8,7 +8,25 @@
 void *
 shakti_handler(shiva_ctx_t *ctx)
 {
+	uint64_t retaddr = __builtin_return_address(0);
+	struct shiva_trace_handler *current;
+	struct shiva_trace_bp *bp;
+	uint64_t o_target;
+
+	printf("handler retaddr: %#lx\n", retaddr);
+	TAILQ_FOREACH(current, &ctx->tailq.trace_handlers_tqlist, _linkage) {
+		if (current->handler_fn != &shakti_handler)
+			continue;
+		printf("Searching breakpoint list\n");
+		TAILQ_FOREACH(bp, &current->bp_tqlist,  _linkage) {
+			if (bp->retaddr == retaddr) {
+				printf("Found breakpoint!\n");
+				o_target = bp->o_target;
+			}
+		}
+	}
 	printf("handler called!\n");
+
 	return NULL;
 }
 
