@@ -60,19 +60,11 @@ resolve_pltgot_entries(struct shiva_module *linker)
 	uint64_t gotaddr;
 	uint64_t *GOT;
 	char interp_path[PATH_MAX];
-	elfobj_t self;
 	elf_error_t error;
 	elf_relocation_iterator_t rel_iter;
 	struct elf_relocation rel;
 	struct elf_symbol symbol;
 	int i;
-
-	if (elf_open_object("/proc/self/exe", &self, ELF_LOAD_F_STRICT,
-	    &error) == false) {
-		shiva_debug("elf_open_object(%s, ...) failed: %s\n",
-		    "/proc/self/exe", elf_error_msg(&error));
-		return false;
-	}
 
 	i = 0;
 	gotaddr = linker->data_vaddr + linker->pltgot_off;
@@ -92,13 +84,18 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		if ((elf_symbol_by_name(&linker->elfobj, rel.symname, &symbol) == true) &&
 		    symbol.type == STT_FUNC) {
 			shiva_debug("Setting [%#lx] GOT entry '%s' to %#lx\n", gotaddr,
-			    rel.symname, symbol.value);
+			    rel.symname, symbol.value + linker->text_vaddr);
 			GOT = (uint64_t *)gotaddr;
 			*GOT = symbol.value + linker->text_vaddr;
 			gotaddr += sizeof(uint64_t);
 			continue;
 		}
-		if (elf_symbol_by_name(&self, rel.symname, &symbol) == false) {
+		/*
+		 * If the symbol doesn't exist within the module itself, let's see
+		 * if we can find it within the debugger itself which is statically
+		 * linked to musl-libc.
+		 */
+		if (elf_symbol_by_name(&linker->self, rel.symname, &symbol) == false) {
 		    shiva_debug("Could not resolve symbol '%s'."
 		    " runtime-linkage failure\n", rel.symname);
 			return false;
@@ -169,7 +166,8 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 		return false;
 	}
 	shiva_debug("Successfully retrieved section mapping for %s\n", shdrname);
-
+	shiva_debug("linker->text_vaddr: %#lx\n", linker->text_vaddr);
+	shiva_debug("smap.offset: %#lx\n", smap.offset);
 	switch(rel.type) {
 	case R_X86_64_PLT32: /* computation: L + A - P */
 		TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {
@@ -199,28 +197,64 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 				rel_unit = &linker->text_mem[smap.offset + rel.offset];
 				rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 				rel_val = symval + rel.addend - rel_addr;
-				shiva_debug("Section: %s (%#lx)\n", rel.symname);
+				shiva_debug("Section: %s\n", rel.symname)
 				shiva_debug("rel_val = %#lx + %#lx - %#lx\n", symval, rel.addend, rel_addr);
 				shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
 				*(uint32_t *)&rel_unit[0] = rel_val;
 				return true;
 			}
-		} else {
+		} else { /* Handling a non-section-name symbol. */
+			/*
+			 * First look for symbol inside of the module, and if it doesn't exist
+			 * there let's look inside of the debuggers symbol table.
+			 */
 			if (elf_symbol_by_name(&linker->elfobj, rel.symname,
-			    &symbol) == false) {
-				fprintf(stderr, "elf_symbol_by_name(%p, %s, ...) failed\n",
-				    &linker->elfobj, rel.symname);
+			    &symbol) == true) {
+				/*
+				 * If the symbol is a NOTYPE then it is an external reference
+				 * to a symbol somewhere else (i.e. shiva_ctx_t *global_ctx).
+				 * Probably exists in the debugger binary.
+				 */
+				if (symbol.type == STT_NOTYPE)
+					goto internal_lookup;
+				shiva_debug("Symbol value for %s: %#lx\n", rel.symname, symbol.value);
+				symval = linker->text_vaddr + symbol.value;
+				rel_unit = &linker->text_mem[smap.offset + rel.offset];
+				rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+				rel_val = symval + rel.addend - rel_addr;
+				shiva_debug("Symbol: %s\n", rel.symname);
+				shiva_debug("rel_val = %#lx + %#lx - %#lx\n", symval, rel.addend, rel_addr);
+				shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
+				*(uint32_t *)&rel_unit[0] = rel_val;
+				return true;
+			}
+			/*
+			 * Look up the symbol from within the debugger binary itself.
+			 */
+internal_lookup:
+			if (elf_symbol_by_name(&linker->self, rel.symname,
+			    &symbol) == true) {
+				shiva_debug("Internal symbol lookup\n");
+				shiva_debug("Symbol value for %s: %#lx\n", rel.symname, symbol.value);
+				/*
+				 * Note if we found this symbol in the debugger "/bin/shiva"
+				 * instead of the loaded module, then we can simply assign
+				 * symbol.value as the symval, instead of symbol.value + linker->text_vaddr
+				 * (Which adds the module text segment to symbol.value).
+				 */
+				symval = symbol.value;
+				rel_unit = &linker->text_mem[smap.offset + rel.offset];
+				rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+				rel_val = symval + rel.addend - rel_addr;
+				shiva_debug("Symbol: %s\n", rel.symname);
+				shiva_debug("rel_val = %#lx + %#lx - %#lx\n", symval, rel.addend, rel_addr);
+				shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
+				*(uint32_t *)&rel_unit[0] = rel_val;
+				return true;
+			} else {
+				fprintf(stderr, "Failed to find relocation symbol: %s\n", rel.symname);
 				return false;
 			}
-			symval = linker->text_vaddr + symbol.value;
-			rel_unit = &linker->text_mem[smap.offset + rel.offset];
-			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
-			rel_val = symval + rel.addend - rel_addr;
-			shiva_debug("Symbol: %s (%#lx)\n", rel.symname);
-			shiva_debug("rel_val = %#lx + %#lx - %#lx\n", symval, rel.addend, rel_addr);
-			shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
-			*(uint32_t *)&rel_unit[0] = rel_val;
-			return true;
 		}
 	}
 	return false;
@@ -471,6 +505,7 @@ create_text_image(struct shiva_module *linker)
 		shiva_debug("mmap failed: %s\n", strerror(errno));
 		return false;
 	}
+	shiva_debug("Module text segment: %p\n", linker->text_mem);
 	linker->text_vaddr = (uint64_t)linker->text_mem;
 	elf_section_iterator_init(&linker->elfobj, &shdr_iter);
 	while (elf_section_iterator_next(&shdr_iter, &section) == ELF_ITER_OK) {
@@ -604,12 +639,25 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 
 	shiva_debug("elf_open_object(%s, ...)\n", path);
 
+	/*
+	 * Open the module ELF object
+	 */
 	res = elf_open_object(path, &linker->elfobj,
 	    ELF_LOAD_F_STRICT, &error);
 	if (res == false) {
 		shiva_debug("elf_open_object(%s, ...) failed\n", path);
 		return false;
 	}
+	/*
+	 * Open our self (The debugger) ELF object
+	 */
+	if (elf_open_object("/proc/self/exe", &linker->self, ELF_LOAD_F_STRICT,
+	    &error) == false) {
+		shiva_debug("elf_open_object(%s, ...) failed: %s\n",
+		    "/proc/self/exe", elf_error_msg(&error));
+		return false;
+	}
+
 	if (calculate_text_size(linker) == false) {
 		shiva_debug("Failed to calculate .text size for parasite module\n");
 		return false;

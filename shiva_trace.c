@@ -1,4 +1,4 @@
-#include "shiva_trace.h"
+#include "shiva.h"
 
 /*
  * This function is a wrapper around shiva_trace_op_poke
@@ -15,24 +15,6 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 	uint64_t addr = (uint64_t)dst;
 	bool res;
 	int ret, o_prot;
-#if 0
-	while (quot--) {
-		printf("poking\n");
-		res = shiva_trace(ctx, pid, SHIVA_TRACE_OP_POKE, d, s,
-		   error);
-		if (res == false)
-			return false;
-		s += sizeof(void *);
-		d += sizeof(void *);
-	}
-	if (rem > 0) {
-		printf("rem > 0\n");
-		res = shiva_trace(ctx, pid, SHIVA_TRACE_OP_POKE, d, s,
-		    error);
-		if (res == false)
-			return false;
-	}
-#endif
 
 	if (shiva_maps_prot_by_addr(ctx, (uint64_t)addr, &o_prot) == false) {
        	    shiva_error_set(error, "poke pid (%d) at %#lx failed: "
@@ -157,7 +139,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 				}
 				call_site = target_addr; // we are creating a call_site at target_vadr
 				call_offset = (uint64_t)current->handler_fn - call_site - 5;
-				printf("calloff = %#lx - %#lx - 4 = %#lx\n",
+				printf("calloff = %p - %#lx - 5 = %#lx\n",
 				    current->handler_fn, call_site, call_offset);
 				*(uint32_t *)&call_inst[1] = call_offset;
 				res = shiva_trace_write(ctx, pid, (void *)target_addr, call_inst, bp->bp_len,

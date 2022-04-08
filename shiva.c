@@ -1,5 +1,7 @@
 #include "shiva.h"
 
+struct shiva_ctx *ctx_global;
+
 void
 shiva_init_lists(struct shiva_ctx *ctx)
 {
@@ -80,6 +82,7 @@ int main(int argc, char **argv, char **envp)
 	struct elf_section section;
 	struct sigaction act;
 	sigset_t set;
+
 	act.sa_handler = shiva_sighandle;
 	sigemptyset(&act.sa_mask);
 	act.sa_flags = 0;
@@ -109,7 +112,9 @@ int main(int argc, char **argv, char **envp)
 	}
 
 	shiva_init_lists(&ctx);
+	ctx_global = &ctx;
 
+	shiva_debug("ctx_global: %p &ctx_global: %p\n", ctx_global, &ctx_global);
 	if (access(ctx.path, F_OK) != 0) {
 		fprintf(stderr, "Could not access binary path: %s\n", ctx.path);
 		exit(EXIT_FAILURE);

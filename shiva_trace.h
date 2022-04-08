@@ -16,6 +16,7 @@
 #include <elf.h>
 #include <errno.h>
 
+#pragma once
 #include "shiva.h"
 
 #define SHIVA_TRACE_THREAD_F_TRACED	(1UL << 0)	// thread is traced by SHIVA
@@ -75,6 +76,18 @@ typedef struct shiva_trace_handler {
 	TAILQ_HEAD(, shiva_trace_bp) bp_tqlist; // list of current bp's
 	TAILQ_ENTRY(shiva_trace_handler) _linkage;
 } shiva_trace_handler_t;
+
+typedef struct shiva_trace_regset_x86_64 {
+	uint64_t rax, rbx, rcx, rdx;
+	uint64_t rsi, rdi;
+	uint64_t rbp, rsp, rip;
+	uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
+	uint64_t flags, cs, ss, fs, ds;
+} shiva_trace_regset_x86_64_t;
+
+typedef struct shiva_trace_regs {
+	struct shiva_trace_regset_x86_64 x86_64;
+} shiva_trace_regs_t;
 
 typedef struct shiva_trace_thread {
 	char *name;

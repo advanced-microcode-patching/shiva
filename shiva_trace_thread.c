@@ -1,4 +1,4 @@
-#include "shiva_trace.h"
+#include "shiva.h"
 
 static bool
 shiva_trace_thread_status(struct shiva_ctx *ctx, pid_t pid,
