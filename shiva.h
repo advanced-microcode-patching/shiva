@@ -355,7 +355,8 @@ typedef struct shiva_trace_bp {
 	size_t bp_len;
 	uint8_t *inst_ptr;
 	uint64_t retaddr;
-	uint64_t o_target;
+	uint64_t o_target; // if this is a call or jmp breakpoint, o_target holds original target address
+	int64_t o_call_offset; // if this is a call or jmp breakpoint, o_offset holds the original target offset
 	struct elf_symbol symbol;
 	bool symbol_location;
 	struct shiva_trace_insn insn;

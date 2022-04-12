@@ -171,11 +171,22 @@ int main(int argc, char **argv, char **envp)
 		fprintf(stderr, "Failed to run the analyzers\n");
 		exit(EXIT_FAILURE);
 	}
+	/*
+	 * shiva_module_loader will load modules/shakti_module.o
+	 * into an executable region within our address space.
+	 * It will then pass control to the module.
+	 */
 	if (shiva_module_loader(&ctx, "./modules/shakti_runtime.o",
 	    &ctx.module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");
 		exit(EXIT_FAILURE);
 	}
+	/*
+	 * Once the module has finished executing, we pass control
+	 * to LDSO.
+	 */
+	shiva_debug("Passing control to entry point: %#lx\n", ctx.ulexec.entry_point);
+	shiva_debug("LDSO entry point: %#lx\n", ctx.ulexec.ldso.entry_point);
 	SHIVA_ULEXEC_LDSO_TRANSFER(ctx.ulexec.rsp_start, ctx.ulexec.ldso.entry_point,
             ctx.ulexec.entry_point);
 

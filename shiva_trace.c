@@ -81,11 +81,11 @@ shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(struct 
 
 bool
 shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct shiva_ctx *),
-    uint64_t target_addr, shiva_error_t *error)
+    uint64_t bp_addr, shiva_error_t *error)
 {
 	struct shiva_trace_handler *current;
 	struct shiva_trace_bp *bp;
-	uint8_t *inst_ptr = (uint8_t *)target_addr;
+	uint8_t *inst_ptr = (uint8_t *)bp_addr;
 	int bits;
 	size_t insn_len;
 	struct elf_symbol symbol;
@@ -124,25 +124,27 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 				/*
 				 * XXX look into why insn_len is 0 after ud_insn_len.
 				 */
-				memcpy(&bp->insn.o_insn[0], (void *)target_addr, 5);
-				o_call_offset = *(uint32_t *)&bp->insn.o_insn[1];
-				printf("o_call_offset: %#lx\n", o_call_offset);
-				bp->o_target = target_addr + o_call_offset + 5;
+				memcpy(&bp->insn.o_insn[0], (void *)bp_addr, 5);
+				bp->o_call_offset = *(uint32_t *)&bp->insn.o_insn[1];
+				printf("o_call_offset: %#lx\n", bp->o_call_offset);
+				printf("bp_addr: %#lx\n", bp_addr);
+				bp->o_target = (int64_t)bp_addr + (int64_t)bp->o_call_offset + 5;
+				bp->o_target &= 0xffffffff;
 				printf("old call target: %#lx\n", bp->o_target);
 				bp->bp_type = current->type;
-				bp->bp_addr = target_addr;
+				bp->bp_addr = bp_addr;
 				bp->bp_len = 5; // length of breakpoint is size of imm call insn
-				bp->retaddr = target_addr + bp->bp_len;
-				if (elf_symbol_by_value(&ctx->elfobj, target_addr, &symbol) == false) {
+				bp->retaddr = bp_addr + bp->bp_len;
+				if (elf_symbol_by_value(&ctx->elfobj, bp->o_target, &symbol) == false) {
 					bp->symbol_location = true;
 					memcpy(&bp->symbol, &symbol, sizeof(symbol));
 				}
-				call_site = target_addr; // we are creating a call_site at target_vadr
+				call_site = bp_addr;
 				call_offset = (uint64_t)current->handler_fn - call_site - 5;
 				printf("calloff = %p - %#lx - 5 = %#lx\n",
 				    current->handler_fn, call_site, call_offset);
 				*(uint32_t *)&call_inst[1] = call_offset;
-				res = shiva_trace_write(ctx, pid, (void *)target_addr, call_inst, bp->bp_len,
+				res = shiva_trace_write(ctx, pid, (void *)bp_addr, call_inst, bp->bp_len,
 				    error);
 				if (res == false) {
 					free(bp);

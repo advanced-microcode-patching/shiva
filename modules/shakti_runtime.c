@@ -43,6 +43,7 @@ void __attribute__((naked)) shakti_store_regs_x86_64(void)
           "memory"
         );
 
+	ctx_global->regs.regset_x86_64.rip = (uint64_t)__builtin_return_address(1) - 5;
 	__asm__("ret");
 }
 
@@ -56,15 +57,19 @@ shakti_handler(void)
 	struct shiva_trace_bp *bp;
 	uint64_t o_target;
 
+	printf("rax: %#lx rcx: %#lx rsp: %#lx rip: %#lx\n", ctx->regs.regset_x86_64.rax,
+	    ctx->regs.regset_x86_64.rcx, ctx->regs.regset_x86_64.rsp, ctx->regs.regset_x86_64.rip);
 	//printf("Ctx: %p\n", ctx);
 #if 0
 	printf("handler retaddr: %#lx\n", retaddr);
 	TAILQ_FOREACH(current, &ctx->tailq.trace_handlers_tqlist, _linkage) {
-		if (current->handler_fn != &shakti_handler)
+		printf("Comparing handler_fn(%p) to &shakti_handler(%lx)\n",
+		    current->handler_fn, &shakti_handler);
+		if (current->handler_fn != (void *)&shakti_handler)
 			continue;
 		printf("Searching breakpoint list\n");
 		TAILQ_FOREACH(bp, &current->bp_tqlist,  _linkage) {
-			if (bp->retaddr == retaddr) {
+			if (bp->retaddr == (uint64_t)retaddr) {
 				printf("Found breakpoint!\n");
 				o_target = bp->o_target;
 			}
@@ -72,7 +77,6 @@ shakti_handler(void)
 	}
 #endif
 	printf("handler called!\n");
-
 	return NULL;
 }
 
