@@ -186,13 +186,13 @@ static bool
 shiva_ulexec_segment_copy(elfobj_t *elfobj, uint8_t *dst,
     struct elf_segment segment)
 {
-	size_t len = segment.filesz / sizeof(uint64_t);
-	size_t rem = len % sizeof(uint64_t);
+	size_t rem = segment.filesz % sizeof(uint64_t);
 	uint64_t qword;
 	bool res;
 	uint8_t byte;
 	size_t i = 0;
 
+	shiva_debug("Remainder: %d bytes\n", rem);
 	shiva_debug("Reading from address %#lx - %#lx\n", segment.vaddr,
 	    segment.vaddr + segment.filesz);
 	for (i = 0; i < segment.filesz; i += sizeof(uint64_t)) {

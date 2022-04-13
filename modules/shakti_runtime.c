@@ -43,7 +43,6 @@ void __attribute__((naked)) shakti_store_regs_x86_64(void)
           "memory"
         );
 
-	ctx_global->regs.regset_x86_64.rip = (uint64_t)__builtin_return_address(1) - 5;
 	__asm__("ret");
 }
 
@@ -57,10 +56,9 @@ shakti_handler(void)
 	struct shiva_trace_bp *bp;
 	uint64_t o_target;
 
+	  ctx_global->regs.regset_x86_64.rip = (uint64_t)__builtin_return_address(1) - 5;
 	printf("rax: %#lx rcx: %#lx rsp: %#lx rip: %#lx\n", ctx->regs.regset_x86_64.rax,
 	    ctx->regs.regset_x86_64.rcx, ctx->regs.regset_x86_64.rsp, ctx->regs.regset_x86_64.rip);
-	//printf("Ctx: %p\n", ctx);
-#if 0
 	printf("handler retaddr: %#lx\n", retaddr);
 	TAILQ_FOREACH(current, &ctx->tailq.trace_handlers_tqlist, _linkage) {
 		printf("Comparing handler_fn(%p) to &shakti_handler(%lx)\n",
@@ -75,7 +73,6 @@ shakti_handler(void)
 			}
 		}
 	}
-#endif
 	printf("handler called!\n");
 	return NULL;
 }

@@ -296,14 +296,13 @@ relocate_module(struct shiva_module *linker)
  * Section data is copied from elfobj to the respective memory mapped segment
  * pointed to by dst. The section data to be copied is described by
  * section. Without the segment_offset this function would not be re-entrant.
- * The segment_offset tells us at which within the segment to copy the given
+ * The segment_offset tells us at which offset within the segment to copy the given
  * section data to.
  */
 bool
 elf_section_map(elfobj_t *elfobj, uint8_t *dst, struct elf_section section,
     uint64_t *segment_offset)
 {
-	size_t len = section.size / sizeof(uint64_t);
 	size_t rem = section.size % sizeof(uint64_t);
 	uint64_t qword;
 	bool res;
@@ -312,12 +311,15 @@ elf_section_map(elfobj_t *elfobj, uint8_t *dst, struct elf_section section,
 	shiva_debug("Reading from offset %#lx - %#lx\n", section.offset,
 	    section.offset + section.size);
 	for (i = 0; i < section.size; i += sizeof(uint64_t)) {
-		if (i + sizeof(uint64_t) >= section.size) {
+		if (i + sizeof(uint64_t) > section.size) {
 			size_t j;
+			  shiva_debug("%d + sizeof(uint64_t) >= %d\n", i, section.size);
+
 			/*
 			 * If there are 7 or less remaining bytes we cannot read
 			 * by QWORD and will read the remainder byte by byte
 			 */
+			shiva_debug("writing out remainder: %d bytes\n", rem);
 			for (j = 0; j < rem; j++) {
 				shiva_debug("Reading remaining byte from offset: %zu\n",
 				    section.offset + i + j);
@@ -338,6 +340,7 @@ elf_section_map(elfobj_t *elfobj, uint8_t *dst, struct elf_section section,
 			shiva_debug("elf_read_offset failed at %#lx\n", section.offset + i);
 			return false;
 		}
+		shiva_debug("qword: %#lx\n", qword);
 		*(uint64_t *)&dst[*segment_offset + i] = qword;
 	}
 	*segment_offset += section.size;
