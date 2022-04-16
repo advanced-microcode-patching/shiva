@@ -18,6 +18,7 @@
 #include <sys/queue.h>
 #include <elf.h>
 #include <errno.h>
+#include <sys/prctl.h>
 
 #include <udis86.h>
 #include "/opt/elfmaster/include/libelfmaster.h"
@@ -40,7 +41,7 @@
 
 #define SHIVA_F_ULEXEC_LDSO_NEEDED	(1UL << 0)
 
-#define SHIVA_STACK_SIZE	(PAGE_SIZE * 100)
+#define SHIVA_STACK_SIZE	(PAGE_SIZE * 1000)
 
 #define SHIVA_LDSO_BASE		0x600000
 #define SHIVA_TARGET_BASE	0x1000000
@@ -264,7 +265,7 @@ void shiva_sighandle(int);
 /*
  * shiva_iter.c
  */
-bool shiva_auxv_iterator_init(struct shiva_ctx *, struct shiva_auxv_iterator *);
+bool shiva_auxv_iterator_init(struct shiva_ctx *, struct shiva_auxv_iterator *, void *);
 shiva_iterator_res_t shiva_auxv_iterator_next(struct shiva_auxv_iterator *, struct shiva_auxv_entry *);
 bool shiva_auxv_set_value(struct shiva_auxv_iterator *, long);
 

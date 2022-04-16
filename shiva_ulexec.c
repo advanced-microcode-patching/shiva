@@ -20,7 +20,7 @@ shiva_ulexec_allocstack(struct shiva_ctx *ctx)
  */
 
 static bool
-shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out)
+shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out, Elf64_auxv_t **auxv_ptr)
 {
 	uint64_t *esp, *sp, *envp, *argv;
 	uint64_t esp_start;
@@ -82,7 +82,8 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out)
 	}
 	*esp++ = (uintptr_t)0;
 	Elf64_auxv_t *auxv = (Elf64_auxv_t *)esp;
-	shiva_auxv_iterator_init(ctx, &a_iter);
+	*auxv_ptr = auxv;
+	shiva_auxv_iterator_init(ctx, &a_iter, NULL);
 	while (shiva_auxv_iterator_next(&a_iter, &a_entry) == SHIVA_ITER_OK) {
 		auxv->a_type = a_entry.type;
 		switch(a_entry.type) {
@@ -113,6 +114,7 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out)
 		}
 		auxv++;
 	}
+	auxv->a_un.a_val = AT_NULL;
 	/*
 	 * Set the out value to the stack address that is &argc -- the beginning
 	 * of our stack setup.
@@ -365,11 +367,23 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 		return false;
 	}
 
+	Elf64_auxv_t *auxv = NULL;
 	shiva_debug("Building auxiliary vector\n");
-	if (shiva_ulexec_build_auxv_stack(ctx, &ctx->ulexec.rsp_start) == false) {
+	if (shiva_ulexec_build_auxv_stack(ctx, &ctx->ulexec.rsp_start, &auxv) == false) {
 		fprintf(stderr, "shiva_ulexec_build_auxv_stack() failed\n");
 		return false;
 	}
+
+	shiva_auxv_iterator_t a_iter;
+	struct shiva_auxv_entry a_entry;
+
+	shiva_auxv_iterator_init(ctx, &a_iter, auxv);
+	while (shiva_auxv_iterator_next(&a_iter, &a_entry) == SHIVA_ITER_OK) {
+		printf("AUXV TYPE: %d AUXV VAL: %#lx\n", a_entry.type, a_entry.value);
+	}
+
+	prctl(PR_SET_MM, PR_SET_MM_AUXV, (unsigned long)auxv, sizeof(Elf64_auxv_t) * 19);
+
 #if 0
 	shiva_debug("Passing control to ldso entry point: %#lx with rsp: %#lx "
 	    "and target entry: %#lx\n",
@@ -379,8 +393,5 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 	LDSO_TRANSFER(ctx->ulexec.rsp_start, ctx->ulexec.ldso.entry_point,
 	    ctx->ulexec.entry_point);
 #endif
-	/*
-	 * Won't ever get here :)
-	 */
 	return true;
 }

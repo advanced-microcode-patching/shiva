@@ -4,12 +4,24 @@
 #define ERRONEOUS_AUXV_COUNT 4096
 
 bool
-shiva_auxv_iterator_init(struct shiva_ctx *ctx, struct shiva_auxv_iterator *iter)
+shiva_auxv_iterator_init(struct shiva_ctx *ctx, struct shiva_auxv_iterator *iter,
+    void *auxv)
 {
 	int i = 0;
 
 	iter->index = 0;
 	iter->ctx = ctx;
+
+	/*
+	 * If the caller supplies an auxv pointer then use it.
+	 * (This is typically for reading secondary auxv's such
+	 * as those built for a userland exec. :)
+	 */
+	if (auxv != NULL) {
+		iter->auxv = (Elf64_auxv_t *)auxv;
+		shiva_debug("Setting iter->auxv to %p\n", iter->auxv);
+		return true;
+	}
 
 	if (ctx->envp == NULL)
 		return false;

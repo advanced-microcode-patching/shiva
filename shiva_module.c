@@ -383,7 +383,7 @@ calculate_data_size(struct shiva_module *linker)
 		}
 	}
 
-	shiva_debug("Parasite data segment size: %zu\n", linker->data_size);
+	shiva_debug("LPM data segment size: %zu\n", linker->data_size);
 	return true;
 }
 
@@ -418,7 +418,7 @@ calculate_text_size(struct shiva_module *linker)
 			linker->plt_count++;
 		}
 	}
-	shiva_debug("Parasite text segment size: %zu\n", linker->text_size);
+	shiva_debug("LPM text segment size: %zu\n", linker->text_size);
 	shiva_debug("PLT Count: %zu\n", linker->plt_count);
 	return true;
 }
