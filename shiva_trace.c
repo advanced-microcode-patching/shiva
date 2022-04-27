@@ -50,7 +50,7 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 }
 
 bool
-shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(struct shiva_ctx *),
+shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(void *, void *, void *, void *),
     shiva_trace_bp_type_t bp_type, shiva_error_t *error)
 {
 
@@ -126,11 +126,10 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 				 */
 				memcpy(&bp->insn.o_insn[0], (void *)bp_addr, 5);
 				bp->o_call_offset = *(uint32_t *)&bp->insn.o_insn[1];
-				//printf("o_call_offset: %#lx\n", bp->o_call_offset);
-				printf("bp_addr: %#lx\n", bp_addr);
+				shiva_debug("bp_addr: %#lx\n", bp_addr);
 				bp->o_target = (int64_t)bp_addr + (int64_t)bp->o_call_offset + 5;
 				bp->o_target &= 0xffffffff;
-				printf("old call target: %#lx\n", bp->o_target);
+				shiva_debug("old call target: %#lx\n", bp->o_target);
 				bp->bp_type = current->type;
 				bp->bp_addr = bp_addr;
 				bp->bp_len = 5; // length of breakpoint is size of imm call insn
@@ -145,6 +144,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 					struct elf_plt plt_entry;
 
 					elf_plt_iterator_init(&ctx->elfobj, &plt_iter);
+					shiva_debug("PLT iterator\n");
 					while (elf_plt_iterator_next(&plt_iter, &plt_entry) == ELF_ITER_OK) {
 						if ((bp->o_target - SHIVA_TARGET_BASE) == plt_entry.addr) {
 							bp->call_target_symname = plt_entry.symname;
@@ -157,17 +157,14 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 				}
 				call_site = bp_addr;
 				call_offset = (uint64_t)current->handler_fn - call_site - 5;
-				printf("calloff = %p - %#lx - 5 = %#lx\n",
-				    current->handler_fn, call_site, call_offset);
+				//printf("calloff = %p - %#lx - 5 = %#lx\n",
+				 //   current->handler_fn, call_site, call_offset);
 				*(uint32_t *)&call_inst[1] = call_offset;
 				res = shiva_trace_write(ctx, pid, (void *)bp_addr, call_inst, bp->bp_len,
 				    error);
 				if (res == false) {
 					free(bp);
 					return false;
-				}
-				if (TAILQ_EMPTY(&current->bp_tqlist)) {
-					printf("EMPTY LIST\n");
 				}
 				shiva_debug("Inserted breakpoint: %#lx\n", bp->bp_addr);
 				TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
@@ -291,6 +288,5 @@ shiva_trace(struct shiva_ctx *ctx, pid_t pid, shiva_trace_op_t op,
 	default:
 		break;
 	}
-	printf("Returning: %d\n", res);
 	return res;
 }

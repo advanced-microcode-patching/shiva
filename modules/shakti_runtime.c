@@ -69,7 +69,7 @@ void __attribute__((naked)) shakti_store_regs_x86_64(struct shiva_trace_regset_x
 }
 
 void *
-shakti_handler(void)
+shakti_handler(void *arg1, void *arg2, void *arg3, void *arg4)
 {
 	shakti_store_regs_x86_64(&ctx_global->regs.regset_x86_64);
 	struct shiva_ctx *ctx = ctx_global;
@@ -81,31 +81,23 @@ shakti_handler(void)
 
 	ctx->regs.regset_x86_64.rbp = frmaddr;
 	ctx->regs.regset_x86_64.rip = (uint64_t)retaddr - 5;
+#if 0
 	printf("rax: %#lx rcx: %#lx rbp: %#lx rip: %#lx rdi %#lx\n", ctx->regs.regset_x86_64.rax,
 	    ctx->regs.regset_x86_64.rcx, ctx->regs.regset_x86_64.rbp, ctx->regs.regset_x86_64.rip, ctx->regs.regset_x86_64.rdi);
-	printf("handler retaddr: %#lx\n", retaddr);
+#endif
 	TAILQ_FOREACH(current, &ctx->tailq.trace_handlers_tqlist, _linkage) {
-		printf("Comparing handler_fn(%p) to &shakti_handler(%lx)\n",
-		    current->handler_fn, &shakti_handler);
 		if (current->handler_fn != (void *)&shakti_handler)
 			continue;
-		printf("Searching breakpoint list\n");
 		TAILQ_FOREACH(bp, &current->bp_tqlist,  _linkage) {
-			printf("Comparing retaddr: %#lx to %#lx\n", bp->retaddr, (uint64_t)retaddr);
 			if (bp->retaddr == (uint64_t)retaddr) {
-				printf("Found breakpoint!\n");
 				o_target = bp->o_target;
-				printf("old call target: %#lx\n", o_target);
-				printf("[CALL] %s\n", bp->symbol.name);
-				void * (*o_func)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t) =
+				printf("[CALL] %s\n", bp->call_target_symname);
+				void * (*o_func)(void *, void *, void *, void *) =
 				    (void *)o_target;
-				return o_func(ctx->regs.regset_x86_64.rdi, ctx->regs.regset_x86_64.rsi,
-				    ctx->regs.regset_x86_64.rdx, ctx->regs.regset_x86_64.rcx,
-				    ctx->regs.regset_x86_64.r8);
+				return o_func(arg1, arg2, arg3, arg4);
 			}
 		}
 	}
-	printf("handler called!\n");
 	return NULL;
 }
 
@@ -120,7 +112,6 @@ shakti_main(shiva_ctx_t *ctx)
 	uint64_t data = 0xdeadbeef;
 	uint64_t out;
 
-	printf("shakti_handler is at %#lx, ctx %p\n", shakti_handler, ctx);
 	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_ATTACH,
 	    NULL, NULL, 0, &error);
 	if (res == false) {
@@ -134,12 +125,8 @@ shakti_main(shiva_ctx_t *ctx)
 		    shiva_error_msg(&error));
 		return -1;
 	}
-	printf("SHAKTI MAIN: %p\n", &shakti_main);
-	printf("HANDLER: %p\n", &shakti_handler);
-
 	shiva_callsite_iterator_init(ctx, &call_iter);
 	while (shiva_callsite_iterator_next(&call_iter, &branch) == ELF_ITER_OK) {
-		printf("callsite (%#lx) -> %s\n", branch.branch_site, branch.symbol.name);
 		res = shiva_trace_set_breakpoint(ctx, (void *)&shakti_handler,
 		    branch.branch_site + ctx->ulexec.base_vaddr, &error);
 		if (res == false) {
@@ -147,7 +134,6 @@ shakti_main(shiva_ctx_t *ctx)
 			    shiva_error_msg(&error));
 			return -1;
 		}
-		printf("Set breakpoint at %#lx\n", branch.branch_site + ctx->ulexec.base_vaddr);
 	}
 #if 0
 	printf("Shakti debugging module\n");
@@ -172,8 +158,6 @@ shakti_main(shiva_ctx_t *ctx)
 	}
 #endif
 	
-	printf("Read value: %#lx\n", out);
-	printf("\n");
 	return 0;
 }
 

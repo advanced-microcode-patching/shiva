@@ -359,7 +359,7 @@ typedef struct shiva_trace_bp {
 
 typedef struct shiva_trace_handler {
 	shiva_trace_bp_type_t type;
-	void * (*handler_fn)(shiva_ctx_t *); // points to handler triggered by BP
+	void * (*handler_fn)(void *, void *, void *, void *); // points to handler triggered by BP
 	TAILQ_HEAD(, shiva_trace_bp) bp_tqlist; // list of current bp's
 	TAILQ_ENTRY(shiva_trace_handler) _linkage;
 } shiva_trace_handler_t;
@@ -390,7 +390,7 @@ typedef struct shiva_trace_thread {
 } shiva_trace_thread_t;
 
 bool shiva_trace(shiva_ctx_t *, pid_t, shiva_trace_op_t, void *, void *, size_t, shiva_error_t *);
-bool shiva_trace_register_handler(shiva_ctx_t *, void * (*)(shiva_ctx_t *), shiva_trace_bp_type_t,
+bool shiva_trace_register_handler(shiva_ctx_t *, void * (*)(void *, void *, void *, void *), shiva_trace_bp_type_t,
     shiva_error_t *);
 bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(shiva_ctx_t *), uint64_t, shiva_error_t *);
 bool shiva_trace_write(struct shiva_ctx *, pid_t, void *, const void *, size_t, shiva_error_t *);

@@ -1,4 +1,4 @@
-GCC_OPTS= -fPIC -c -ggdb -DDEBUG
+GCC_OPTS= -fPIC -c -ggdb
 OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \
     shiva_callsite.o
