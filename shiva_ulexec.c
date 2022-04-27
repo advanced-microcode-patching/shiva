@@ -367,9 +367,9 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 		return false;
 	}
 
-	Elf64_auxv_t *auxv = NULL;
 	shiva_debug("Building auxiliary vector\n");
-	if (shiva_ulexec_build_auxv_stack(ctx, &ctx->ulexec.rsp_start, &auxv) == false) {
+	if (shiva_ulexec_build_auxv_stack(ctx, &ctx->ulexec.rsp_start,
+	    &ctx->ulexec.auxv.vector) == false) {
 		fprintf(stderr, "shiva_ulexec_build_auxv_stack() failed\n");
 		return false;
 	}
@@ -377,21 +377,15 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 	shiva_auxv_iterator_t a_iter;
 	struct shiva_auxv_entry a_entry;
 
-	shiva_auxv_iterator_init(ctx, &a_iter, auxv);
+	shiva_auxv_iterator_init(ctx, &a_iter, ctx->ulexec.auxv.vector);
 	while (shiva_auxv_iterator_next(&a_iter, &a_entry) == SHIVA_ITER_OK) {
 		printf("AUXV TYPE: %d AUXV VAL: %#lx\n", a_entry.type, a_entry.value);
 	}
 
-	prctl(PR_SET_MM, PR_SET_MM_AUXV, (unsigned long)auxv, sizeof(Elf64_auxv_t) * 19);
+#if 0
+	prctl(PR_SET_MM, PR_SET_MM_AUXV, (unsigned long)ctx->ulexec.auxv.vector,
+	    20);
+#endif
 
-#if 0
-	shiva_debug("Passing control to ldso entry point: %#lx with rsp: %#lx "
-	    "and target entry: %#lx\n",
-	    ctx->ulexec.ldso.entry_point, ctx->ulexec.rsp_start, ctx->ulexec.entry_point);
-#endif
-#if 0
-	LDSO_TRANSFER(ctx->ulexec.rsp_start, ctx->ulexec.ldso.entry_point,
-	    ctx->ulexec.entry_point);
-#endif
 	return true;
 }

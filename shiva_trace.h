@@ -100,7 +100,7 @@ typedef struct shiva_trace_thread {
 	TAILQ_ENTRY(shiva_trace_thread) _linkage;
 } shiva_trace_thread_t;
 
-bool shiva_trace(shiva_ctx_t *, pid_t, shiva_trace_op_t, void *, void *, shiva_error_t *);
+bool shiva_trace(shiva_ctx_t *, pid_t, shiva_trace_op_t, void *, void *, size_t, shiva_error_t *);
 bool shiva_trace_register_handler(shiva_ctx_t *, void * (*)(shiva_ctx_t *), shiva_trace_bp_type_t,
     shiva_error_t *);
 bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(shiva_ctx_t *), uint64_t, shiva_error_t *);

@@ -75,6 +75,7 @@ shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(struct 
 	handler_struct->type = bp_type;
 	TAILQ_INIT(&handler_struct->bp_tqlist);
 
+	shiva_debug("INSTALLED BP HANDLER: %p\n", handler_fn);
 	TAILQ_INSERT_TAIL(&ctx->tailq.trace_handlers_tqlist, handler_struct, _linkage);
 	return true;
 }
@@ -111,7 +112,6 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 				bits = elf_class(&ctx->elfobj) == elfclass64 ? 64 : 32;
 				insn_len = ud_insn_len(&ctx->disas.ud_obj);
 				assert(insn_len <= 15);
-				TAILQ_INIT(&current->bp_tqlist);
 				bp = calloc(1, sizeof(*bp));
 				if (bp == NULL) {
 					shiva_error_set(error, "memory allocation failed: %s\n",
@@ -126,7 +126,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 				 */
 				memcpy(&bp->insn.o_insn[0], (void *)bp_addr, 5);
 				bp->o_call_offset = *(uint32_t *)&bp->insn.o_insn[1];
-				printf("o_call_offset: %#lx\n", bp->o_call_offset);
+				//printf("o_call_offset: %#lx\n", bp->o_call_offset);
 				printf("bp_addr: %#lx\n", bp_addr);
 				bp->o_target = (int64_t)bp_addr + (int64_t)bp->o_call_offset + 5;
 				bp->o_target &= 0xffffffff;
@@ -135,9 +135,25 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 				bp->bp_addr = bp_addr;
 				bp->bp_len = 5; // length of breakpoint is size of imm call insn
 				bp->retaddr = bp_addr + bp->bp_len;
-				if (elf_symbol_by_value(&ctx->elfobj, bp->o_target, &symbol) == false) {
+
+				if (elf_symbol_by_value(&ctx->elfobj, bp->o_target - SHIVA_TARGET_BASE, &symbol) == true) {
 					bp->symbol_location = true;
 					memcpy(&bp->symbol, &symbol, sizeof(symbol));
+					bp->call_target_symname = symbol.name;
+				} else {
+					elf_plt_iterator_t plt_iter;
+					struct elf_plt plt_entry;
+
+					elf_plt_iterator_init(&ctx->elfobj, &plt_iter);
+					while (elf_plt_iterator_next(&plt_iter, &plt_entry) == ELF_ITER_OK) {
+						if ((bp->o_target - SHIVA_TARGET_BASE) == plt_entry.addr) {
+							bp->call_target_symname = plt_entry.symname;
+						}
+					}
+					if (bp->call_target_symname == NULL) {
+						bp->call_target_symname = shiva_xfmtstrdup("fn_%#lx\n",
+						    bp->o_target);
+					}
 				}
 				call_site = bp_addr;
 				call_offset = (uint64_t)current->handler_fn - call_site - 5;
@@ -150,6 +166,10 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 					free(bp);
 					return false;
 				}
+				if (TAILQ_EMPTY(&current->bp_tqlist)) {
+					printf("EMPTY LIST\n");
+				}
+				shiva_debug("Inserted breakpoint: %#lx\n", bp->bp_addr);
 				TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
 				break;
 			}
@@ -160,7 +180,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 
 bool
 shiva_trace_op_attach(struct shiva_ctx *ctx, pid_t pid,
-    void *addr, void *data, shiva_error_t *error)
+    void *addr, void *data, size_t len, shiva_error_t *error)
 {
 	bool res;
 	uint64_t status;
@@ -194,69 +214,15 @@ shiva_trace_op_attach(struct shiva_ctx *ctx, pid_t pid,
 
 bool
 shiva_trace_op_cont(struct shiva_ctx *ctx, pid_t pid,
-    void *addr, void *data, shiva_error_t *error)
+    void *addr, void *data, size_t len, shiva_error_t *error)
 {
-
-	return true;
-}
-
-static bool
-shiva_trace_op_poke(struct shiva_ctx *ctx, pid_t pid,
-    void *addr, void *data, shiva_error_t *error)
-{
-	uint64_t aligned_vaddr;
-	uint64_t v = (uint64_t)data;
-	size_t pokelen = 0;
-	int o_prot, ret;
-
-	shiva_debug("attempting to write to %p\n", addr);
-	if (shiva_maps_validate_addr(ctx, (uint64_t)addr) == false) {
-		shiva_error_set(error, "poke pid (%d) at %#lx failed: "
-		   "cannot write to debugger memory\n", pid, (uint64_t)addr);
-		return false;
-	}
-	pokelen = (v >= 0x00000000 && v < ~(uint8_t)0x00)  ? 1 : 0;
-	pokelen = (v >= 0x000000ff && v < ~(uint16_t)0x00) ? 2 : 0;
-	pokelen = (v >= 0x0000ffff && v < ~(uint32_t)0x00) ? 4 : 0;
-	pokelen = (v >= 0xffffffff && v < ~(uint64_t)0x00) ? 8 : 0;
-
-	if (shiva_maps_prot_by_addr(ctx, (uint64_t)addr, &o_prot) == false) {
-		shiva_error_set(error, "poke pid (%d) at %#lx failed: "
-		    "cannot find memory protection\n", pid, (uint64_t)addr);
-		return false;
-	}
-	aligned_vaddr = (uint64_t)addr;
-	aligned_vaddr &= ~4095;
-	/*
-	 * Make virtual address writable if it is not.
-	 */
-	ret = mprotect((void *)aligned_vaddr, 4096, PROT_READ|PROT_WRITE);
-	if (ret < 0) {
-		shiva_error_set(error, "poke pid (%d) at %#lx failed: "
-		    "mprotect failure: %s\n", pid, (uint64_t)addr, strerror(errno));
-		return false;
-	}
-	/*
-	 * Copy data to target addr
-	 */
-	memcpy(addr, data, pokelen);
-	/*
-	 * Reset memory protection
-	 */
-	ret = mprotect((void *)aligned_vaddr, 4096, o_prot);
-	if (ret < 0) {
-		shiva_error_set(error, "poke pid (%d) at %#lx failed: "
-		    "mprotect failure: %s\n", pid, (uint64_t)addr, strerror(errno));
-		return false;
-	}
-	
 
 	return true;
 }
 
 static bool
 shiva_trace_op_peek(struct shiva_ctx *ctx, pid_t pid,
-    void *addr, void *data, shiva_error_t *error)
+    void *addr, void *data, size_t len, shiva_error_t *error)
 {
 
 	if (shiva_maps_validate_addr(ctx, (uint64_t)addr) == false) {
@@ -264,7 +230,12 @@ shiva_trace_op_peek(struct shiva_ctx *ctx, pid_t pid,
 		    "cannot read from debugger memory\n", pid, (uint64_t)addr);
 		return false;
 	}
-	memcpy(data, addr, sizeof(uint64_t));
+        if (shiva_maps_validate_addr(ctx, (uint64_t)addr + len) == false) {
+		shiva_error_set(error, "peek pid (%d) at %#lx failed: "
+		    "cannot read from debugger memory\n", pid, (uint64_t)addr);
+		return false;
+	}
+	memcpy(data, addr, len);
 	return true;
 }
 
@@ -283,22 +254,22 @@ shiva_trace_op_peek(struct shiva_ctx *ctx, pid_t pid,
 
 bool
 shiva_trace(struct shiva_ctx *ctx, pid_t pid, shiva_trace_op_t op,
-    void *addr, void *data, shiva_error_t *error)
+    void *addr, void *data, size_t len, shiva_error_t *error)
 {
 	bool res;
 
 	switch(op) {
 	case SHIVA_TRACE_OP_ATTACH:
-		res = shiva_trace_op_attach(ctx, pid, addr, data, error);
+		res = shiva_trace_op_attach(ctx, pid, addr, data, len, error);
 		break;
 	case SHIVA_TRACE_OP_CONT:
-		res = shiva_trace_op_cont(ctx, pid, addr, data, error);
+		res = shiva_trace_op_cont(ctx, pid, addr, data, len, error);
 		break;
 	case SHIVA_TRACE_OP_POKE:
-		res = shiva_trace_op_poke(ctx, pid, addr, data, error);
+		res = shiva_trace_write(ctx, pid, addr, data, len, error);
 		break;
 	case SHIVA_TRACE_OP_PEEK:
-		res = shiva_trace_op_peek(ctx, pid, addr, data, error);
+		res = shiva_trace_op_peek(ctx, pid, addr, data, len, error);
 		break;
 #if 0
 	case SHIVA_TRACE_OP_GETREGS:

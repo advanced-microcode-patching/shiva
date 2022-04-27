@@ -17,7 +17,7 @@
  */
 uint8_t plt_stub[6] = "\xff\x25\x00\x00\x00\x00";
 
-static inline void
+static void
 transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
 {
 	__asm__ __volatile__ ("mov %0, %%rdi\n" :: "r"(ctx));
@@ -501,6 +501,14 @@ create_text_image(struct shiva_module *linker)
 	uint64_t vaddr;
 	int i;
 
+	/*
+	 * NOTE We map the module to segments within a 32bit address range.
+	 * This avoids the problem of call offsets larger than 32bits. The
+	 * target program that we are ulexec'ing is always mapped to the same
+	 * 32bit address at runtime, and therefore trampolines between the
+	 * debugger and debugee can be sure to use 32bit offsets. Therefore
+	 * we use MAP_32BIT with mmap.
+	 */
 	text_size_aligned = ELF_PAGEALIGN(linker->text_size, PAGE_SIZE);
 	linker->text_mem = mmap(NULL, text_size_aligned, PROT_READ|PROT_WRITE|PROT_EXEC,
 	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT, -1, 0);

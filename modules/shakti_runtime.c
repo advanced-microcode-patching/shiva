@@ -6,7 +6,7 @@
 #include "../shiva.h"
 
 //extern struct shiva_ctx *ctx_global;
-
+#if 0
 void __attribute__((naked)) shakti_store_regs_x86_64(void)
 {
         __asm__ __volatile__(
@@ -16,8 +16,8 @@ void __attribute__((naked)) shakti_store_regs_x86_64(void)
         "mov %%rdx, %[rdx]\n\t"
         "mov %%rsi, %[rsi]\n\t"
         "mov %%rdi, %[rdi]\n\t"
-        "mov %%rbp, %[rbp]\n\t"
-        "mov %%rsp, %[rsp]\n\t"
+       // "mov %%rbp, %[rbp]\n\t"
+       // "mov %%rsp + 8), %[rsp]\n\t"
         "mov %%r8, %[r8]\n\t"
         "mov %%r9, %[r9]\n\t"
         "mov %%r10, %[r10]\n\t"
@@ -45,20 +45,44 @@ void __attribute__((naked)) shakti_store_regs_x86_64(void)
 
 	__asm__("ret");
 }
+#endif
+
+void __attribute__((naked)) shakti_store_regs_x86_64(struct shiva_trace_regset_x86_64 *regs)
+{
+	__asm__ __volatile__(
+		"movq %rax, (%rdi)\n\t"
+		"movq %rbx, 8(%rdi)\n\t"
+		"movq %rcx, 16(%rdi)\n\t"
+		"movq %rdx, 24(%rdi)\n\t"
+		"movq %rsi, 32(%rdi)\n\t"
+		"movq %rdi, 40(%rdi)\n\t"
+		"movq %r8,  48(%rdi)\n\t"
+		"movq %r9,  56(%rdi)\n\t"
+		"movq %r10, 64(%rdi)\n\t"
+		"movq %r11, 72(%rdi)\n\t"
+		"movq %r12, 80(%rdi)\n\t"
+		"movq %r13, 88(%rdi)\n\t"
+		"movq %r14, 96(%rdi)\n\t"
+		"movq %r15, 104(%rdi)\n\t"
+		"ret\n\t"
+		);
+}
 
 void *
 shakti_handler(void)
 {
-	shakti_store_regs_x86_64();
+	shakti_store_regs_x86_64(&ctx_global->regs.regset_x86_64);
 	struct shiva_ctx *ctx = ctx_global;
 	void *retaddr = __builtin_return_address(0);
+	void *frmaddr = __builtin_frame_address(1);
 	struct shiva_trace_handler *current;
 	struct shiva_trace_bp *bp;
 	uint64_t o_target;
 
-	  ctx_global->regs.regset_x86_64.rip = (uint64_t)__builtin_return_address(1) - 5;
-	printf("rax: %#lx rcx: %#lx rsp: %#lx rip: %#lx\n", ctx->regs.regset_x86_64.rax,
-	    ctx->regs.regset_x86_64.rcx, ctx->regs.regset_x86_64.rsp, ctx->regs.regset_x86_64.rip);
+	ctx->regs.regset_x86_64.rbp = frmaddr;
+	ctx->regs.regset_x86_64.rip = (uint64_t)retaddr - 5;
+	printf("rax: %#lx rcx: %#lx rbp: %#lx rip: %#lx rdi %#lx\n", ctx->regs.regset_x86_64.rax,
+	    ctx->regs.regset_x86_64.rcx, ctx->regs.regset_x86_64.rbp, ctx->regs.regset_x86_64.rip, ctx->regs.regset_x86_64.rdi);
 	printf("handler retaddr: %#lx\n", retaddr);
 	TAILQ_FOREACH(current, &ctx->tailq.trace_handlers_tqlist, _linkage) {
 		printf("Comparing handler_fn(%p) to &shakti_handler(%lx)\n",
@@ -67,9 +91,17 @@ shakti_handler(void)
 			continue;
 		printf("Searching breakpoint list\n");
 		TAILQ_FOREACH(bp, &current->bp_tqlist,  _linkage) {
+			printf("Comparing retaddr: %#lx to %#lx\n", bp->retaddr, (uint64_t)retaddr);
 			if (bp->retaddr == (uint64_t)retaddr) {
 				printf("Found breakpoint!\n");
 				o_target = bp->o_target;
+				printf("old call target: %#lx\n", o_target);
+				printf("[CALL] %s\n", bp->symbol.name);
+				void * (*o_func)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t) =
+				    (void *)o_target;
+				return o_func(ctx->regs.regset_x86_64.rdi, ctx->regs.regset_x86_64.rsi,
+				    ctx->regs.regset_x86_64.rdx, ctx->regs.regset_x86_64.rcx,
+				    ctx->regs.regset_x86_64.r8);
 			}
 		}
 	}
@@ -87,15 +119,14 @@ shakti_main(shiva_ctx_t *ctx)
 	struct shiva_trace_handler trace_handler;
 	uint64_t data = 0xdeadbeef;
 	uint64_t out;
-#if 0
-	printf("shakti_handler is at %#lx\n", shakti_handler);
+
+	printf("shakti_handler is at %#lx, ctx %p\n", shakti_handler, ctx);
 	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_ATTACH,
-	    NULL, NULL, &error);
+	    NULL, NULL, 0, &error);
 	if (res == false) {
 		printf("shiva_trace failed: %s\n", shiva_error_msg(&error));
 		return -1;
 	}
-#endif
 	res = shiva_trace_register_handler(ctx, (void *)&shakti_handler,
 	    SHIVA_TRACE_BP_CALL, &error);
 	if (res == false) {
