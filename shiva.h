@@ -316,6 +316,12 @@ bool shiva_analyze_run(shiva_ctx_t *);
 
 
 
+/*
+ *When your handler function executes, assuming is was invoked
+ * via a CALLHOOK breakpoint, then it probably wants to call the
+ * original function and return. This macro allows you to do this,
+ * see modules/shakti_runtime.c
+ */
 #define SHIVA_TRACE_CALL_ORIGINAL(bp) { \
 	do {\
 		void * (*o_func)(void *, void *, void *, void *, \
@@ -330,6 +336,20 @@ bool shiva_analyze_run(shiva_ctx_t *);
 		       (void *)ctx_global->regs.regset_x86_64.r10);	\
 	} while(0); \
 }
+
+/*
+ * Get the breakpoint struct that correlates to the handler
+ * function that you are currently in.
+ */
+#define SHIVA_TRACE_BP_STRUCT(bp, handler) { \
+	do {\
+		void *__ret = __builtin_return_address(0); \
+		TAILQ_FOREACH(bp, &handler->bp_tqlist, _linkage)  \
+			if (bp->retaddr == __ret)	\
+				break;	\
+	} while(0); \
+}
+
 
 typedef enum shiva_trace_op {
 	SHIVA_TRACE_OP_CONT = 0,
