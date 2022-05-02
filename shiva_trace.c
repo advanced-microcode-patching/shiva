@@ -49,8 +49,20 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 	return true;
 }
 
+struct shiva_trace_handler *
+shiva_trace_find_handler(struct shiva_ctx *ctx, void *handler)
+{
+	struct shiva_trace_handler *current;
+
+	TAILQ_FOREACH(current, &ctx->tailq.trace_handlers_tqlist, _linkage) {
+		if (current->handler_fn == handler)
+			return current;
+	}
+	return NULL;
+}
+
 bool
-shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(void *, void *, void *, void *),
+shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
     shiva_trace_bp_type_t bp_type, shiva_error_t *error)
 {
 
@@ -75,13 +87,13 @@ shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(void *,
 	handler_struct->type = bp_type;
 	TAILQ_INIT(&handler_struct->bp_tqlist);
 
-	shiva_debug("INSTALLED BP HANDLER: %p\n", handler_fn);
+	shiva_debug("Registering handler %p\n", handler_fn);
 	TAILQ_INSERT_TAIL(&ctx->tailq.trace_handlers_tqlist, handler_struct, _linkage);
 	return true;
 }
 
 bool
-shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct shiva_ctx *),
+shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *, void *, void *, void *),
     uint64_t bp_addr, shiva_error_t *error)
 {
 	struct shiva_trace_handler *current;
@@ -126,10 +138,8 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 				 */
 				memcpy(&bp->insn.o_insn[0], (void *)bp_addr, 5);
 				bp->o_call_offset = *(uint32_t *)&bp->insn.o_insn[1];
-				shiva_debug("bp_addr: %#lx\n", bp_addr);
 				bp->o_target = (int64_t)bp_addr + (int64_t)bp->o_call_offset + 5;
 				bp->o_target &= 0xffffffff;
-				shiva_debug("old call target: %#lx\n", bp->o_target);
 				bp->bp_type = current->type;
 				bp->bp_addr = bp_addr;
 				bp->bp_len = 5; // length of breakpoint is size of imm call insn
@@ -144,10 +154,9 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 					struct elf_plt plt_entry;
 
 					elf_plt_iterator_init(&ctx->elfobj, &plt_iter);
-					shiva_debug("PLT iterator\n");
 					while (elf_plt_iterator_next(&plt_iter, &plt_entry) == ELF_ITER_OK) {
 						if ((bp->o_target - SHIVA_TARGET_BASE) == plt_entry.addr) {
-							bp->call_target_symname = plt_entry.symname;
+							bp->call_target_symname = shiva_xfmtstrdup("%s@plt", plt_entry.symname);
 						}
 					}
 					if (bp->call_target_symname == NULL) {
@@ -157,8 +166,6 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(struct sh
 				}
 				call_site = bp_addr;
 				call_offset = (uint64_t)current->handler_fn - call_site - 5;
-				//printf("calloff = %p - %#lx - 5 = %#lx\n",
-				 //   current->handler_fn, call_site, call_offset);
 				*(uint32_t *)&call_inst[1] = call_offset;
 				res = shiva_trace_write(ctx, pid, (void *)bp_addr, call_inst, bp->bp_len,
 				    error);

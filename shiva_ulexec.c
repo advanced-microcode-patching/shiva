@@ -369,7 +369,7 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 
 	shiva_debug("Building auxiliary vector\n");
 	if (shiva_ulexec_build_auxv_stack(ctx, &ctx->ulexec.rsp_start,
-	    &ctx->ulexec.auxv.vector) == false) {
+	    (Elf64_auxv_t **)&ctx->ulexec.auxv.vector) == false) {
 		fprintf(stderr, "shiva_ulexec_build_auxv_stack() failed\n");
 		return false;
 	}

@@ -176,6 +176,7 @@ int main(int argc, char **argv, char **envp)
 	 * into an executable region within our address space.
 	 * It will then pass control to the module.
 	 */
+
 	if (shiva_module_loader(&ctx, "./modules/shakti_runtime.o",
 	    &ctx.module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");

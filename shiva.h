@@ -50,15 +50,15 @@
 #define SHIVA_MODULE_F_INIT	(1UL << 1)
 
 #define SHIVA_ULEXEC_LDSO_TRANSFER(stack, addr, entry) __asm__ __volatile__("mov %0, %%rsp\n" \
-                                            "push %1\n" \
-                                            "mov %2, %%rax\n" \
-                                            "mov $0, %%rbx\n" \
-                                            "mov $0, %%rcx\n" \
-                                            "mov $0, %%rdx\n" \
-                                            "mov $0, %%rsi\n" \
-                                            "mov $0, %%rdi\n" \
+					    "push %1\n" \
+					    "mov %2, %%rax\n" \
+					    "mov $0, %%rbx\n" \
+					    "mov $0, %%rcx\n" \
+					    "mov $0, %%rdx\n" \
+					    "mov $0, %%rsi\n" \
+					    "mov $0, %%rdi\n" \
 					    "mov $0, %%rbp\n" \
-                                            "ret" :: "r" (stack), "g" (addr), "g"(entry))
+					    "ret" :: "r" (stack), "g" (addr), "g"(entry))
 
 
 typedef enum shiva_iterator_res {
@@ -111,69 +111,69 @@ struct shiva_branch_site {
 };
 
 typedef enum shiva_module_section_map_attr {
-        LP_SECTION_TEXTSEGMENT = 0,
-        LP_SECTION_DATASEGMENT,
-        LP_SECTION_UNKNOWN
+	LP_SECTION_TEXTSEGMENT = 0,
+	LP_SECTION_DATASEGMENT,
+	LP_SECTION_UNKNOWN
 } shiva_module_section_map_attr_t;
 
 struct shiva_module_section_mapping {
-        struct elf_section section;
-        shiva_module_section_map_attr_t map_attribute;
-        uint64_t vaddr; /* Which memory address the section contents is placed in */
-        uint64_t offset;
-        uint64_t size;
-        char *name;
-        TAILQ_ENTRY(shiva_module_section_mapping) _linkage;
+	struct elf_section section;
+	shiva_module_section_map_attr_t map_attribute;
+	uint64_t vaddr; /* Which memory address the section contents is placed in */
+	uint64_t offset;
+	uint64_t size;
+	char *name;
+	TAILQ_ENTRY(shiva_module_section_mapping) _linkage;
 };
 
 #define SHIVA_MODULE_MAX_PLT_COUNT 4096
 
 struct shiva_module_plt_entry {
-        char *symname;
-        uint64_t vaddr;
-        size_t offset;
-        TAILQ_ENTRY(shiva_module_plt_entry) _linkage;
+	char *symname;
+	uint64_t vaddr;
+	size_t offset;
+	TAILQ_ENTRY(shiva_module_plt_entry) _linkage;
 };
 
 typedef struct shiva_mmap_entry {
 	uint64_t base;
 	size_t len;
-	uint32_t prot;    // mapping prot
+	uint32_t prot;	  // mapping prot
 	uint32_t mapping; // shared, private
 	bool debugger_mapping;
 	TAILQ_ENTRY(shiva_mmap_entry) _linkage;
 } shiva_mmap_entry_t;
 
 struct shiva_module {
-        int fd;
+	int fd;
 	uint64_t flags;
-        uint8_t *text_mem;
-        uint8_t *data_mem; /* Includes .bss */
-        uintptr_t *pltgot;
-        uintptr_t *plt;
-        size_t pltgot_size;
-        size_t plt_size;
-        size_t plt_off;
-        size_t plt_count;
-        size_t pltgot_off;
-        size_t text_size;
-        size_t data_size;
-        uint64_t text_vaddr;
-        uint64_t data_vaddr;
-        elfobj_t elfobj; /* elfobj to the module */
+	uint8_t *text_mem;
+	uint8_t *data_mem; /* Includes .bss */
+	uintptr_t *pltgot;
+	uintptr_t *plt;
+	size_t pltgot_size;
+	size_t plt_size;
+	size_t plt_off;
+	size_t plt_count;
+	size_t pltgot_off;
+	size_t text_size;
+	size_t data_size;
+	uint64_t text_vaddr;
+	uint64_t data_vaddr;
+	elfobj_t elfobj; /* elfobj to the module */
 	elfobj_t self; /* elfobj to self (Debugger binary) */
-        struct {
-                TAILQ_HEAD(, shiva_module_section_mapping) section_maplist;
-                TAILQ_HEAD(, shiva_module_plt_entry) plt_list;
-        } tailq;
+	struct {
+		TAILQ_HEAD(, shiva_module_section_mapping) section_maplist;
+		TAILQ_HEAD(, shiva_module_plt_entry) plt_list;
+	} tailq;
 };
 
 typedef struct shiva_trace_regset_x86_64 {
-        uint64_t rax, rbx, rcx, rdx;
-        uint64_t rsi, rdi;
-        uint64_t rbp, rsp, rip;
-        uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
-        uint64_t flags, cs, ss, fs, ds;
+	uint64_t rax, rbx, rcx, rdx;
+	uint64_t rsi, rdi;
+	uint64_t rbp, rsp, rip;
+	uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
+	uint64_t flags, cs, ss, fs, ds;
 } shiva_trace_regset_x86_64_t;
 
 typedef struct shiva_ctx {
@@ -314,6 +314,23 @@ bool shiva_analyze_run(shiva_ctx_t *);
 #define SHIVA_TRACE_HANDLER_F_JMP	(1UL << 1) // handler is invoked via jmp
 #define SHIVA_TRACE_HANDLER_F_INT3	(1UL << 2) // handler is invoked via int3
 
+
+
+#define SHIVA_TRACE_CALL_ORIGINAL(bp) { \
+	do {\
+		void * (*o_func)(void *, void *, void *, void *, \
+				 void *, void *, void *);	\
+		o_func = (void *)bp->o_target;				\
+		return o_func((void *)ctx_global->regs.regset_x86_64.rdi,	\
+		       (void *)ctx_global->regs.regset_x86_64.rsi,	\
+		       (void *)ctx_global->regs.regset_x86_64.rdx,	\
+		       (void *)ctx_global->regs.regset_x86_64.rcx,	\
+		       (void *)ctx_global->regs.regset_x86_64.r8,	\
+		       (void *)ctx_global->regs.regset_x86_64.r9,	\
+		       (void *)ctx_global->regs.regset_x86_64.r10);	\
+	} while(0); \
+}
+
 typedef enum shiva_trace_op {
 	SHIVA_TRACE_OP_CONT = 0,
 	SHIVA_TRACE_OP_ATTACH,
@@ -359,20 +376,10 @@ typedef struct shiva_trace_bp {
 
 typedef struct shiva_trace_handler {
 	shiva_trace_bp_type_t type;
-	void * (*handler_fn)(void *, void *, void *, void *); // points to handler triggered by BP
+	void * (*handler_fn)(void *); // points to handler triggered by BP
 	TAILQ_HEAD(, shiva_trace_bp) bp_tqlist; // list of current bp's
 	TAILQ_ENTRY(shiva_trace_handler) _linkage;
 } shiva_trace_handler_t;
-
-#if 0
-typedef struct shiva_trace_regset_x86_64 {
-	uint64_t rax, rbx, rcx, rdx;
-	uint64_t rsi, rdi;
-	uint64_t rbp, rsp, rip;
-	uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
-	uint64_t flags, cs, ss, fs, ds;
-} shiva_trace_regset_x86_64_t;
-#endif
 
 typedef struct shiva_trace_regs {
 	struct shiva_trace_regset_x86_64 x86_64;
@@ -390,9 +397,11 @@ typedef struct shiva_trace_thread {
 } shiva_trace_thread_t;
 
 bool shiva_trace(shiva_ctx_t *, pid_t, shiva_trace_op_t, void *, void *, size_t, shiva_error_t *);
-bool shiva_trace_register_handler(shiva_ctx_t *, void * (*)(void *, void *, void *, void *), shiva_trace_bp_type_t,
+bool shiva_trace_register_handler(shiva_ctx_t *, void * (*)(void *), shiva_trace_bp_type_t,
     shiva_error_t *);
-bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(shiva_ctx_t *), uint64_t, shiva_error_t *);
+struct shiva_trace_handler * shiva_trace_find_handler(struct shiva_ctx *, void *);
+struct shiva_trace_bp * shiva_trace_bp_struct(void *);
+bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(void *, void *, void *, void *), uint64_t, shiva_error_t *);
 bool shiva_trace_write(struct shiva_ctx *, pid_t, void *, const void *, size_t, shiva_error_t *);
 /*
  * shiva_trace_thread.c

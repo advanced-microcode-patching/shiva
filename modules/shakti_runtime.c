@@ -5,48 +5,6 @@
 
 #include "../shiva.h"
 
-//extern struct shiva_ctx *ctx_global;
-#if 0
-void __attribute__((naked)) shakti_store_regs_x86_64(void)
-{
-        __asm__ __volatile__(
-        "mov %%rax, %[rax]\n\t"
-        "mov %%rbx, %[rbx]\n\t"
-        "mov %%rcx, %[rcx]\n\t"
-        "mov %%rdx, %[rdx]\n\t"
-        "mov %%rsi, %[rsi]\n\t"
-        "mov %%rdi, %[rdi]\n\t"
-       // "mov %%rbp, %[rbp]\n\t"
-       // "mov %%rsp + 8), %[rsp]\n\t"
-        "mov %%r8, %[r8]\n\t"
-        "mov %%r9, %[r9]\n\t"
-        "mov %%r10, %[r10]\n\t"
-        "mov %%r11, %[r11]\n\t"
-        "mov %%r12, %[r12]\n\t"
-        "mov %%r13, %[r13]\n\t"
-        "mov %%r14, %[r14]\n\t"
-        "mov %%r15, %[r15]\n\t"
-        "lea (%%rip), %%rbx\n\t" // use rbx to store rip
-        "mov %%rbx, %[rip]\n\t"
-        "mov %[rbx], %%rbx\n\t" // restore rbx value
-        : [rax] "=g"(ctx_global->regs.regset_x86_64.rax), [rbx] "=g"(ctx_global->regs.regset_x86_64.rbx),
-          [rcx] "=g"(ctx_global->regs.regset_x86_64.rcx), [rdx] "=g"(ctx_global->regs.regset_x86_64.rdx),
-          [rsi] "=g"(ctx_global->regs.regset_x86_64.rsi), [rdi] "=g"(ctx_global->regs.regset_x86_64.rdi),
-          [rbp] "=g"(ctx_global->regs.regset_x86_64.rbp), [rsp] "=g"(ctx_global->regs.regset_x86_64.rsp),
-          [r8]  "=g"(ctx_global->regs.regset_x86_64.r8),  [r9]  "=g"(ctx_global->regs.regset_x86_64.r9),
-          [r10] "=g"(ctx_global->regs.regset_x86_64.r10), [r11] "=g"(ctx_global->regs.regset_x86_64.r11),
-          [r12] "=g"(ctx_global->regs.regset_x86_64.r12), [r13] "=g"(ctx_global->regs.regset_x86_64.r13),
-          [r14] "=g"(ctx_global->regs.regset_x86_64.r14), [r15] "=g"(ctx_global->regs.regset_x86_64.r15),
-          [rip] "=g"(ctx_global->regs.regset_x86_64.rip)
-        ::"%rax", "%rbx", "%rcx", "%rdx", "%rsi", "%rdi",
-          "%r8", "%r9", "%r10", "%r11", "%r12", "%r13", "%r14", "%r15",
-          "memory"
-        );
-
-	__asm__("ret");
-}
-#endif
-
 void __attribute__((naked)) shakti_store_regs_x86_64(struct shiva_trace_regset_x86_64 *regs)
 {
 	__asm__ __volatile__(
@@ -55,7 +13,7 @@ void __attribute__((naked)) shakti_store_regs_x86_64(struct shiva_trace_regset_x
 		"movq %rcx, 16(%rdi)\n\t"
 		"movq %rdx, 24(%rdi)\n\t"
 		"movq %rsi, 32(%rdi)\n\t"
-		"movq %rdi, 40(%rdi)\n\t"
+		//"movq %rdi, 40(%rdi)\n\t"
 		"movq %r8,  48(%rdi)\n\t"
 		"movq %r9,  56(%rdi)\n\t"
 		"movq %r10, 64(%rdi)\n\t"
@@ -68,34 +26,71 @@ void __attribute__((naked)) shakti_store_regs_x86_64(struct shiva_trace_regset_x
 		);
 }
 
+/*
+ * This handler is being used to hook function calls within
+ * the binary.
+ */
 void *
-shakti_handler(void *arg1, void *arg2, void *arg3, void *arg4)
+shakti_handler(void *arg)
 {
+	/*
+	 * This function must always be called at the beginning of the handler
+	 * to retrieve the register state. In the future users won't need to
+	 * manually call this, it will be linked into the code at runtime.
+	 */
 	shakti_store_regs_x86_64(&ctx_global->regs.regset_x86_64);
+
+#if 0
+	printf("rdi: %p rsi %p rdx %p rcx %p r8 %p\n",
+	    ctx_global->regs.regset_x86_64.rdi,
+	    ctx_global->regs.regset_x86_64.rsi,
+	    ctx_global->regs.regset_x86_64.rdx,
+	    ctx_global->regs.regset_x86_64.rcx,
+	    ctx_global->regs.regset_x86_64.r8);
+
+	printf("arg1: %p arg2: %p arg3: %p arg4: %p\n",
+		arg1, arg2, arg3, arg4);
+#endif
+	/*
+	 * Get global pointer to the context.
+	 */
 	struct shiva_ctx *ctx = ctx_global;
+
+	/*
+	 * Currently we must manually use these in order to get
+	 * the correct rbp and rip at the time this handler was
+	 * called.
+	 */
 	void *retaddr = __builtin_return_address(0);
 	void *frmaddr = __builtin_frame_address(1);
-	struct shiva_trace_handler *current;
+	struct shiva_trace_handler *handler;
 	struct shiva_trace_bp *bp;
 	uint64_t o_target;
 
-	ctx->regs.regset_x86_64.rbp = frmaddr;
+	ctx->regs.regset_x86_64.rbp = (uint64_t)frmaddr;
 	ctx->regs.regset_x86_64.rip = (uint64_t)retaddr - 5;
-#if 0
-	printf("rax: %#lx rcx: %#lx rbp: %#lx rip: %#lx rdi %#lx\n", ctx->regs.regset_x86_64.rax,
-	    ctx->regs.regset_x86_64.rcx, ctx->regs.regset_x86_64.rbp, ctx->regs.regset_x86_64.rip, ctx->regs.regset_x86_64.rdi);
-#endif
-	TAILQ_FOREACH(current, &ctx->tailq.trace_handlers_tqlist, _linkage) {
-		if (current->handler_fn != (void *)&shakti_handler)
-			continue;
-		TAILQ_FOREACH(bp, &current->bp_tqlist,  _linkage) {
-			if (bp->retaddr == (uint64_t)retaddr) {
-				o_target = bp->o_target;
-				printf("[CALL] %s\n", bp->call_target_symname);
-				void * (*o_func)(void *, void *, void *, void *) =
-				    (void *)o_target;
-				return o_func(arg1, arg2, arg3, arg4);
-			}
+	ctx->regs.regset_x86_64.rdi = (uint64_t)arg;
+
+	handler = shiva_trace_find_handler(ctx, &shakti_handler);
+	if (handler == NULL) {
+		printf("Failed to find handler struct for shakti_handler\n");
+		exit(-1);
+	}
+	/*
+	 * Get the shiva_trace_bp struct pointer that correlates
+	 * to the call-hook-breakpoint. Then find the call-hook
+	 * breakpoint that triggered our handler.
+	 */
+	TAILQ_FOREACH(bp, &handler->bp_tqlist,  _linkage) {
+		if (bp->retaddr == (uint64_t)retaddr) {
+			o_target = bp->o_target; /* get original call target address */
+			
+			/*
+			 * Print the name of the function that was originally being
+			 * called.
+			 */
+			printf("[CALL] %s\n", bp->call_target_symname);
+			SHIVA_TRACE_CALL_ORIGINAL(bp);
 		}
 	}
 	return NULL;
@@ -135,29 +130,6 @@ shakti_main(shiva_ctx_t *ctx)
 			return -1;
 		}
 	}
-#if 0
-	printf("Shakti debugging module\n");
-	printf("ctx: %p\n", ctx);
-	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_ATTACH,
-	    NULL, NULL, &error);
-	if (res == false) {
-		printf("shiva_trace failed: %s\n", shiva_error_msg(&error));
-		return -1;
-	}
-	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_POKE,
-	    (void *)ctx->ulexec.base_vaddr, &data, &error);
-	if (res == false) {
-		printf("shiva_trace 1 failed: %s\n", shiva_error_msg(&error));
-		return -1;
-	}
-	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_PEEK,
-	    (void *)ctx->ulexec.base_vaddr, &out, &error);
-	if (res == false) {
-		printf("shiva_trace 2 failed: %s\n", shiva_error_msg(&error));
-		return -1;
-	}
-#endif
-	
 	return 0;
 }
 
