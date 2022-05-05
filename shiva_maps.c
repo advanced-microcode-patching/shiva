@@ -1,6 +1,34 @@
 #include "shiva.h"
 
 /*
+ * Get the base address of the target executable.
+ * The base address is set in the out argument.
+ */
+bool
+shiva_maps_get_base(struct shiva_ctx *ctx, uint64_t *out)
+{
+	FILE *fp;
+	char buf[PATH_MAX];
+	char *p;
+
+	fp = fopen("/proc/self/maps", "r");
+	if (fp == NULL) {
+		perror("fopen");
+		return false;
+	}
+	while (fgets(buf, sizeof(buf), fp) != NULL) {
+		if (strstr(buf, ctx->path) == NULL)
+			continue;
+		p = strchr(buf, '-');
+		*p = '\0';
+		printf("buf: %s\n", buf);
+		*out = strtoul(buf, NULL, 16);
+		return true;
+	}
+	return false;
+}
+
+/*
  * Checking if 'addr' is a valid address mapping.
  * It's valid if it exists in /proc/pid/maps, as long as it
  * doesn't belong to the debuggers text/data segment.
@@ -34,7 +62,10 @@ shiva_maps_build_list(struct shiva_ctx *ctx)
 	FILE *fp;
 	char buf[PATH_MAX];
 
-	assert(TAILQ_EMPTY(&ctx->tailq.mmap_tqlist));
+	if (!TAILQ_EMPTY(&ctx->tailq.mmap_tqlist)) {
+		fprintf(stderr, "mmap_tqlist is already initialized\n");
+		return false;
+	}
 
 	TAILQ_INIT(&ctx->tailq.mmap_tqlist);
 

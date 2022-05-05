@@ -427,7 +427,7 @@ calculate_text_size(struct shiva_module *linker)
 }
 
 bool
-create_data_image(struct shiva_module *linker)
+create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 {
 	elf_section_iterator_t shdr_iter;
 	struct elf_section section;
@@ -442,10 +442,14 @@ create_data_image(struct shiva_module *linker)
 		shiva_debug("No data segment is needed\n");
 		return true; // we need no data segment
 	}
+
+	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
+	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT;
+
 	data_size_aligned = ELF_PAGEALIGN(linker->data_size, PAGE_SIZE);
 	shiva_debug("ELF data segment len: %zu\n", data_size_aligned);
 	linker->data_mem = mmap(NULL, data_size_aligned, PROT_READ|PROT_WRITE,
-	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT, -1, 0);
+	    mmap_flags, -1, 0);
 	if (linker->data_mem == MAP_FAILED) {
 		shiva_debug("mmap failed: %s\n", strerror(errno));
 		return false;
@@ -490,7 +494,7 @@ create_data_image(struct shiva_module *linker)
 }
 
 bool
-create_text_image(struct shiva_module *linker)
+create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 {
 	elf_section_iterator_t shdr_iter;
 	struct elf_section section;
@@ -505,16 +509,22 @@ create_text_image(struct shiva_module *linker)
 	int i;
 
 	/*
-	 * NOTE We map the module to segments within a 32bit address range.
+	 * NOTE: We map the module to segments within a 32bit address range.
 	 * This avoids the problem of call offsets larger than 32bits. The
 	 * target program that we are ulexec'ing is always mapped to the same
 	 * 32bit address at runtime, and therefore trampolines between the
 	 * debugger and debugee can be sure to use 32bit offsets. Therefore
-	 * we use MAP_32BIT with mmap.
+	 * we use MAP_32BIT with mmap. This worked just fine until we started
+	 * running shiva as an interpreter, in which case the kernel is going
+	 * to load the target executable to a much higher address space.
+	 * In this case we won't use the MAP_32BIT.
 	 */
+	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
+	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT;
+
 	text_size_aligned = ELF_PAGEALIGN(linker->text_size, PAGE_SIZE);
 	linker->text_mem = mmap(NULL, text_size_aligned, PROT_READ|PROT_WRITE|PROT_EXEC,
-	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT, -1, 0);
+	    mmap_flags, -1, 0);
 	if (linker->text_mem == MAP_FAILED) {
 		shiva_debug("mmap failed: %s\n", strerror(errno));
 		return false;
@@ -684,11 +694,11 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		shiva_debug("Failed to calculate .data size for parasite module\n");
 		return false;
 	}
-	if (create_text_image(linker) == false) {
+	if (create_text_image(ctx, linker) == false) {
 		shiva_debug("Failed to create text segment\n");
 		return false;
 	}
-	if (create_data_image(linker) == false) {
+	if (create_data_image(ctx, linker) == false) {
 		shiva_debug("Failed to create data segment\n");
 		return false;
 	}

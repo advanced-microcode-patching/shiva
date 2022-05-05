@@ -49,6 +49,12 @@
 #define SHIVA_MODULE_F_RUNTIME	(1UL << 0)
 #define SHIVA_MODULE_F_INIT	(1UL << 1)
 
+/*
+ * Path to real dynamic linker.
+ * XXX this should be configurable via environment.
+ */
+#define SHIVA_LDSO_PATH "/lib64/ld-linux-x86-64.so.2"
+
 #define SHIVA_ULEXEC_LDSO_TRANSFER(stack, addr, entry) __asm__ __volatile__("mov %0, %%rsp\n" \
 					    "push %1\n" \
 					    "mov %2, %%rax\n" \
@@ -286,7 +292,7 @@ bool shiva_maps_build_list(shiva_ctx_t *);
 bool shiva_maps_validate_addr(shiva_ctx_t *, uint64_t);
 void shiva_maps_iterator_init(shiva_ctx_t *, shiva_maps_iterator_t *);
 shiva_iterator_res_t shiva_maps_iterator_next(shiva_maps_iterator_t *, struct shiva_mmap_entry *);
-
+bool shiva_maps_get_base(shiva_ctx_t *, uint64_t *);
 /*
  * shiva_callsite.c
  */

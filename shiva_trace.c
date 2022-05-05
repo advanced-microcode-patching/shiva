@@ -166,7 +166,11 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *, v
 				}
 				call_site = bp_addr;
 				call_offset = (uint64_t)current->handler_fn - call_site - 5;
+				//call_offset &= 0xffffffff;
+
 				*(uint32_t *)&call_inst[1] = call_offset;
+				shiva_debug("call_offset = %#lx - %#lx - 5: %#lx\n", current->handler_fn,
+				    call_site, call_offset);
 				res = shiva_trace_write(ctx, pid, (void *)bp_addr, call_inst, bp->bp_len,
 				    error);
 				if (res == false) {

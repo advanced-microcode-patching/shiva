@@ -325,6 +325,7 @@ shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool inter
 		ctx->ulexec.ldso.base_vaddr = base_vaddr;
 		ctx->ulexec.ldso.phdr_vaddr = base_vaddr + elf_phoff(elfobj);
 	}
+	printf("Returning :)\n");
 	return true;
 }
 
