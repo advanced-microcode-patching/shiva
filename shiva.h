@@ -35,9 +35,9 @@
 
 #define SHIVA_RUNTIME_ADDR(addr) (addr + ctx->ulexec.base)
 
-#define SHIVA_F_JMP_CFLOW		(1UL << 0)
-#define SHIVA_F_STRING_ARGS		(1UL << 1)
-#define SHIVA_F_RETURN_FLOW		(1UL << 2)
+#define SHIVA_OPTS_F_MODULE_PATH		(1UL << 0)
+#define SHIVA_OPTS_F_ULEXEC_ONLY		(1UL << 1)
+#define SHIVA_OPTS_F_INTERP_MODE		(1UL << 2)
 
 #define SHIVA_F_ULEXEC_LDSO_NEEDED	(1UL << 0)
 
@@ -177,7 +177,7 @@ typedef struct shiva_trace_regset_x86_64 {
 } shiva_trace_regset_x86_64_t;
 
 typedef struct shiva_ctx {
-	char *path;
+	char *path; // path to target executable
 	int argc;
 	char **args;
 	char **argv;

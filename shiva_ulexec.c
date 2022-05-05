@@ -35,7 +35,7 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out, Elf64_auxv_t
 	count += sizeof(void *);
 	count += ctx->ulexec.envpcount * sizeof(char *);
 	count += sizeof(void *);
-	count += SHIVA_AUXV_COUNT * sizeof(Elf64_auxv_t);
+	count += (SHIVA_AUXV_COUNT + 1) * sizeof(Elf64_auxv_t);
 	count = (count + 16) & ~(16 - 1);
 	totalsize = count + ctx->ulexec.envplen + ctx->ulexec.arglen;
 	totalsize = (totalsize + 16) & ~(16 - 1);
@@ -59,6 +59,7 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out, Elf64_auxv_t
 	s = ctx->ulexec.argstr;
 	*esp++ = ctx->argc;
 	for (argc = ctx->argc; argc > 0; argc--) {
+		printf("Copying '%s' to %p\n", s, strdata);
 		strcpy(strdata, s);
 		len = strlen(s) + 1;
 		s += len;
@@ -69,7 +70,6 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out, Elf64_auxv_t
 	 * Append NULL after last argv ptr
 	 */
 	*esp++ = (uintptr_t)0; // Our stack currently: argc, argv[0], argv[n], NULL
-
 	/*
 	 * Copyin envp pointers and envp ascii data
 	 */
@@ -81,6 +81,7 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out, Elf64_auxv_t
 		strdata += len;
 	}
 	*esp++ = (uintptr_t)0;
+
 	Elf64_auxv_t *auxv = (Elf64_auxv_t *)esp;
 	*auxv_ptr = auxv;
 	shiva_auxv_iterator_init(ctx, &a_iter, NULL);
@@ -373,7 +374,6 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 		fprintf(stderr, "shiva_ulexec_build_auxv_stack() failed\n");
 		return false;
 	}
-
 	shiva_auxv_iterator_t a_iter;
 	struct shiva_auxv_entry a_entry;
 

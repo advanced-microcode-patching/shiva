@@ -160,7 +160,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *, v
 						}
 					}
 					if (bp->call_target_symname == NULL) {
-						bp->call_target_symname = shiva_xfmtstrdup("fn_%#lx\n",
+						bp->call_target_symname = shiva_xfmtstrdup("fn_%#lx",
 						    bp->o_target);
 					}
 				}

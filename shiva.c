@@ -75,6 +75,42 @@ shiva_build_target_argv(struct shiva_ctx *ctx, char **argv, int argc)
 	return true;
 }
 
+bool
+shiva_interp_mode(struct shiva_ctx *ctx)
+{
+	struct elf_section section;
+
+	shiva_debug("Target path: %s\n", target_path);
+
+	ctx_global = ctx;
+	shiva_init_lists(ctx);
+
+	if (shiva_build_trace_data(ctx) == false) {
+		fprintf(stderr, "shiva_build_trace_data() failed\n");
+		exit(EXIT_FAILURE);
+	}
+
+	if (elf_section_by_name(&ctx->elfobj, ".rela.text", &section) == true) {
+		fprintf(stderr, "Warning: Found .text relocations in '%s'. This may alter"
+		    " the effects of breakpoint debugging\n", elf_pathname(&ctx->elfobj));
+	}
+
+	if (shiva_maps_build_list(ctx) == false) {
+		fprintf(stderr, "shiva_maps_build_list() failed\n");
+		exit(EXIT_FAILURE);
+	}
+	/*
+	 * Now that we've got the target binary (The debugee) loaded
+	 * into memory, we can run some analyzers on it to acquire
+	 * information (i.e. callsite locations).
+	 */
+	if (shiva_analyze_run(ctx) == false) {
+		fprintf(stderr, "Failed to run the analyzers\n");
+		exit(EXIT_FAILURE);
+	}
+
+}
+
 int main(int argc, char **argv, char **envp)
 {
 	shiva_ctx_t ctx;
@@ -83,6 +119,44 @@ int main(int argc, char **argv, char **envp)
 	struct sigaction act;
 	sigset_t set;
 
+	char *path, *p;
+
+	/*
+	 * Initialize everything in the context.
+	 */
+	memset(&ctx, 0, sizeof(ctx));
+
+	p = realpath("/proc/self/exe", path);
+	if (p == NULL) {
+		fprintf(stderr, "realpath failed: %s\n", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+	p = strrchr(p, '/') + 1;
+	if (strcmp(p, "shiva") != 0) {
+		shiva_debug("Running in interpreter mode\n");
+
+		ctx.envp = envp;
+		ctx.argv = argv;
+		ctx.argc = argc;
+		ctx.path = path;
+
+		if (shiva_interp_mode(&ctx) == false) {
+			fprintf(stderr, "shiva_interp_mode failed\n");
+			exit(EXIT_FAILURE);
+		}
+	}
+	/*
+	 * Everything from here down assumes Shiva will be running in standalone
+	 * mode (On the command line).
+	 */
+
+	if (argc < 2 || (argc == 2 && argv[1][0] == '-')) {
+		printf("Usage: %s [-u] <prog> [<prog> args]\n", argv[0]);
+		printf("-u	userland-exec mode. shiva simply loads and executes the target program\n");
+		printf("example: shiva -u /some/program <program args>\n");
+		exit(EXIT_FAILURE);
+	}
+
 	act.sa_handler = shiva_sighandle;
 	sigemptyset(&act.sa_mask);
 	act.sa_flags = 0;
@@ -90,21 +164,8 @@ int main(int argc, char **argv, char **envp)
 	sigemptyset(&set);
 	sigaddset(&set, SIGINT);
 
-	/*
-	 * Initialize everything in the context.
-	 */
-	memset(&ctx, 0, sizeof(ctx));
-
-	if ((argc < 2) || (argc == 2 && argv[1][0] == '-')) {
-		printf("Usage: %s [-sbr] <prog> [<prog> args]\n", argv[0]);
-		printf("[-s] string values\n");
-		printf("[-b] branch control flow\n");
-		printf("[-r] return values\n");
-		printf("Example: shiva -sbr /bin/ls -lR\n");
-		exit(EXIT_FAILURE);
-	}
-
 	ctx.envp = envp;
+	ctx.argv = argv;
 
 	if (shiva_build_target_argv(&ctx, argv, argc) == false) {
 		fprintf(stderr, "build_target_argv failed\n");
@@ -125,27 +186,21 @@ int main(int argc, char **argv, char **envp)
 
 		for (p = &(*(*(argv + 1) + 1)); *p != '\0'; p++) {
 			switch (*p) {
-			case 's':
-				ctx.flags |= SHIVA_F_STRING_ARGS;
-				break;
-			case 'b':
-				ctx.flags |= SHIVA_F_JMP_CFLOW;
-				break;
-			case 'r':
-				ctx.flags |= SHIVA_F_RETURN_FLOW;
+			case 'u':
+				ctx.flags |= SHIVA_OPTS_F_ULEXEC_ONLY;
 				break;
 			default:
 				break;
 			}
 		}
 	}
-	shiva_debug("Target path: %s\n", ctx.path);
+
+	printf("Target path: %s\n", ctx.path);
 	shiva_debug("Target args: ");
-#if DEBUG
 	for (i = 0; i < ctx.argcount; i++) {
 		printf("%s ", ctx.args[i]);
 	}
-#endif
+	printf("\n");
 	if (shiva_build_trace_data(&ctx) == false) {
 		fprintf(stderr, "shiva_build_trace_data() failed\n");
 		exit(EXIT_FAILURE);
@@ -176,6 +231,8 @@ int main(int argc, char **argv, char **envp)
 	 * into an executable region within our address space.
 	 * It will then pass control to the module.
 	 */
+	if (ctx.flags & SHIVA_OPTS_F_ULEXEC_ONLY)
+		goto transfer_control;
 
 	if (shiva_module_loader(&ctx, "./modules/shakti_runtime.o",
 	    &ctx.module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
@@ -186,10 +243,11 @@ int main(int argc, char **argv, char **envp)
 	 * Once the module has finished executing, we pass control
 	 * to LDSO.
 	 */
+transfer_control:
 	shiva_debug("Passing control to entry point: %#lx\n", ctx.ulexec.entry_point);
 	shiva_debug("LDSO entry point: %#lx\n", ctx.ulexec.ldso.entry_point);
 	SHIVA_ULEXEC_LDSO_TRANSFER(ctx.ulexec.rsp_start, ctx.ulexec.ldso.entry_point,
-            ctx.ulexec.entry_point);
+	    ctx.ulexec.entry_point);
 
 	return true;
 }

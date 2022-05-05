@@ -24,6 +24,9 @@ shiva_maps_validate_addr(struct shiva_ctx *ctx, uint64_t addr)
 
 /*
  * Load /proc/pid/maps into the ctx->tailq.mmap_tqlist
+ * XXX: Update this function to deal with Shiva when
+ * it's in interpreter mode... the address space layout
+ * is different than it would be in standalone mode. 
  */
 bool
 shiva_maps_build_list(struct shiva_ctx *ctx)

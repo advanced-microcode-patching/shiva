@@ -1,0 +1,43 @@
+
+When writing a custom interpreter, such as 'shiva', there are interesting
+bugs and caveats worth noting.
+
+
+1. __ctype_init() crashes when running shiva as an interpreter.
+
+Here we will run a program called 'test2' in GDB. This executable has /bin/shiva
+specified as the program interpreter in the PT_INTERP segment. The 'test2'
+executable is a dynamically linked PIE executable. The '/bin/shiva' is a
+statically linked executable.
+
+-= GDB output for test2 program
+
+0x000000000041d106 in __ctype_init () from /home/elfmaster/git/shiva/shiva
+(gdb) bt
+#0  0x000000000041d106 in __ctype_init () from /home/elfmaster/git/shiva/shiva
+#1  0x000000000047d530 in __libc_early_init () from /home/elfmaster/git/shiva/shiva
+#2  0x000000000041c119 in __libc_start_main_impl () from /home/elfmaster/git/shiva/shiva
+#3  0x0000000000401775 in _start () from /home/elfmaster/git/shiva/shiva
+(gdb) 
+
+When we run /bin/shiva as a standalone executable this works fine because it has
+a PT_TLS segment.
+
+When running /bin/shiva indirectly (as an interpreter) we run into the crash
+shown above. The static glibc initialization code locates the TLS segment by
+retrieving the address of PT_PHDR, and iterating over it until it finds PT_TLS.
+When /bin/shiva is run directly the PT_PHDR value taken from auxv points to
+it's own phdr table. When /bin/shiva is run indirectly (As the interpreter)
+the PT_PHDR value points to the phdr table for the executable 'test2'.
+The 'test2' executable does not have any TLS variables and therefore it
+has no PT_TLS segment, which leads to this crash.
+
+Essentially the glibc static initialization code is not compatible with
+executable's that are loaded as program interpreters. Unless TLS is somehow
+completely removed from the interpreter executable.
+
+NOTE: This whole problem can be avoided by using musl-libc, which doesn't
+have problematic initialization code for the interpreter to run right.
+
+
+
