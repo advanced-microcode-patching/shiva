@@ -79,15 +79,19 @@ bool
 shiva_interp_mode(struct shiva_ctx *ctx)
 {
 	struct elf_section section;
-
-	shiva_debug("Target path: %s\n", target_path);
+	elf_error_t error;
+	char *interp;
+	uint64_t *rsp;
+	shiva_auxv_iterator_t auxv_iter;
+	struct shiva_auxv_entry auxv_entry;
+	uint64_t entry_point;
 
 	ctx_global = ctx;
 	shiva_init_lists(ctx);
 
 	if (shiva_build_trace_data(ctx) == false) {
 		fprintf(stderr, "shiva_build_trace_data() failed\n");
-		exit(EXIT_FAILURE);
+		return false;
 	}
 
 	if (elf_section_by_name(&ctx->elfobj, ".rela.text", &section) == true) {
@@ -97,7 +101,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 
 	if (shiva_maps_build_list(ctx) == false) {
 		fprintf(stderr, "shiva_maps_build_list() failed\n");
-		exit(EXIT_FAILURE);
+		return false;
 	}
 	/*
 	 * Now that we've got the target binary (The debugee) loaded
@@ -106,8 +110,71 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	 */
 	if (shiva_analyze_run(ctx) == false) {
 		fprintf(stderr, "Failed to run the analyzers\n");
+		return false;
+	}
+
+	/*
+	 * Loads the runtime module, and then passes control to
+	 * shakti_main() (Within the module) before passing control
+	 * to LDSO.
+	 */
+	if (shiva_module_loader(ctx, "./modules/shakti_runtime.o",
+	    &ctx->module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
+		fprintf(stderr, "shiva_module_loader failed\n");
 		exit(EXIT_FAILURE);
 	}
+	if (elf_type(&ctx->elfobj) != ET_DYN) {
+		fprintf(stderr, "Shiva only supports PIE ELF binaries.\n");
+		return false;
+	}
+	interp = elf_interpreter_path(&ctx->elfobj);
+	if (interp == NULL) {
+		fprintf(stderr,
+	  	    "Shiva currently only supports dynamically linked ELF binaries\n");
+		return false;
+	}
+	if (elf_open_object(interp, &ctx->ldsobj, ELF_LOAD_F_STRICT, &error) == false) {
+		fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n",
+		    interp, elf_error_msg(&error));
+		return false;
+	}
+	/*
+	 * NOTE: In interpreter mode we are not needing to userland execve the
+	 * target, but we will borrow one of the functions from shiva_ulexec.c
+	 * to load the dynamic linker into the address space for execution :)
+	 */
+	if (shiva_ulexec_load_elf_binary(ctx, &ctx->ldsobj, true) == false) {
+		fprintf(stderr, "shiva_ulexec_load_elf_binary(%p, %s, true) failed\n",
+		    ctx, elf_pathname(&ctx->ldsobj));
+		return false;
+	}
+
+	/*
+	 * Get the entry point of the target executable. Stored in AT_ENTRY
+	 * of the auxiliary vector.
+	 */
+	if (shiva_auxv_iterator_init(ctx, &auxv_iter, NULL) == false) {
+		fprintf(stderr, "shiva_auxv_iterator_init failed\n");
+		return false;
+	}
+	while (shiva_auxv_iterator_next(&auxv_iter, &auxv_entry) == SHIVA_ITER_OK) {
+		if (auxv_entry.type == AT_ENTRY) {
+			entry_point = auxv_entry.value;
+			shiva_debug("Entry point: %#lx\n", entry_point);
+			break;
+		}
+	}
+	/*
+	 * Set rsp to near the top of the stack at &argc
+	 */
+	rsp = (uint64_t *)ctx->argv;
+	rsp--;
+
+        shiva_debug("Passing control to entry point: %#lx\n", entry_point);
+        shiva_debug("LDSO entry point: %#lx\n", ctx->ulexec.ldso.entry_point);
+        SHIVA_ULEXEC_LDSO_TRANSFER(rsp, ctx->ulexec.ldso.entry_point, entry_point);
+
+	return true;
 
 }
 
@@ -119,27 +186,30 @@ int main(int argc, char **argv, char **envp)
 	struct sigaction act;
 	sigset_t set;
 
-	char *path, *p;
+	char *path, *p, *target_path;
 
 	/*
 	 * Initialize everything in the context.
 	 */
 	memset(&ctx, 0, sizeof(ctx));
 
-	p = realpath("/proc/self/exe", path);
-	if (p == NULL) {
+	/*
+	 * Determine whether we are in interpreter mode
+	 */
+	target_path = realpath("/proc/self/exe", path);
+	if (target_path == NULL) {
 		fprintf(stderr, "realpath failed: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	p = strrchr(p, '/') + 1;
+	p = strrchr(target_path, '/') + 1;
 	if (strcmp(p, "shiva") != 0) {
 		shiva_debug("Running in interpreter mode\n");
 
 		ctx.envp = envp;
 		ctx.argv = argv;
 		ctx.argc = argc;
-		ctx.path = path;
-
+		ctx.path = target_path;
+		ctx.flags |= SHIVA_OPTS_F_INTERP_MODE;
 		if (shiva_interp_mode(&ctx) == false) {
 			fprintf(stderr, "shiva_interp_mode failed\n");
 			exit(EXIT_FAILURE);

@@ -265,6 +265,7 @@ bool shiva_auxv_set_value(struct shiva_auxv_iterator *, long);
  * shiva_ulexec.c
  */
 bool shiva_ulexec_prep(shiva_ctx_t *);
+bool shiva_ulexec_load_elf_binary(struct shiva_ctx *, elfobj_t *, bool);
 
 /*
  * shiva_module.c

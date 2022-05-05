@@ -59,7 +59,6 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out, Elf64_auxv_t
 	s = ctx->ulexec.argstr;
 	*esp++ = ctx->argc;
 	for (argc = ctx->argc; argc > 0; argc--) {
-		printf("Copying '%s' to %p\n", s, strdata);
 		strcpy(strdata, s);
 		len = strlen(s) + 1;
 		s += len;

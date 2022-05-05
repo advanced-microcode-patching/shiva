@@ -208,6 +208,8 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 			 * First look for symbol inside of the module, and if it doesn't exist
 			 * there let's look inside of the debuggers symbol table.
 			 */
+			/* 1. Check module for symbol */
+			shiva_debug("Checking module for symbol\n");
 			if (elf_symbol_by_name(&linker->elfobj, rel.symname,
 			    &symbol) == true) {
 				/*
@@ -228,10 +230,11 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 				*(uint32_t *)&rel_unit[0] = rel_val;
 				return true;
 			}
-			/*
-			 * Look up the symbol from within the debugger binary itself.
+			/* 
+			 * 2. Look up the symbol from within the debugger binary itself.
 			 */
 internal_lookup:
+			shiva_debug("Looking up symbol %s inside of Shiva\n");
 			if (elf_symbol_by_name(&linker->self, rel.symname,
 			    &symbol) == true) {
 				shiva_debug("Internal symbol lookup\n");
@@ -635,6 +638,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	elf_error_t error;
 	bool res;
 	uint64_t entry;
+	char *shiva_path;
 
 	linker = malloc(sizeof(struct shiva_module));
 	if (linker == NULL) {
@@ -651,7 +655,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	shiva_debug("elf_open_object(%s, ...)\n", path);
 
 	/*
-	 * Open the module ELF object
+	 * Open the module ELF object (I.E. modules/shakti_runtime.o)
 	 */
 	res = elf_open_object(path, &linker->elfobj,
 	    ELF_LOAD_F_STRICT, &error);
@@ -660,9 +664,12 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		return false;
 	}
 	/*
-	 * Open our self (The debugger) ELF object
+	 * Open our self (The debugger/interpreter) ELF object.
 	 */
-	if (elf_open_object("/proc/self/exe", &linker->self, ELF_LOAD_F_STRICT,
+	shiva_path = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ?
+	    elf_interpreter_path(&ctx->elfobj) : "/proc/self/exe";
+
+	if (elf_open_object(shiva_path, &linker->self, ELF_LOAD_F_STRICT,
 	    &error) == false) {
 		shiva_debug("elf_open_object(%s, ...) failed: %s\n",
 		    "/proc/self/exe", elf_error_msg(&error));

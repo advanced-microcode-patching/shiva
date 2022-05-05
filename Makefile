@@ -20,7 +20,7 @@ all:
 	$(CC) $(GCC_OPTS) shiva_maps.c -o	shiva_maps.o
 	$(CC) $(GCC_OPTS) shiva_analyze.c -o	shiva_analyze.o
 	$(CC) $(GCC_OPTS) shiva_callsite.c -o 	shiva_callsite.o
-	$(CC) -static -Wl,-undefined=pause -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o shiva
+	$(MUSL) -static -Wl,-undefined=pause -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o shiva
 
 test:
 	gcc test.c -o test -fcf-protection=none
