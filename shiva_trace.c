@@ -1,5 +1,12 @@
 #include "shiva.h"
 
+uint64_t
+shiva_trace_base_addr(struct shiva_ctx *ctx)
+{
+
+	return ctx->ulexec.base_vaddr;
+}
+
 /*
  * This function is a wrapper around shiva_trace_op_poke
  */
@@ -17,10 +24,10 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 	int ret, o_prot;
 
 	if (shiva_maps_prot_by_addr(ctx, (uint64_t)addr, &o_prot) == false) {
-       	    shiva_error_set(error, "poke pid (%d) at %#lx failed: "
-            "cannot find memory protection\n", pid, (uint64_t)addr);
+	    shiva_error_set(error, "poke pid (%d) at %#lx failed: "
+	    "cannot find memory protection\n", pid, (uint64_t)addr);
 		return false;
-        }
+	}
 
 	aligned_vaddr = (uint64_t)addr;
 	aligned_vaddr &= ~4095;
@@ -103,18 +110,53 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *, v
 	size_t insn_len;
 	struct elf_symbol symbol;
 	uint8_t call_inst[5] = "\xe8\x00\x00\x00\x00";
+	uint8_t tramp_inst[12] = "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x50\xc3";
 	uint64_t call_offset, call_site;
 	bool res;
 	int pid;
 	uint64_t o_call_offset;
+	bool found_handler = false;
 
 	TAILQ_FOREACH(current, &ctx->tailq.trace_handlers_tqlist, _linkage) {
 		if (current->handler_fn == handler_fn) {
+			found_handler = true;
 			shiva_debug("found handler: %p\n", handler_fn);
 			switch(current->type) {
 			case SHIVA_TRACE_BP_JMP:
 				break;
 			case SHIVA_TRACE_BP_INT3:
+				break;
+			case SHIVA_TRACE_BP_TRAMPOLINE:
+				ud_set_input_buffer(&ctx->disas.ud_obj, inst_ptr, SHIVA_MAX_INST_LEN);
+				bits = elf_class(&ctx->elfobj) == elfclass64 ? 64 : 32;
+				insn_len = ud_insn_len(&ctx->disas.ud_obj);
+				assert(insn_len <= 15);
+				bp = calloc(1, sizeof(*bp));
+				if (bp == NULL) {
+					shiva_error_set(error, "memory allocation failed: %s\n",
+					    strerror(errno));
+					return false;
+				}
+				if (elf_symbol_by_value(&ctx->elfobj,
+				    bp_addr - shiva_trace_base_addr(ctx), &symbol) == true) {
+					bp->symbol_location = true;
+					memcpy(&bp->symbol, &symbol, sizeof(symbol));
+					bp->call_target_symname = symbol.name;
+				}
+				memcpy(&bp->insn.o_insn[0], (void *)bp_addr, sizeof(tramp_inst));
+				*(uint64_t *)&tramp_inst[2] = (uint64_t)handler_fn;
+				memcpy(&bp->insn.n_insn[0], tramp_inst, sizeof(tramp_inst));
+				bp->bp_addr = bp_addr;
+				bp->bp_len = sizeof(tramp_inst);
+				bp->bp_type = current->type;
+				res = shiva_trace_write(ctx, pid, (void *)bp_addr, tramp_inst, bp->bp_len,
+				    error);
+				if (res == false) {
+					free(bp);
+					return false;
+				}
+				shiva_debug("Inserted breakpoint: %#lx\n", bp->bp_addr);
+				TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
 				break;
 			case SHIVA_TRACE_BP_CALL:
 				/*
@@ -145,7 +187,14 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *, v
 				bp->bp_len = 5; // length of breakpoint is size of imm call insn
 				bp->retaddr = bp_addr + bp->bp_len;
 
-				if (elf_symbol_by_value(&ctx->elfobj, bp->o_target - SHIVA_TARGET_BASE, &symbol) == true) {
+				/*
+				 * XXX when we start handling non-PIE binaries we will be passing
+				 * bp->o_target to find the symbol by absolute symbol name, whereas
+				 * right now we are passing o_target - base_addr to get the symbols
+				 * offset to look up within the binary.
+				 */
+				if (elf_symbol_by_value(&ctx->elfobj,
+				    bp->o_target - shiva_trace_base_addr(ctx), &symbol) == true) {
 					bp->symbol_location = true;
 					memcpy(&bp->symbol, &symbol, sizeof(symbol));
 					bp->call_target_symname = symbol.name;
@@ -155,7 +204,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *, v
 
 					elf_plt_iterator_init(&ctx->elfobj, &plt_iter);
 					while (elf_plt_iterator_next(&plt_iter, &plt_entry) == ELF_ITER_OK) {
-						if ((bp->o_target - SHIVA_TARGET_BASE) == plt_entry.addr) {
+						if ((bp->o_target - shiva_trace_base_addr(ctx)) == plt_entry.addr) {
 							bp->call_target_symname = shiva_xfmtstrdup("%s@plt", plt_entry.symname);
 						}
 					}
@@ -165,9 +214,12 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *, v
 					}
 				}
 				call_site = bp_addr;
-				call_offset = (uint64_t)current->handler_fn - call_site - 5;
-				//call_offset &= 0xffffffff;
-
+				call_offset = ((uint64_t)current->handler_fn - call_site - 5);
+				if (call_offset > 0xffffffff) {
+					shiva_error_set(error, "shiva_trace_set_breakpoint() failed: "
+					    "call offset %#lx is too large\n", call_offset);
+					return false;
+				}
 				*(uint32_t *)&call_inst[1] = call_offset;
 				shiva_debug("call_offset = %#lx - %#lx - 5: %#lx\n", current->handler_fn,
 				    call_site, call_offset);
@@ -182,6 +234,10 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *, v
 				break;
 			}
 		}
+	}
+	if (found_handler == false) {
+		shiva_error_set(error, "unable to find handler %p\n", handler_fn);
+		return false;
 	}
 	return true;
 }
@@ -238,7 +294,7 @@ shiva_trace_op_peek(struct shiva_ctx *ctx, pid_t pid,
 		    "cannot read from debugger memory\n", pid, (uint64_t)addr);
 		return false;
 	}
-        if (shiva_maps_validate_addr(ctx, (uint64_t)addr + len) == false) {
+	if (shiva_maps_validate_addr(ctx, (uint64_t)addr + len) == false) {
 		shiva_error_set(error, "peek pid (%d) at %#lx failed: "
 		    "cannot read from debugger memory\n", pid, (uint64_t)addr);
 		return false;

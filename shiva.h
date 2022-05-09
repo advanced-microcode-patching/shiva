@@ -317,10 +317,10 @@ bool shiva_analyze_run(shiva_ctx_t *);
 #define SHIVA_TRACE_THREAD_F_COREDUMPING	(1UL << 3)
 #define SHIVA_TRACE_THREAD_F_NEW		(1UL << 4) // newly added into thread list
 
-#define SHIVA_TRACE_HANDLER_F_CALL	(1UL << 0) // handler is invoked via  call
-#define SHIVA_TRACE_HANDLER_F_JMP	(1UL << 1) // handler is invoked via jmp
-#define SHIVA_TRACE_HANDLER_F_INT3	(1UL << 2) // handler is invoked via int3
-
+#define SHIVA_TRACE_HANDLER_F_CALL		(1UL << 0) // handler is invoked via  call
+#define SHIVA_TRACE_HANDLER_F_JMP		(1UL << 1) // handler is invoked via jmp
+#define SHIVA_TRACE_HANDLER_F_INT3		(1UL << 2) // handler is invoked via int3
+#define SHIVA_TRACE_HANDLER_F_TRAMPOLINE	(1UL << 3) // handler is invoked via function trampoline
 
 
 /*
@@ -344,6 +344,13 @@ bool shiva_analyze_run(shiva_ctx_t *);
 	} while(0); \
 }
 
+typedef enum shiva_trace_bp_type {
+        SHIVA_TRACE_BP_JMP = 0,
+        SHIVA_TRACE_BP_CALL,
+        SHIVA_TRACE_BP_INT3,
+        SHIVA_TRACE_BP_TRAMPOLINE
+} shiva_trace_bp_type_t;
+
 /*
  * Get the breakpoint struct that correlates to the handler
  * function that you are currently in.
@@ -352,6 +359,8 @@ bool shiva_analyze_run(shiva_ctx_t *);
 	do {\
 		void *__ret = __builtin_return_address(0); \
 		TAILQ_FOREACH(bp, &handler->bp_tqlist, _linkage)  \
+			if (bp->bp_type == SHIVA_TRACE_BP_TRAMPOLINE) \
+				break;				\
 			if (bp->retaddr == __ret)	\
 				break;	\
 	} while(0); \
@@ -379,12 +388,6 @@ typedef struct shiva_trace_insn
 	size_t o_insn_len;
 	size_t n_insn_len;
 } shiva_trace_insn_t;
-
-typedef enum shiva_trace_bp_type {
-	SHIVA_TRACE_BP_JMP = 0,
-	SHIVA_TRACE_BP_CALL,
-	SHIVA_TRACE_BP_INT3
-} shiva_trace_bp_type_t;
 
 typedef struct shiva_trace_bp {
 	shiva_trace_bp_type_t bp_type;

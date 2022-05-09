@@ -31,36 +31,21 @@ void my_print_string(const char *s)
 	struct shiva_ctx *ctx = ctx_global;
 	struct shiva_trace_handler *handler;
 	struct shiva_trace_bp *bp;
-	shiva_error_t error;
 	void (*o_print_string)(const char *);
+	unsigned long vaddr;
 	char buf[256];
-	uint64_t vaddr;
-	bool res;
 
 	snprintf(buf, sizeof(buf), "Hijacked string: %s", s);
 	handler = shiva_trace_find_handler(ctx, &my_print_string);
-	if (handler == NULL) {
+	if (handler == NULL)
 		printf("Failed to find handler struct for my_print_string\n");
 		exit(-1);
 	}
-	printf("Found handler: %p\n", handler);
 	SHIVA_TRACE_BP_STRUCT(bp, handler);
 	vaddr = (uint64_t)bp->symbol.value + ctx->ulexec.base_vaddr;
-	printf("Vaddr: %#lx\n", vaddr);
-	res = shiva_trace_write(ctx, 0, (void *)vaddr, &bp->insn.o_insn, bp->bp_len, &error);
-	if (res == false) {
-		printf("shiva_trace_write failed: %s\n", shiva_error_msg(&error));
-		exit(-1);
-	}
+	shiva_trace_write(ctx, 0, (void *)addr, &bp->insn.o_insn, bp->bp_len);
 	o_print_string = (void *)vaddr;
 	o_print_string(buf);
-
-	res = shiva_trace_write(ctx, 0, (void *)vaddr, &bp->insn.o_insn, bp->bp_len, &error);
-        if (res == false) {
-                printf("shiva_trace_write failed: %s\n", shiva_error_msg(&error));
-                exit(-1);
-        }
-
 	return;
 	
 }

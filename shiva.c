@@ -274,12 +274,6 @@ int main(int argc, char **argv, char **envp)
 		}
 	}
 
-	printf("Target path: %s\n", ctx.path);
-	shiva_debug("Target args: ");
-	for (i = 0; i < ctx.argcount; i++) {
-		printf("%s ", ctx.args[i]);
-	}
-	printf("\n");
 	if (shiva_build_trace_data(&ctx) == false) {
 		fprintf(stderr, "shiva_build_trace_data() failed\n");
 		exit(EXIT_FAILURE);

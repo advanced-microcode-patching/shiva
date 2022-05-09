@@ -1,0 +1,20 @@
+This talk we will be discussing a technology that I call Shiva. It is an
+innovative approach to expanding the programmability and security of the Linux
+userland runtime. Shiva is a sophisticated program that functions as a custom
+"program interpreter" for loading and executing modules into the process
+address space at runtime. Think "LKM's for userland".
+
+This talk will focus primarily on the use of Shiva for the design and
+integration of security modules which harden programs against exploitation at
+runtime. We will explore the Shiva API, and demonstrate it's capabilities with
+several modules that mitigate exploitation attacks, and a module which
+implements a process sandbox to harden against general attempts at privilege
+escalation. Shiva allows the programmer to have full command over the process
+address space, with a flexible and innovative API that allows developers to
+rapidly design new security technologies and mitigation features without the
+need for compile-time instrumentation.
+
+Moreover, we will cover the fascinating internals of the Shiva runtime
+environment, and see how it can also be used as a standalone tracing engine to
+accomplish complex debugging and instrumentation tasks with ease.  Function
+tracing, software profiling, and reverse engineering hardened binaries.
