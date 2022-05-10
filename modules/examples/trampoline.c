@@ -5,47 +5,53 @@
 
 #include "../shiva.h"
 
-void __attribute__((naked)) shakti_store_regs_x86_64(struct shiva_trace_regset_x86_64 *regs)
-{
-	__asm__ __volatile__(
-		"movq %rax, (%rdi)\n\t"
-		"movq %rbx, 8(%rdi)\n\t"
-		"movq %rcx, 16(%rdi)\n\t"
-		"movq %rdx, 24(%rdi)\n\t"
-		"movq %rsi, 32(%rdi)\n\t"
-		//"movq %rdi, 40(%rdi)\n\t"
-		"movq %r8,  48(%rdi)\n\t"
-		"movq %r9,  56(%rdi)\n\t"
-		"movq %r10, 64(%rdi)\n\t"
-		"movq %r11, 72(%rdi)\n\t"
-		"movq %r12, 80(%rdi)\n\t"
-		"movq %r13, 88(%rdi)\n\t"
-		"movq %r14, 96(%rdi)\n\t"
-		"movq %r15, 104(%rdi)\n\t"
-		"ret\n\t"
-		);
-}
-
 void my_print_string(const char *s)
 {
 	struct shiva_ctx *ctx = ctx_global;
 	struct shiva_trace_handler *handler;
 	struct shiva_trace_bp *bp;
+	shiva_error_t error;
 	void (*o_print_string)(const char *);
-	unsigned long vaddr;
 	char buf[256];
+	uint64_t vaddr;
+	bool res;
 
 	snprintf(buf, sizeof(buf), "Hijacked string: %s", s);
 	handler = shiva_trace_find_handler(ctx, &my_print_string);
-	if (handler == NULL)
+	if (handler == NULL) {
 		printf("Failed to find handler struct for my_print_string\n");
 		exit(-1);
 	}
+	/*
+	 * Find the breakpoint struct associated with this handler/hijack
+	 * function.
+	 */
 	SHIVA_TRACE_BP_STRUCT(bp, handler);
-	vaddr = (uint64_t)bp->symbol.value + ctx->ulexec.base_vaddr;
-	shiva_trace_write(ctx, 0, (void *)addr, &bp->insn.o_insn, bp->bp_len);
+	vaddr = (uint64_t)bp->symbol.value + shiva_trace_base_addr(ctx);
+
+	/*
+	 * Restore original code bytes of function 'print_string'
+	 */
+	res = shiva_trace_write(ctx, 0, (void *)vaddr, &bp->insn.o_insn, bp->bp_len, &error);
+	if (res == false) {
+		printf("shiva_trace_write failed: %s\n", shiva_error_msg(&error));
+		exit(-1);
+	}
+	/*
+	 * Call the original print_string
+	 */
 	o_print_string = (void *)vaddr;
 	o_print_string(buf);
+
+	/*
+	 * Restore our trampoline back in place.
+	 */
+	res = shiva_trace_write(ctx, 0, (void *)vaddr, &bp->insn.o_insn, bp->bp_len, &error);
+        if (res == false) {
+                printf("shiva_trace_write failed: %s\n", shiva_error_msg(&error));
+                exit(-1);
+        }
+
 	return;
 	
 }

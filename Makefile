@@ -4,6 +4,7 @@ OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_callsite.o
 INTERP_PATH="/home/elfmaster/git/shiva/shiva"
 STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a udis86/libudis86/.libs/libudis86.a
+
 CC=gcc
 MUSL=musl-gcc
 

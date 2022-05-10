@@ -1,5 +1,25 @@
 #include "shiva.h"
 
+void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *regs)
+{
+	__asm__ __volatile__(
+		"movq %rax, (%rdi)\n\t"
+		"movq %rbx, 8(%rdi)\n\t"
+		"movq %rcx, 16(%rdi)\n\t"
+		"movq %rdx, 24(%rdi)\n\t"
+		"movq %rsi, 32(%rdi)\n\t"
+		"movq %r8,  48(%rdi)\n\t"
+		"movq %r9,  56(%rdi)\n\t"
+		"movq %r10, 64(%rdi)\n\t"
+		"movq %r11, 72(%rdi)\n\t"
+		"movq %r12, 80(%rdi)\n\t"
+		"movq %r13, 88(%rdi)\n\t"
+		"movq %r14, 96(%rdi)\n\t"
+		"movq %r15, 104(%rdi)\n\t"
+		"ret\n\t"
+		);
+}
+
 uint64_t
 shiva_trace_base_addr(struct shiva_ctx *ctx)
 {
@@ -100,7 +120,7 @@ shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(void *)
 }
 
 bool
-shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *, void *, void *, void *),
+shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
     uint64_t bp_addr, shiva_error_t *error)
 {
 	struct shiva_trace_handler *current;
@@ -141,7 +161,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *, v
 				    bp_addr - shiva_trace_base_addr(ctx), &symbol) == true) {
 					bp->symbol_location = true;
 					memcpy(&bp->symbol, &symbol, sizeof(symbol));
-					bp->call_target_symname = symbol.name;
+					bp->call_target_symname = (char *)symbol.name;
 				}
 				memcpy(&bp->insn.o_insn[0], (void *)bp_addr, sizeof(tramp_inst));
 				*(uint64_t *)&tramp_inst[2] = (uint64_t)handler_fn;
@@ -197,7 +217,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *, v
 				    bp->o_target - shiva_trace_base_addr(ctx), &symbol) == true) {
 					bp->symbol_location = true;
 					memcpy(&bp->symbol, &symbol, sizeof(symbol));
-					bp->call_target_symname = symbol.name;
+					bp->call_target_symname = (char *)symbol.name;
 				} else {
 					elf_plt_iterator_t plt_iter;
 					struct elf_plt plt_entry;

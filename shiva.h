@@ -358,11 +358,12 @@ typedef enum shiva_trace_bp_type {
 #define SHIVA_TRACE_BP_STRUCT(bp, handler) { \
 	do {\
 		void *__ret = __builtin_return_address(0); \
-		TAILQ_FOREACH(bp, &handler->bp_tqlist, _linkage)  \
+		TAILQ_FOREACH(bp, &handler->bp_tqlist, _linkage)  { \
 			if (bp->bp_type == SHIVA_TRACE_BP_TRAMPOLINE) \
-				break;				\
-			if (bp->retaddr == __ret)	\
+				break;  \
+			if ((void *)bp->retaddr == __ret)	\
 				break;	\
+		} \
 	} while(0); \
 }
 
@@ -431,8 +432,9 @@ bool shiva_trace_register_handler(shiva_ctx_t *, void * (*)(void *), shiva_trace
     shiva_error_t *);
 struct shiva_trace_handler * shiva_trace_find_handler(struct shiva_ctx *, void *);
 struct shiva_trace_bp * shiva_trace_bp_struct(void *);
-bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(void *, void *, void *, void *), uint64_t, shiva_error_t *);
+bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(void *), uint64_t, shiva_error_t *);
 bool shiva_trace_write(struct shiva_ctx *, pid_t, void *, const void *, size_t, shiva_error_t *);
+void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *);
 /*
  * shiva_trace_thread.c
  */
