@@ -1,4 +1,4 @@
-GCC_OPTS= -fPIC -c -ggdb
+GCC_OPTS= -fPIC -c -ggdb -DDEBUG 
 OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \
     shiva_callsite.o
@@ -21,7 +21,7 @@ all:
 	$(CC) $(GCC_OPTS) shiva_maps.c -o	shiva_maps.o
 	$(CC) $(GCC_OPTS) shiva_analyze.c -o	shiva_analyze.o
 	$(CC) $(GCC_OPTS) shiva_callsite.c -o 	shiva_callsite.o
-	$(MUSL) -static -Wl,-undefined=pause -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o shiva
+	$(MUSL) -T ./ld.script -mno-relax -static -Wl,-undefined=pause -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o shiva
 
 test:
 	gcc test.c -o test -fcf-protection=none

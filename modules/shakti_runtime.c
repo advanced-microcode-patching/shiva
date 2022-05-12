@@ -14,7 +14,7 @@ void *
 shakti_handler(void *arg)
 {
 	shiva_trace_getregs_x86_64(&ctx_global->regs.regset_x86_64);
-	
+
 	struct shiva_ctx *ctx = ctx_global;
 
 	void *retaddr = __builtin_return_address(0);

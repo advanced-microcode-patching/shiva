@@ -86,10 +86,13 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	struct shiva_auxv_entry auxv_entry;
 	uint64_t entry_point;
 	bool res;
+	shiva_maps_iterator_t maps_iter;
+	struct shiva_mmap_entry mmap_entry;
 
 	ctx_global = ctx;
 	shiva_init_lists(ctx);
 
+	printf("Interp mode\n");
 	if (shiva_build_trace_data(ctx) == false) {
 		fprintf(stderr, "shiva_build_trace_data() failed\n");
 		return false;
@@ -104,21 +107,39 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		fprintf(stderr, "Failed to run the analyzers\n");
 		return false;
 	}
+	printf("build maps list\n");
 	if (shiva_maps_build_list(ctx) == false) {
 		fprintf(stderr, "shiva_maps_build_list() failed\n");
 		return false;
 	}
+
+	printf("Iterate over maps list\n");
+	shiva_maps_iterator_init(ctx, &maps_iter);
+	while (shiva_maps_iterator_next(&maps_iter, &mmap_entry) == SHIVA_ITER_OK) {
+		if (mmap_entry.mmap_type == SHIVA_MMAP_TYPE_SHIVA) {
+			printf("Setting shiva base to: %#lx\n", mmap_entry.base);
+			break;
+		}
+	}
+	ctx->shiva.base = mmap_entry.base;
+	printf("Setting shiva base: %#lx\n", mmap_entry.base);
 	/*
-         * Since we're in interpreter mode we did not use the ulexec, but
-         * have to set the base address of the target executable which
-         * was mapped into memory by the kernel. This base_vaddr value
+	 * Since we're in interpreter mode we did not use the ulexec, but
+	 * have to set the base address of the target executable which
+	 * was mapped into memory by the kernel. This base_vaddr value
 	 * is used by the shiva_trace API internally, and must be set.
-         */
-        res = shiva_maps_get_base(ctx, &ctx->ulexec.base_vaddr);
-        if (res == false) {
-                fprintf(stderr, "shiva_maps_get_base() failed\n");
-                return false;
-        }
+	 */
+	res = shiva_maps_get_base(ctx, &ctx->ulexec.base_vaddr);
+	if (res == false) {
+		fprintf(stderr, "shiva_maps_get_base() failed\n");
+		return false;
+	}
+
+	res = shiva_proc_duplicate_image(ctx);
+	if (res == false) {
+		fprintf(stderr, "shiva_proc_duplicate_image(%p) failed\n", ctx);
+		return false;
+	}
 	/*
 	 * Loads the runtime module, and then passes control to
 	 * shakti_main() (Within the module) before passing control
@@ -128,23 +149,17 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	if (shiva_module_loader(ctx, "./modules/shakti_runtime.o",
 	    &ctx->module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");
-		exit(EXIT_FAILURE);
+		return false;
 	}
+
 	if (elf_type(&ctx->elfobj) != ET_DYN) {
 		fprintf(stderr, "Shiva only supports PIE ELF binaries.\n");
 		return false;
 	}
-#if 0
-	interp = elf_interpreter_path(&ctx->elfobj);
-	if (interp == NULL) {
-		fprintf(stderr,
-	  	    "Shiva currently only supports dynamically linked ELF binaries\n");
-		return false;
-	}
-#endif
+
 	if (elf_open_object(SHIVA_LDSO_PATH, &ctx->ldsobj, ELF_LOAD_F_STRICT, &error) == false) {
 		fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n",
-		    interp, elf_error_msg(&error));
+		    SHIVA_LDSO_PATH, elf_error_msg(&error));
 		return false;
 	}
 	/*
@@ -180,8 +195,8 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	rsp--;
 
 	shiva_debug("Passing control to entry point: %#lx\n", entry_point);
-        shiva_debug("LDSO entry point: %#lx\n", ctx->ulexec.ldso.entry_point);
-        SHIVA_ULEXEC_LDSO_TRANSFER(rsp, ctx->ulexec.ldso.entry_point, entry_point);
+	shiva_debug("LDSO entry point: %#lx\n", ctx->ulexec.ldso.entry_point);
+	SHIVA_ULEXEC_LDSO_TRANSFER(rsp, ctx->ulexec.ldso.entry_point, entry_point);
 
 	return true;
 
@@ -194,7 +209,8 @@ int main(int argc, char **argv, char **envp)
 	struct elf_section section;
 	struct sigaction act;
 	sigset_t set;
-
+	shiva_maps_iterator_t maps_iter;
+	struct shiva_mmap_entry mmap_entry;
 	char *path, *p, *target_path;
 
 	/*
@@ -290,6 +306,16 @@ int main(int argc, char **argv, char **envp)
 		fprintf(stderr, "shiva_maps_build_list() failed\n");
 		exit(EXIT_FAILURE);
 	}
+
+	shiva_maps_iterator_init(&ctx, &maps_iter);
+	while (shiva_maps_iterator_next(&maps_iter, &mmap_entry) == SHIVA_ITER_OK) {
+		if (mmap_entry.mmap_type == SHIVA_MMAP_TYPE_SHIVA) {
+			printf("Setting shiva base to: %#lx\n", mmap_entry.base);
+			break;
+		}
+	}
+	ctx.shiva.base = mmap_entry.base;
+
 	/*
 	 * Now that we've got the target binary (The debugee) loaded
 	 * into memory, we can run some analyzers on it to acquire
@@ -306,7 +332,7 @@ int main(int argc, char **argv, char **envp)
 	 */
 	if (ctx.flags & SHIVA_OPTS_F_ULEXEC_ONLY)
 		goto transfer_control;
-
+	printf("Loading module\n");
 	if (shiva_module_loader(&ctx, "./modules/shakti_runtime.o",
 	    &ctx.module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");

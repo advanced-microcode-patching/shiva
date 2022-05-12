@@ -12,5 +12,6 @@ int main(int argc, char **argv)
 {
 	print_string("Hello World");
 	print_string(argv[1]);
+	pause();
 	exit(0);
 }

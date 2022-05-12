@@ -240,7 +240,7 @@ internal_lookup:
 				shiva_debug("Internal symbol lookup\n");
 				shiva_debug("Symbol value for %s: %#lx\n", rel.symname, symbol.value);
 				/*
-				 * Note if we found this symbol in the debugger "/bin/shiva"
+				 * Note if we found this symbol within the "/bin/shiva" executable
 				 * instead of the loaded module, then we can simply assign
 				 * symbol.value as the symval, instead of symbol.value + linker->text_vaddr
 				 * (Which adds the module text segment to symbol.value).
@@ -445,10 +445,14 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 
 	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
 	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT;
+	uint64_t mmap_base = 0;
 
+	if (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) {
+		mmap_base = ELF_PAGEALIGN(linker->text_vaddr + linker->text_size, PAGE_SIZE);
+	}
 	data_size_aligned = ELF_PAGEALIGN(linker->data_size, PAGE_SIZE);
 	shiva_debug("ELF data segment len: %zu\n", data_size_aligned);
-	linker->data_mem = mmap(NULL, data_size_aligned, PROT_READ|PROT_WRITE,
+	linker->data_mem = mmap((void *)mmap_base, data_size_aligned, PROT_READ|PROT_WRITE,
 	    mmap_flags, -1, 0);
 	if (linker->data_mem == MAP_FAILED) {
 		shiva_debug("mmap failed: %s\n", strerror(errno));
@@ -521,9 +525,39 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	 */
 	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
 	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT;
+	uint64_t mmap_base = 0;
+
+	/*
+	 * If we are in interpreter mode, then we were not responsible for
+	 * mapping the target executable into memory. The kernel will map the
+	 * executable to a high address, making it impossible to use IP relative
+	 * addressing or 5 byte jumps and calls that are dispatched between the
+	 * module and the target executable. To correct this we make sure that the
+	 * module is mapped to an address space right after the heap, to ensure
+	 * that the module is within a 4GB range of the target executable.
+	 */
+	if (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) {
+
+		shiva_maps_iterator_t maps_iter;
+		struct shiva_mmap_entry mmap_entry;
+	
+		shiva_maps_iterator_init(ctx, &maps_iter);
+		while (shiva_maps_iterator_next(&maps_iter, &mmap_entry) == SHIVA_ITER_OK) {
+			if (mmap_entry.mmap_type == SHIVA_MMAP_TYPE_HEAP) {
+				mmap_base = ELF_PAGEALIGN(mmap_entry.base + mmap_entry.len, PAGE_SIZE);
+				mmap_base += 4096 * 8;
+				break;
+			}
+		}
+		if (mmap_base == 0) {
+			fprintf(stderr, "Warning, couldn't find heap location which we use to "
+			    "indicate the load bias for the module '%s' text segment\n",
+			    elf_pathname(&linker->elfobj));
+		}
+	}
 
 	text_size_aligned = ELF_PAGEALIGN(linker->text_size, PAGE_SIZE);
-	linker->text_mem = mmap(NULL, text_size_aligned, PROT_READ|PROT_WRITE|PROT_EXEC,
+	linker->text_mem = mmap((void *)mmap_base, text_size_aligned, PROT_READ|PROT_WRITE|PROT_EXEC,
 	    mmap_flags, -1, 0);
 	if (linker->text_mem == MAP_FAILED) {
 		shiva_debug("mmap failed: %s\n", strerror(errno));
@@ -657,8 +691,9 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	}
 	memset(linker, 0, sizeof(*linker));
 	linker->flags = flags;
+	linker->shiva_base = ctx->shiva.base;
 	*linkerptr = linker;
-
+	
 	TAILQ_INIT(&linker->tailq.section_maplist);
 	TAILQ_INIT(&linker->tailq.plt_list);
 

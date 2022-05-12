@@ -141,11 +141,20 @@ struct shiva_module_plt_entry {
 	TAILQ_ENTRY(shiva_module_plt_entry) _linkage;
 };
 
+typedef enum shiva_mmap_type {
+	SHIVA_MMAP_TYPE_HEAP = 0,
+	SHIVA_MMAP_TYPE_STACK,
+	SHIVA_MMAP_TYPE_VDSO,
+	SHIVA_MMAP_TYPE_SHIVA,
+	SHIVA_MMAP_TYPE_MISC
+} shiva_mmap_type_t;
+
 typedef struct shiva_mmap_entry {
 	uint64_t base;
 	size_t len;
 	uint32_t prot;	  // mapping prot
 	uint32_t mapping; // shared, private
+	shiva_mmap_type_t mmap_type;
 	bool debugger_mapping;
 	TAILQ_ENTRY(shiva_mmap_entry) _linkage;
 } shiva_mmap_entry_t;
@@ -166,6 +175,7 @@ struct shiva_module {
 	size_t data_size;
 	uint64_t text_vaddr;
 	uint64_t data_vaddr;
+	uint64_t shiva_base; /* base address of shiva executable at runtime */
 	elfobj_t elfobj; /* elfobj to the module */
 	elfobj_t self; /* elfobj to self (Debugger binary) */
 	struct {
@@ -193,6 +203,9 @@ typedef struct shiva_ctx {
 	elfobj_t ldsobj;
 	uint64_t flags;
 	int pid;
+	int duplicate_pid;
+	uint64_t duplicate_base;
+	char *shiva_path; // path to /bin/shiva
 	union {
 		struct shiva_trace_regset_x86_64 regset_x86_64;
 	} regs;
@@ -206,6 +219,9 @@ typedef struct shiva_ctx {
 		uint64_t base;
 	} disas;
 	struct {
+		uint64_t base;
+	} shiva;
+	struct {
 		/*
 		 * basic runtime data created during
 		 * userland exec.
@@ -213,6 +229,7 @@ typedef struct shiva_ctx {
 		uint8_t *stack;
 		uint8_t *mem;
 		uint64_t rsp_start;
+		uint64_t heap_vaddr;
 		uint64_t entry_point;
 		uint64_t base_vaddr;
 		uint64_t phdr_vaddr; // vaddr of phdr table for mapped binary
