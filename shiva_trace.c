@@ -234,6 +234,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					}
 				}
 				call_site = bp_addr;
+				printf("handler(%p) - callsite(%#lx) - 5\n", current->handler_fn, call_site);
 				call_offset = ((uint64_t)current->handler_fn - call_site - 5);
 				if (call_offset > 0xffffffff) {
 					shiva_error_set(error, "shiva_trace_set_breakpoint() failed: "

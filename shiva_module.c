@@ -103,7 +103,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		shiva_debug("Setting [%#lx] GOT entry '%s' to %#lx\n", gotaddr, rel.symname,
 		    symbol.value);
 		GOT = (uint64_t *)gotaddr;
-		*GOT = symbol.value;
+		*GOT = symbol.value + linker->shiva_base;
 		gotaddr += sizeof(uint64_t);
 	}
 	return true;
