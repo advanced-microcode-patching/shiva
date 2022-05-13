@@ -79,6 +79,9 @@ shiva_maps_build_list(struct shiva_ctx *ctx)
 		unsigned long end;
 		char *appname = NULL;
 		char *p, *q;
+		char tmp[PATH_MAX];
+
+		strcpy(tmp, buf);
 
 		p = strrchr(buf, '/');
 		if (p != NULL)
@@ -86,21 +89,26 @@ shiva_maps_build_list(struct shiva_ctx *ctx)
 		entry = shiva_malloc(sizeof(*entry));
 		memset(entry, 0, sizeof(*entry));
 
-		if (strstr(buf, "[heap]") != NULL) {
+		p = strrchr(buf, '/');
+		if (p != NULL) {
+			if (strncmp(&p[1], "shiva", 5) == 0) {
+				if (strstr(buf, "r----") != NULL) {
+					if (ctx->shiva_path == NULL) {
+						p = strchr(tmp, '/');
+                                		ctx->shiva_path = shiva_malloc(PATH_MAX + 1);
+                                		for (i = 0; *p != '\n' && *p != '\0'; p++, i++)
+                                        		ctx->shiva_path[i] = *p;
+                                		ctx->shiva_path[i] = '\0';
+					}
+				}
+				entry->mmap_type = SHIVA_MMAP_TYPE_SHIVA;
+			}
+		} else if (strstr(buf, "[heap]") != NULL) {
 			entry->mmap_type = SHIVA_MMAP_TYPE_HEAP;
 		} else if (strstr(buf, "[stack]") != NULL) {
 			entry->mmap_type = SHIVA_MMAP_TYPE_STACK;
 		} else if (strstr(buf, "[vdso]") != NULL) {
 			entry->mmap_type = SHIVA_MMAP_TYPE_VDSO;
-		} else if (strstr(buf, "shiva") != NULL) {
-			if (ctx->shiva_path == NULL) {
-				p = strchr(buf, '/');
-				ctx->shiva_path = shiva_malloc(PATH_MAX + 1);
-				for (i = 0; *p != '\n' && *p != '\0'; p++, i++)
-					ctx->shiva_path[i] = *p;
-				ctx->shiva_path[i] = '\0';
-			}
-			entry->mmap_type = SHIVA_MMAP_TYPE_SHIVA;
 		} else {
 			entry->mmap_type = SHIVA_MMAP_TYPE_MISC;
 		}

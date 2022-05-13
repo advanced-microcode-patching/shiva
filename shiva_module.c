@@ -245,7 +245,7 @@ internal_lookup:
 				 * symbol.value as the symval, instead of symbol.value + linker->text_vaddr
 				 * (Which adds the module text segment to symbol.value).
 				 */
-				symval = symbol.value;
+				symval = symbol.value + linker->shiva_base;
 				rel_unit = &linker->text_mem[smap.offset + rel.offset];
 				rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 				rel_val = symval + rel.addend - rel_addr;
@@ -444,7 +444,7 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	}
 
 	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
-	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT;
+	    MAP_PRIVATE|MAP_ANONYMOUS;
 	uint64_t mmap_base = 0;
 
 	if (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) {
@@ -524,7 +524,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	 * In this case we won't use the MAP_32BIT.
 	 */
 	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
-	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT;
+	    MAP_PRIVATE|MAP_ANONYMOUS;
 	uint64_t mmap_base = 0;
 
 	/*

@@ -57,6 +57,7 @@ shakti_main(shiva_ctx_t *ctx)
 	struct shiva_branch_site branch;
 	struct shiva_trace_handler trace_handler;
 
+	printf("Function tracer\n");
 	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_ATTACH,
 	    NULL, NULL, 0, &error);
 	if (res == false) {

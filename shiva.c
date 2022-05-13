@@ -134,12 +134,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		fprintf(stderr, "shiva_maps_get_base() failed\n");
 		return false;
 	}
-
-	res = shiva_proc_duplicate_image(ctx);
-	if (res == false) {
-		fprintf(stderr, "shiva_proc_duplicate_image(%p) failed\n", ctx);
-		return false;
-	}
 	/*
 	 * Loads the runtime module, and then passes control to
 	 * shakti_main() (Within the module) before passing control
@@ -309,8 +303,8 @@ int main(int argc, char **argv, char **envp)
 
 	shiva_maps_iterator_init(&ctx, &maps_iter);
 	while (shiva_maps_iterator_next(&maps_iter, &mmap_entry) == SHIVA_ITER_OK) {
-		if (mmap_entry.mmap_type == SHIVA_MMAP_TYPE_SHIVA) {
-			printf("Setting shiva base to: %#lx\n", mmap_entry.base);
+		if (mmap_entry.mmap_type == SHIVA_MMAP_TYPE_SHIVA && mmap_entry.prot == PROT_READ) {
+			printf("SHIVA BASE: %#lx\n", mmap_entry.base);
 			break;
 		}
 	}
@@ -332,7 +326,7 @@ int main(int argc, char **argv, char **envp)
 	 */
 	if (ctx.flags & SHIVA_OPTS_F_ULEXEC_ONLY)
 		goto transfer_control;
-	printf("Loading module\n");
+
 	if (shiva_module_loader(&ctx, "./modules/shakti_runtime.o",
 	    &ctx.module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");

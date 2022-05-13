@@ -43,8 +43,8 @@
 
 #define SHIVA_STACK_SIZE	(PAGE_SIZE * 1000)
 
-#define SHIVA_LDSO_BASE		0x600000
-#define SHIVA_TARGET_BASE	0x1000000
+#define SHIVA_LDSO_BASE		0x563de4b87000
+#define SHIVA_TARGET_BASE	0x7f20898e0000
 
 #define SHIVA_MODULE_F_RUNTIME	(1UL << 0)
 #define SHIVA_MODULE_F_INIT	(1UL << 1)
@@ -322,6 +322,10 @@ shiva_iterator_res_t shiva_callsite_iterator_next(shiva_callsite_iterator_t *, s
 bool shiva_analyze_find_calls(shiva_ctx_t *);
 bool shiva_analyze_run(shiva_ctx_t *);
 
+/*
+ * shiva_proc.c
+ */
+bool shiva_proc_duplicate_image(shiva_ctx_t *ctx);
 /*
  * Shiva tracing functionality.
  * shiva_trace.c
