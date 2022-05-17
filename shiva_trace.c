@@ -236,11 +236,13 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				call_site = bp_addr;
 				printf("handler(%p) - callsite(%#lx) - 5\n", current->handler_fn, call_site);
 				call_offset = ((uint64_t)current->handler_fn - call_site - 5);
+				call_offset &= 0xffffffff;
+				/*
 				if (call_offset > 0xffffffff) {
 					shiva_error_set(error, "shiva_trace_set_breakpoint() failed: "
 					    "call offset %#lx is too large\n", call_offset);
 					return false;
-				}
+				} */
 				*(uint32_t *)&call_inst[1] = call_offset;
 				shiva_debug("call_offset = %#lx - %#lx - 5: %#lx\n", current->handler_fn,
 				    call_site, call_offset);

@@ -82,9 +82,11 @@ shakti_main(shiva_ctx_t *ctx)
 		printf("failed to find symbol 'print_string'\n");
 		return -1;
 	}
-	printf("Set breakpoint\n");
+	printf("Set breakpoint addr: %#lx + %#lx\n", symbol.value, ctx->ulexec.base_vaddr);
+	uint64_t val = symbol.value + ctx->ulexec.base_vaddr;
+	printf("Passing val: %#lx\n", val);
 	res = shiva_trace_set_breakpoint(ctx, (void *)my_print_string,
-	    symbol.value + ctx->ulexec.base_vaddr, &error);
+	    val, &error);
 	if (res == false) {
 		printf("shiva_trace_set_breakpoint failed: %s\n", shiva_error_msg(&error));
 		return -1;

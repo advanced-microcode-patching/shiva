@@ -19,6 +19,7 @@
 #include <elf.h>
 #include <errno.h>
 #include <sys/prctl.h>
+#include <sys/wait.h>
 
 #include <udis86.h>
 #include "/opt/elfmaster/include/libelfmaster.h"

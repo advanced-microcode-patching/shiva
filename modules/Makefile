@@ -1,5 +1,5 @@
 all:
-	gcc -fno-stack-protector -c shakti_runtime.c -o shakti_runtime.o
+	gcc -mcmodel=large -fno-stack-protector -c shakti_runtime.c -o shakti_runtime.o
 clean:
 	rm -f *.o
 

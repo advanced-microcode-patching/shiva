@@ -100,8 +100,10 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		    " runtime-linkage failure\n", rel.symname);
 			return false;
 		}
-		shiva_debug("Setting [%#lx] GOT entry '%s' to %#lx\n", gotaddr, rel.symname,
-		    symbol.value);
+		printf("Found symbol in shiva, symbol value: %#lx shiva base: %#lx\n",
+		    symbol.value, linker->shiva_base);
+		printf("Setting [%#lx] GOT entry '%s' to %#lx\n", gotaddr, rel.symname,
+		    symbol.value + linker->shiva_base);
 		GOT = (uint64_t *)gotaddr;
 		*GOT = symbol.value + linker->shiva_base;
 		gotaddr += sizeof(uint64_t);
@@ -449,6 +451,8 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 
 	if (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) {
 		mmap_base = ELF_PAGEALIGN(linker->text_vaddr + linker->text_size, PAGE_SIZE);
+	} else {
+		mmap_flags |= MAP_32BIT;
 	}
 	data_size_aligned = ELF_PAGEALIGN(linker->data_size, PAGE_SIZE);
 	shiva_debug("ELF data segment len: %zu\n", data_size_aligned);
@@ -554,8 +558,9 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 			    "indicate the load bias for the module '%s' text segment\n",
 			    elf_pathname(&linker->elfobj));
 		}
+	} else {
+		mmap_flags |= MAP_32BIT;
 	}
-
 	text_size_aligned = ELF_PAGEALIGN(linker->text_size, PAGE_SIZE);
 	linker->text_mem = mmap((void *)mmap_base, text_size_aligned, PROT_READ|PROT_WRITE|PROT_EXEC,
 	    mmap_flags, -1, 0);
