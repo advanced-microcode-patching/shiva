@@ -171,6 +171,29 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 	shiva_debug("linker->text_vaddr: %#lx\n", linker->text_vaddr);
 	shiva_debug("smap.offset: %#lx\n", smap.offset);
 	switch(rel.type) {
+	case R_X86_64_PLTOFF64: /* computation L - GOT + A */
+		TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {
+			if (strcmp(rel.symname, current->symname) != 0)
+				continue;
+			shiva_debug("Applying PLTOFF64 relocation for %s\n",
+			    current->symname);
+			rel_unit = &linker->text_mem[smap.offset + rel.offset];
+			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+			rel_val = /* L */ current->vaddr - /* GOT */
+			    (linker->data_vaddr + linker->pltgot_off) + /* A */ rel.addend;
+			shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
+			*(uint64_t *)&rel_unit[0] = rel_val;
+			return true;
+		}
+		break;
+	case R_X86_64_GOTPC64:
+		shiva_debug("Applying GOTPC64 relocation for %s\n", current->symname);
+		rel_unit = &linker->text_mem[smap.offset + rel.offset];
+		rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+		rel_val = (linker->data_vaddr + linker->pltgot_off) - rel_addr + rel.addend;
+		*(uint64_t *)&rel_unit[0] = rel_val;
+		return true;
+		break;
 	case R_X86_64_PLT32: /* computation: L + A - P */
 		TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {
 			if (strcmp(rel.symname, current->symname) != 0)
@@ -414,7 +437,7 @@ calculate_text_size(struct shiva_module *linker)
 	linker->plt_off = linker->text_size;
 	elf_relocation_iterator_init(&linker->elfobj, &rel_iter);
 	while (elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK) {
-		if (rel.type == R_X86_64_PLT32) {
+		if (rel.type == R_X86_64_PLT32 || rel.type == R_X86_64_PLTOFF64) {
 			/*
 			 * Create room for each PLT stub
 			 */
@@ -644,7 +667,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 			}
 			TAILQ_INSERT_TAIL(&linker->tailq.section_maplist, n, _linkage);
 		}
-		if (rel.type != R_X86_64_PLT32)
+		if (rel.type != R_X86_64_PLT32 && rel.type != R_X86_64_PLTOFF64)
 			continue;
 		/*
 		 * We have a tailq list for the address/offset of each PLT entry
@@ -652,7 +675,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 		 */
 		struct shiva_module_plt_entry *plt;
 
-		plt = malloc(sizeof(*plt));
+		plt = calloc(1, sizeof(*plt));
 		if (plt == NULL) {
 			shiva_debug("malloc: %s\n", strerror(errno));
 			return false;
@@ -664,6 +687,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 		}
 		plt->offset = linker->plt_off + i * sizeof(plt_stub);
 		plt->vaddr = linker->text_vaddr + linker->plt_off + i * sizeof(plt_stub);
+		plt->plt_count++;
 		TAILQ_INSERT_TAIL(&linker->tailq.plt_list, plt, _linkage);
 
 		shiva_debug("Copying PLT stub to %#lx, offset %#lx\n",

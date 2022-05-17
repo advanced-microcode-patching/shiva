@@ -139,6 +139,7 @@ struct shiva_module_plt_entry {
 	char *symname;
 	uint64_t vaddr;
 	size_t offset;
+	size_t plt_count;
 	TAILQ_ENTRY(shiva_module_plt_entry) _linkage;
 };
 
