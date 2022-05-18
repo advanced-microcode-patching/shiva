@@ -48,6 +48,20 @@ module_entrypoint(struct shiva_module *linker, uint64_t *entry)
 	return true;
 }
 
+static bool
+got_entry_by_name(struct shiva_module *linker, char *name, struct shiva_module_got_entry *out)
+{
+	struct shiva_module_got_entry *got_entry;
+
+	TAILQ_FOREACH(got_entry, &linker->tailq.got_list, _linkage) {
+		if (strcmp(got_entry->symname, name) == 0) {
+			memcpy(out, got_entry, sizeof(*out));
+			return true;
+		}
+	}
+	return false;
+}
+
 /*
  * Our custom interpreter is built with musl-libc. Lets
  * locate the path to our interpreter (i.e. /home/elfmaster/shiva_interp)
@@ -59,15 +73,40 @@ resolve_pltgot_entries(struct shiva_module *linker)
 {
 	uint64_t gotaddr;
 	uint64_t *GOT;
-	char interp_path[PATH_MAX];
 	elf_error_t error;
 	elf_relocation_iterator_t rel_iter;
 	struct elf_relocation rel;
 	struct elf_symbol symbol;
+	struct shiva_module_got_entry *current = NULL;
 	int i;
 
 	i = 0;
 	gotaddr = linker->data_vaddr + linker->pltgot_off;
+
+	TAILQ_FOREACH(current, &linker->tailq.got_list, _linkage) {
+		struct elf_symbol symbol;
+
+		if (elf_symbol_by_name(&linker->elfobj, current->symname, &symbol) == true) {
+			if (symbol.type == STT_FUNC || symbol.type == STT_OBJECT) {
+				shiva_debug("Setting [%#lx] GOT entry '%s' to %#lx\n",
+				    linker->data_vaddr + linker->pltgot_off + current->gotoff, current->symname, symbol.value + linker->text_vaddr);
+				GOT = (uint64_t *)linker->data_vaddr + linker->pltgot_off + current->gotoff;
+				*GOT = symbol.value + linker->text_vaddr;
+				continue;
+			}
+		}
+		if (elf_symbol_by_name(&linker->self, current->symname, &symbol) == false) {
+			fprintf("Could not resolve symbol '%s'. Linkage failure!\n",
+			    current->symname);
+			return false;
+		}
+		shiva_debug("Found symbol '%s' within Shiva. Symbol value: %#lx Shiva base: %#lx\n",
+		    current->symname, symbol.value, linker->shiva_base);
+		printf("Current got address: %#lx\n", linker->data_vaddr + linker->pltgot_off + current->gotoff);
+		GOT = (uint64_t *)linker->data_vaddr + linker->pltgot_off + current->gotoff;
+		*GOT = symbol.value + linker->shiva_base;
+	}
+#if 0
 	/*
 	 * Here we are using the relocation iterator to retrieve the PLT32
 	 * relocations from the loaded module, and then resolve the symbols
@@ -79,7 +118,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 	 */
 	elf_relocation_iterator_init(&linker->elfobj, &rel_iter);
 	while (elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK) {
-		if (rel.type != R_X86_64_PLT32)
+		if (rel.type != R_X86_64_PLT32 && rel.type != R_X86_64_GOT64)
 			continue;
 		if ((elf_symbol_by_name(&linker->elfobj, rel.symname, &symbol) == true) &&
 		    symbol.type == STT_FUNC) {
@@ -108,6 +147,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		*GOT = symbol.value + linker->shiva_base;
 		gotaddr += sizeof(uint64_t);
 	}
+#endif
 	return true;
 }
 
@@ -120,8 +160,15 @@ patch_plt_stubs(struct shiva_module *linker)
 	uint64_t gotaddr, pltaddr, gotoff;
 
 	TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {
+		struct shiva_module_got_entry got_entry;
+
+		if (got_entry_by_name(linker, current->symname, &got_entry) == false) {
+			fprintf(stderr, "Unable to find GOT entry for '%s'\n", current->symname);
+			return false;
+		}
+
 		stub = &linker->text_mem[linker->plt_off + i * sizeof(plt_stub)];
-		gotaddr = linker->data_vaddr + linker->pltgot_off + i * sizeof(uint64_t);
+		gotaddr = linker->data_vaddr + linker->pltgot_off + got_entry.gotoff;
 		pltaddr = linker->text_vaddr + (linker->plt_off + i * sizeof(plt_stub));
 		gotoff = gotaddr - pltaddr - sizeof(plt_stub);
 		*(uint32_t *)&stub[2] = gotoff;
@@ -157,6 +204,8 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 	uint64_t rel_addr;
 	uint32_t rel_val;
 	struct elf_symbol symbol;
+	ENTRY e, *ep;
+	struct shiva_module_got_entry got_entry;
 
 	char *shdrname = strrchr(rel.shdrname, '.');
 	if (shdrname == NULL) {
@@ -170,6 +219,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 	shiva_debug("Successfully retrieved section mapping for %s\n", shdrname);
 	shiva_debug("linker->text_vaddr: %#lx\n", linker->text_vaddr);
 	shiva_debug("smap.offset: %#lx\n", smap.offset);
+
 	switch(rel.type) {
 	case R_X86_64_PLTOFF64: /* computation L - GOT + A */
 		TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {
@@ -185,14 +235,57 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 			*(uint64_t *)&rel_unit[0] = rel_val;
 			return true;
 		}
-		break;
-	case R_X86_64_GOTPC64:
-		shiva_debug("Applying GOTPC64 relocation for %s\n", current->symname);
+		break;	/*The offset from the GOT to the current position */
+	case R_X86_64_GOTPC64: /* computation: GOT - P + A */
+		shiva_debug("Applying GOTPC64 relocation for _GLOBAL_OFFSET_TABLE_ + %d\n", rel.addend);
 		rel_unit = &linker->text_mem[smap.offset + rel.offset];
 		rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 		rel_val = (linker->data_vaddr + linker->pltgot_off) - rel_addr + rel.addend;
 		*(uint64_t *)&rel_unit[0] = rel_val;
 		return true;
+		break;
+	case R_X86_64_GOT64:
+		shiva_debug("Applying GOT64 relocation for %s\n", rel.symname);
+		e.key = rel.symname;
+		e.data = NULL;
+
+		if (hsearch_r(e, FIND, &ep, &linker->cache.got) == 0) {
+			fprintf(stderr, "Unable to find symbol '%s' in GOT cache, cannot resolve GOT64 relocation\n",
+			    rel.symname);
+			return false;
+		}
+		memcpy(&got_entry, ep->data, sizeof(got_entry));
+		rel_unit = &linker->text_mem[smap.offset + rel.offset];
+		rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+		rel_val = got_entry.gotoff;
+		shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
+		*(uint64_t *)&rel_unit[0] = rel_val;
+		return true;
+		break;
+	case R_X86_64_GOTOFF64:
+		/*
+		 * Calculate offset from symbol to base of GOT
+		 */
+		if (elf_symbol_by_name(&linker->elfobj, rel.symname, &symbol) == true) {
+			rel_unit = &linker->text_mem[smap.offset + rel.offset];
+			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+			rel_val = (symbol.value + linker->text_vaddr) + rel.addend - rel_addr;
+			shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
+			*(uint64_t *)&rel_unit[0] = rel_val;
+			return true;
+			/*
+			 * Otherwise if symbol is in the Shiva address space, then
+			 * calculate the symbol value with the shiva base address
+			 * instead of the modules.
+			 */
+		} else if (elf_symbol_by_name(&linker->self, rel.symname, &symbol) == true) {
+			rel_unit = &linker->text_mem[smap.offset + rel.offset];
+			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+			rel_val = (symbol.value + linker->shiva_base) + rel.addend - rel_addr;
+			shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
+			*(uint64_t *)&rel_unit[0] = rel_val;
+			return true;
+		}
 		break;
 	case R_X86_64_PLT32: /* computation: L + A - P */
 		TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {
@@ -375,6 +468,8 @@ elf_section_map(elfobj_t *elfobj, uint8_t *dst, struct elf_section section,
 	return true;
 }
 
+#define MAX_GOT_COUNT 4096 * 10
+
 bool
 calculate_data_size(struct shiva_module *linker)
 {
@@ -383,6 +478,9 @@ calculate_data_size(struct shiva_module *linker)
 	struct elf_relocation rel;
 	elf_relocation_iterator_t rel_iter;
 	struct elf_segment segment;
+	struct shiva_module_got_entry *got_entry;
+	ENTRY e, *ep;
+	uint64_t offset;
 
 	elf_section_iterator_init(&linker->elfobj, &iter);
 	while (elf_section_iterator_next(&iter, &section) == ELF_ITER_OK) {
@@ -391,6 +489,7 @@ calculate_data_size(struct shiva_module *linker)
 		}
 	}
 	linker->pltgot_off = linker->data_size;
+
 	if (elf_section_by_name(&linker->elfobj, ".bss", &section) == false) {
 		shiva_debug("elf_section_by_name() failed\n");
 		return false;
@@ -400,14 +499,63 @@ calculate_data_size(struct shiva_module *linker)
 	 */
 	linker->data_size += section.size;
 
+	/*
+	 * Create cache for GOT entries.
+	 */
+	(void) hcreate_r(MAX_GOT_COUNT, &linker->cache.got);
+
+	TAILQ_INIT(&linker->tailq.got_list);
+
+	offset = 0;
+
 	elf_relocation_iterator_init(&linker->elfobj, &rel_iter);
 	while (elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK) {
-		if (rel.type == R_X86_64_PLT32) {
+		switch(rel.type) {
+		case R_X86_64_PLT32:
+		case R_X86_64_GOT64:
+		case R_X86_64_PLTOFF64:
 			/*
 			 * Create room for the modules pltgot
 			 */
+		//	linker->data_size += sizeof(uint64_t);
+		//	linker->pltgot_size += sizeof(uint64_t);
+			/*
+			 * Cache symbol so we don't create duplicate GOT entries
+			*/
+			e.key = (char *)rel.symname;
+			e.data = (char *)rel.symname;
+
+			/*
+			 * If we already have this symbol then move on.
+			 */
+			if (hsearch_r(e, FIND, &ep, &linker->cache.got) != 0)
+				continue;
+
+			got_entry = shiva_malloc(sizeof(*got_entry));
+			got_entry->symname = rel.symname; /* rel.symname will be valid until elf is unloaded */
+			got_entry->gotaddr = linker->data_vaddr + linker->pltgot_off + offset;
+			got_entry->gotoff = offset;
+
+			e.key = (char *)got_entry->symname;
+			e.data = got_entry;
+
+			if (hsearch_r(e, ENTER, &ep, &linker->cache.got) == 0) {
+				free(got_entry);
+				fprintf(stderr, "Failed to add symbol: '%s'\n",
+				    rel.symname);
+				return false;
+			}
+
+			shiva_debug("Inserting entries into GOT cache and GOT list\n");
+			shiva_debug("got_entry->gotaddr: %#lx\n", got_entry->gotaddr);
+			TAILQ_INSERT_TAIL(&linker->tailq.got_list, got_entry, _linkage);
+			offset += sizeof(uint64_t);
+
 			linker->data_size += sizeof(uint64_t);
 			linker->pltgot_size += sizeof(uint64_t);
+			break;
+		default:
+			break;
 		}
 	}
 

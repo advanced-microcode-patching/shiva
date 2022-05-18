@@ -55,7 +55,10 @@ void my_print_string(const char *s)
 	return;
 	
 }
-
+int foo()
+{
+	printf("hi\n");
+}
 int
 shakti_main(shiva_ctx_t *ctx)
 {
@@ -65,6 +68,7 @@ shakti_main(shiva_ctx_t *ctx)
 	struct shiva_branch_site branch;
 	struct elf_symbol symbol;
 
+	foo();
 	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_ATTACH,
 	    NULL, NULL, 0, &error);
 	if (res == false) {

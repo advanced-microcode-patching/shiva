@@ -143,6 +143,13 @@ struct shiva_module_plt_entry {
 	TAILQ_ENTRY(shiva_module_plt_entry) _linkage;
 };
 
+struct shiva_module_got_entry {
+	char *symname;
+	uint64_t gotaddr; // address of GOT entry
+	uint64_t gotoff; // offset of GOT entry
+	TAILQ_ENTRY(shiva_module_got_entry) _linkage;
+};
+
 typedef enum shiva_mmap_type {
 	SHIVA_MMAP_TYPE_HEAP = 0,
 	SHIVA_MMAP_TYPE_STACK,
@@ -181,9 +188,13 @@ struct shiva_module {
 	elfobj_t elfobj; /* elfobj to the module */
 	elfobj_t self; /* elfobj to self (Debugger binary) */
 	struct {
+		TAILQ_HEAD(, shiva_module_got_entry) got_list;
 		TAILQ_HEAD(, shiva_module_section_mapping) section_maplist;
 		TAILQ_HEAD(, shiva_module_plt_entry) plt_list;
 	} tailq;
+	struct {
+		struct hsearch_data got;
+	} cache;
 };
 
 typedef struct shiva_trace_regset_x86_64 {
