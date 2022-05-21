@@ -297,22 +297,6 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 			*(int64_t *)&rel_unit[0] = rel_val;
 			return true;
 		}
-#if 0
-			/*
-			 * Otherwise if symbol is in the Shiva address space, then
-			 * calculate the symbol value with the shiva base address
-			 * instead of the modules.
-			 */
-		}
-	       	else if (elf_symbol_by_name(&linker->self, rel.symname, &symbol) == true) {
-			rel_unit = &linker->text_mem[smap.offset + rel.offset];
-			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
-			rel_val = (symbol.value + linker->shiva_base) + rel.addend - rel_addr;
-			shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
-			*(uint64_t *)&rel_unit[0] = rel_val;
-			return true;
-		}
-#endif
 		break;
 	case R_X86_64_PLT32: /* computation: L + A - P */
 		TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {
