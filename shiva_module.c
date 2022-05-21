@@ -103,8 +103,8 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		shiva_debug("Found symbol '%s' within Shiva. Symbol value: %#lx Shiva base: %#lx\n",
 		    current->symname, symbol.value, linker->shiva_base);
 		printf("Current got address: %#lx\n", linker->data_vaddr + linker->pltgot_off + current->gotoff);
-		GOT = (uint64_t *)linker->data_vaddr + linker->pltgot_off + current->gotoff;
-		*GOT = symbol.value + linker->shiva_base;
+		GOT = (uint64_t *)((uint64_t)(linker->data_vaddr + linker->pltgot_off + current->gotoff));
+		*(uint64_t *)GOT = symbol.value + linker->shiva_base;
 	}
 #if 0
 	/*
@@ -198,7 +198,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 {
 	struct shiva_module_plt_entry *current = NULL;
 	struct shiva_module_section_mapping *smap_current;
-	struct shiva_module_section_mapping smap;
+	struct shiva_module_section_mapping smap, smap_tmp;
 	uint8_t *rel_unit;
 	uint64_t symval;
 	uint64_t rel_addr;
@@ -274,8 +274,25 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 		if (elf_symbol_by_name(&linker->elfobj, rel.symname, &symbol) == true) {
 			rel_unit = &linker->text_mem[smap.offset + rel.offset];
 			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
-			rel_val = (symbol.value + linker->text_vaddr) + rel.addend - (linker->data_vaddr +
-			    linker->pltgot_off);
+			if (strncmp(rel.symname, ".LC", 3) == 0) {
+				/*
+				 * Symbol is likely pointing to locations within
+				 * the .rodata section. We will need to add symbol value
+				 * to the base of .rodata section instead of the text segment address.
+				 * This is because these label symbols have values that are relative
+				 * to the base of the section that contains them.
+				 */
+				if (get_section_mapping(linker, ".rodata", &smap_tmp) == false) {
+                			shiva_debug("Failed to retrieve section data for %s\n", rel.shdrname);
+                			return false;
+        			}
+
+				rel_val = (symbol.value + smap_tmp.vaddr) + rel.addend -
+				    (linker->data_vaddr + linker->pltgot_off);
+			} else {
+				rel_val = (symbol.value + linker->text_vaddr) + rel.addend -
+				    (linker->data_vaddr + linker->pltgot_off);
+			}
 			shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
 			*(int64_t *)&rel_unit[0] = rel_val;
 			return true;
@@ -557,7 +574,6 @@ calculate_data_size(struct shiva_module *linker)
 			}
 
 			shiva_debug("Inserting entries into GOT cache and GOT list\n");
-			shiva_debug("got_entry->gotaddr: %#lx\n", got_entry->gotaddr);
 			TAILQ_INSERT_TAIL(&linker->tailq.got_list, got_entry, _linkage);
 			offset += sizeof(uint64_t);
 
