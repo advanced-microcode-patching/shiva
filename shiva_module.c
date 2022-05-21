@@ -202,7 +202,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 	uint8_t *rel_unit;
 	uint64_t symval;
 	uint64_t rel_addr;
-	uint32_t rel_val;
+	uint64_t rel_val;
 	struct elf_symbol symbol;
 	ENTRY e, *ep;
 	struct shiva_module_got_entry got_entry;
@@ -263,22 +263,31 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 		return true;
 		break;
 	case R_X86_64_GOTOFF64:
+		shiva_debug("Applying GOTOFF64 relocation for %s\n", rel.symname);
 		/*
-		 * Calculate offset from symbol to base of GOT
+		 * Calculate offset from symbol to base of GOT.
+		 * NOTE: This is an unusual relocation. It uses GOT as an anchor
+		 * and finds the offset to the symbol. It then subtracts the offset
+		 * from the GOT to resolve the symbol address. The symbol is then
+		 * invoked indirectly via call *reg
 		 */
 		if (elf_symbol_by_name(&linker->elfobj, rel.symname, &symbol) == true) {
 			rel_unit = &linker->text_mem[smap.offset + rel.offset];
 			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
-			rel_val = (symbol.value + linker->text_vaddr) + rel.addend - rel_addr;
+			rel_val = (symbol.value + linker->text_vaddr) + rel.addend - (linker->data_vaddr +
+			    linker->pltgot_off);
 			shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
-			*(uint64_t *)&rel_unit[0] = rel_val;
+			*(int64_t *)&rel_unit[0] = rel_val;
 			return true;
+		}
+#if 0
 			/*
 			 * Otherwise if symbol is in the Shiva address space, then
 			 * calculate the symbol value with the shiva base address
 			 * instead of the modules.
 			 */
-		} else if (elf_symbol_by_name(&linker->self, rel.symname, &symbol) == true) {
+		}
+	       	else if (elf_symbol_by_name(&linker->self, rel.symname, &symbol) == true) {
 			rel_unit = &linker->text_mem[smap.offset + rel.offset];
 			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 			rel_val = (symbol.value + linker->shiva_base) + rel.addend - rel_addr;
@@ -286,6 +295,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 			*(uint64_t *)&rel_unit[0] = rel_val;
 			return true;
 		}
+#endif
 		break;
 	case R_X86_64_PLT32: /* computation: L + A - P */
 		TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {
@@ -623,6 +633,7 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	if (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) {
 		mmap_base = ELF_PAGEALIGN(linker->text_vaddr + linker->text_size, PAGE_SIZE);
 	} else {
+		mmap_base = ELF_PAGEALIGN(linker->text_vaddr + linker->text_size, PAGE_SIZE);
 		mmap_flags |= MAP_32BIT;
 	}
 	data_size_aligned = ELF_PAGEALIGN(linker->data_size, PAGE_SIZE);
@@ -730,6 +741,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 			    elf_pathname(&linker->elfobj));
 		}
 	} else {
+		mmap_base = 0;
 		mmap_flags |= MAP_32BIT;
 	}
 	text_size_aligned = ELF_PAGEALIGN(linker->text_size, PAGE_SIZE);
