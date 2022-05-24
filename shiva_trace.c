@@ -79,9 +79,13 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 struct shiva_trace_handler *
 shiva_trace_find_handler(struct shiva_ctx *ctx, void *handler)
 {
-	struct shiva_trace_handler *current;
+	struct shiva_trace_handler *current = NULL;
 
+	shiva_debug("ctx: %p, handler: %p handler_tqlist: %p\n", ctx, handler,
+	    &ctx->tailq.trace_handlers_tqlist);
 	TAILQ_FOREACH(current, &ctx->tailq.trace_handlers_tqlist, _linkage) {
+		shiva_debug("Testing current: %p handler_fn %p handler %p\n", current, current->handler_fn,
+		    handler);
 		if (current->handler_fn == handler)
 			return current;
 	}
@@ -114,7 +118,7 @@ shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(void *)
 	handler_struct->type = bp_type;
 	TAILQ_INIT(&handler_struct->bp_tqlist);
 
-	shiva_debug("Registering handler %p\n", handler_fn);
+	shiva_debug("Registering handler %p\n", handler_struct->handler_fn);
 	TAILQ_INSERT_TAIL(&ctx->tailq.trace_handlers_tqlist, handler_struct, _linkage);
 	return true;
 }

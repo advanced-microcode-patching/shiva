@@ -17,6 +17,7 @@ shiva_maps_get_base(struct shiva_ctx *ctx, uint64_t *out)
 		return false;
 	}
 	while (fgets(buf, sizeof(buf), fp) != NULL) {
+		printf("looking for: %s\n", ctx->path);
 		if (strstr(buf, ctx->path) == NULL)
 			continue;
 		p = strchr(buf, '-');

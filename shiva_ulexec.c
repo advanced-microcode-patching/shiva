@@ -2,11 +2,11 @@
 
 #define SHIVA_AUXV_COUNT 19
 
-static uint8_t *
+uint8_t *
 shiva_ulexec_allocstack(struct shiva_ctx *ctx)
 {
 	ctx->ulexec.stack = mmap(NULL, SHIVA_STACK_SIZE, PROT_READ|PROT_WRITE,
-	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_GROWSDOWN, -1, 0);
+	    MAP_PRIVATE|MAP_ANONYMOUS|MAP_GROWSDOWN|MAP_32BIT, -1, 0);
 	assert(ctx->ulexec.stack != MAP_FAILED);
 	shiva_debug("STACK: %#lx - %#lx\n", (uint64_t)ctx->ulexec.stack,
 	    (uint64_t)ctx->ulexec.stack + (size_t)SHIVA_STACK_SIZE);
@@ -263,9 +263,13 @@ shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool inter
 			int mmap_flags = MAP_ANONYMOUS|MAP_PRIVATE;
 
 			mmap_flags |= !(ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_32BIT : 0;
+			if (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) {
+				base_vaddr = 0x1000000;
+				mmap_flags |= MAP_FIXED;
+			}
 			//base_vaddr = (interpreter == false ? SHIVA_TARGET_BASE : SHIVA_LDSO_BASE);
 			shiva_debug("Attempting to map %#lx\n", base_vaddr);
-			mem = mmap((void *)0, phdr.memsz, PROT_READ|PROT_WRITE, mmap_flags, -1, 0);
+			mem = mmap((void *)base_vaddr, phdr.memsz, PROT_READ|PROT_WRITE, mmap_flags, -1, 0);
 			if (mem == MAP_FAILED) {
 				perror("mmap");
 				exit(EXIT_FAILURE);

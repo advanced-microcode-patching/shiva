@@ -27,8 +27,9 @@ void my_print_string(const char *s)
 	 * function.
 	 */
 	SHIVA_TRACE_BP_STRUCT(bp, handler);
-	vaddr = (uint64_t)bp->symbol.value + shiva_trace_base_addr(ctx);
+	vaddr = (uint64_t)bp->symbol.value + ctx->ulexec.base_vaddr;
 
+	printf("Symbol value %#lx + target base: %#lx\n", bp->symbol.value, shiva_trace_base_addr(ctx));
 	/*
 	 * Restore original code bytes of function 'print_string'
 	 */
@@ -53,7 +54,7 @@ void my_print_string(const char *s)
         }
 
 	return;
-	
+
 }
 
 int

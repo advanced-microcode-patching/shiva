@@ -102,7 +102,6 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		}
 		shiva_debug("Found symbol '%s' within Shiva. Symbol value: %#lx Shiva base: %#lx\n",
 		    current->symname, symbol.value, linker->shiva_base);
-		printf("Current got address: %#lx\n", linker->data_vaddr + linker->pltgot_off + current->gotoff);
 		GOT = (uint64_t *)((uint64_t)(linker->data_vaddr + linker->pltgot_off + current->gotoff));
 		*(uint64_t *)GOT = symbol.value + linker->shiva_base;
 	}
@@ -280,7 +279,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 				 * the .rodata section. We will need to add symbol value
 				 * to the base of .rodata section instead of the text segment address.
 				 * This is because these label symbols have values that are relative
-				 * to the base of the section that contains them.
+				 * to the base of '.rodata'
 				 */
 				if (get_section_mapping(linker, ".rodata", &smap_tmp) == false) {
                 			shiva_debug("Failed to retrieve section data for %s\n", rel.shdrname);

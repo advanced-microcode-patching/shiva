@@ -27,7 +27,7 @@ all:
 test:
 	gcc test.c -o test -fcf-protection=none
 test2:
-	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test.c -o test2
+	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test.c -o test2 -fcf-protection=none
 clean:
 	rm -f test
 	rm -f test2

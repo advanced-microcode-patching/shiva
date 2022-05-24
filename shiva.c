@@ -88,11 +88,13 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	bool res;
 	shiva_maps_iterator_t maps_iter;
 	struct shiva_mmap_entry mmap_entry;
-
+	uint8_t *o_stack, *n_stack;
+	uint64_t o_stack_addr, o_stack_end;
+	size_t copy_len;
 	ctx_global = ctx;
 	shiva_init_lists(ctx);
 
-	printf("Interp mode\n");
+	printf("Interp mode, ctx: %p\n", ctx);
 	if (shiva_build_trace_data(ctx) == false) {
 		fprintf(stderr, "shiva_build_trace_data() failed\n");
 		return false;
@@ -157,9 +159,9 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		return false;
 	}
 	/*
-	 * NOTE: In interpreter mode we are not needing to userland execve the
+	 * NOTE: In interpreter mode don't need to userland-execve the
 	 * target, but we will borrow one of the functions from shiva_ulexec.c
-	 * to load the real  dynamic linker into the address space for execution :)
+	 * to load the real dynamic linker into the address space for execution :)
 	 */
 	if (shiva_ulexec_load_elf_binary(ctx, &ctx->ldsobj, true) == false) {
 		fprintf(stderr, "shiva_ulexec_load_elf_binary(%p, %s, true) failed\n",
@@ -183,11 +185,49 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		}
 	}
 	/*
+	 * We must create a new stack before passing control to LDSO. Normally in interpreter
+	 * mode it wouldn't matter since we can just re-use the stack, auxv, etc. In our case
+	 * though we call back to various data structures, symbols and code within the Shiva
+	 * interpreter, and the Shiva stack data will be corrupted if we don't use a separate
+	 * stack for the executable.
+	 */
+	n_stack = shiva_ulexec_allocstack(ctx);
+	if (n_stack == NULL) {
+		fprintf(stderr, "shiva_ulexec_allocstack failed\n");
+		return false;
+	}
+	/*
 	 * Set rsp to near the top of the stack at &argc
 	 */
 	rsp = (uint64_t *)ctx->argv;
 	rsp--;
 
+	printf("n_stack: %p\n", n_stack);
+	/*
+	 * We want to copy the top-most page of the old stack onto the top-most
+	 * page of the new stack. To be more specific we're copying less than
+	 * a page, starting at &argc and then copying everything after that.
+	 */
+	o_stack = (uint8_t *)rsp;
+	o_stack_addr = (uint64_t)o_stack;
+	o_stack_end = ELF_PAGEALIGN(o_stack_addr, 0x1000);
+	copy_len = o_stack_end - o_stack_addr;
+
+	printf("n_stack: %p\n", n_stack);
+	shiva_debug("o_stack_addr: %#lx o_stack_end: %#lx\n", o_stack_addr, o_stack_end);
+	/*
+	 * shiva_ulexec_allocstack() returns a pointer that points to the very
+	 * end of the stack (Top of the stack really).
+	 */
+	shiva_debug("copy_len: %d\n", copy_len);
+	shiva_debug("Copying to %p from %p\n", n_stack - copy_len, o_stack);
+	n_stack = n_stack - copy_len;
+	memcpy(n_stack, o_stack, copy_len);
+
+	/*
+	 * rsp must now point to our new stack, right at &argc
+	 */
+	rsp = (uint64_t *)n_stack;
 	shiva_debug("Passing control to entry point: %#lx\n", entry_point);
 	shiva_debug("LDSO entry point: %#lx\n", ctx->ulexec.ldso.entry_point);
 	SHIVA_ULEXEC_LDSO_TRANSFER(rsp, ctx->ulexec.ldso.entry_point, entry_point);
