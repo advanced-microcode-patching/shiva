@@ -28,8 +28,6 @@ void my_print_string(const char *s)
 	 */
 	SHIVA_TRACE_BP_STRUCT(bp, handler);
 	vaddr = (uint64_t)bp->symbol.value + ctx->ulexec.base_vaddr;
-
-	printf("Symbol value %#lx + target base: %#lx\n", bp->symbol.value, shiva_trace_base_addr(ctx));
 	/*
 	 * Restore original code bytes of function 'print_string'
 	 */
@@ -66,8 +64,6 @@ shakti_main(shiva_ctx_t *ctx)
 	struct shiva_branch_site branch;
 	struct elf_symbol symbol;
 
-	printf("Hello World\n");
-
 	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_ATTACH,
 	    NULL, NULL, 0, &error);
 	if (res == false) {
@@ -85,9 +81,7 @@ shakti_main(shiva_ctx_t *ctx)
 		printf("failed to find symbol 'print_string'\n");
 		return -1;
 	}
-	printf("Set breakpoint addr: %#lx + %#lx\n", symbol.value, ctx->ulexec.base_vaddr);
 	uint64_t val = symbol.value + ctx->ulexec.base_vaddr;
-	printf("Passing val: %#lx\n", val);
 	res = shiva_trace_set_breakpoint(ctx, (void *)my_print_string,
 	    val, &error);
 	if (res == false) {

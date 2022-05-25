@@ -94,7 +94,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	ctx_global = ctx;
 	shiva_init_lists(ctx);
 
-	printf("Interp mode, ctx: %p\n", ctx);
+	shiva_debug("Interp mode, ctx: %p\n", ctx);
 	if (shiva_build_trace_data(ctx) == false) {
 		fprintf(stderr, "shiva_build_trace_data() failed\n");
 		return false;
@@ -115,16 +115,14 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		return false;
 	}
 
-	printf("Iterate over maps list\n");
 	shiva_maps_iterator_init(ctx, &maps_iter);
 	while (shiva_maps_iterator_next(&maps_iter, &mmap_entry) == SHIVA_ITER_OK) {
 		if (mmap_entry.mmap_type == SHIVA_MMAP_TYPE_SHIVA) {
-			printf("Setting shiva base to: %#lx\n", mmap_entry.base);
 			break;
 		}
 	}
 	ctx->shiva.base = mmap_entry.base;
-	printf("Setting shiva base: %#lx\n", mmap_entry.base);
+	shiva_debug("Setting shiva base: %#lx\n", mmap_entry.base);
 	/*
 	 * Since we're in interpreter mode we did not use the ulexec, but
 	 * have to set the base address of the target executable which
@@ -141,7 +139,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	 * shakti_main() (Within the module) before passing control
 	 * to LDSO.
 	 */
-	printf("Loading module\n");
 	if (shiva_module_loader(ctx, "./modules/shakti_runtime.o",
 	    &ctx->module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");
@@ -202,7 +199,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	rsp = (uint64_t *)ctx->argv;
 	rsp--;
 
-	printf("n_stack: %p\n", n_stack);
 	/*
 	 * We want to copy the top-most page of the old stack onto the top-most
 	 * page of the new stack. To be more specific we're copying less than
@@ -213,7 +209,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	o_stack_end = ELF_PAGEALIGN(o_stack_addr, 0x1000);
 	copy_len = o_stack_end - o_stack_addr;
 
-	printf("n_stack: %p\n", n_stack);
 	shiva_debug("o_stack_addr: %#lx o_stack_end: %#lx\n", o_stack_addr, o_stack_end);
 	/*
 	 * shiva_ulexec_allocstack() returns a pointer that points to the very
@@ -344,7 +339,6 @@ int main(int argc, char **argv, char **envp)
 	shiva_maps_iterator_init(&ctx, &maps_iter);
 	while (shiva_maps_iterator_next(&maps_iter, &mmap_entry) == SHIVA_ITER_OK) {
 		if (mmap_entry.mmap_type == SHIVA_MMAP_TYPE_SHIVA && mmap_entry.prot == PROT_READ) {
-			printf("SHIVA BASE: %#lx\n", mmap_entry.base);
 			break;
 		}
 	}
