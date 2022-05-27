@@ -83,7 +83,7 @@ shakti_main(shiva_ctx_t *ctx)
 	}
 	uint64_t val = symbol.value + ctx->ulexec.base_vaddr;
 	res = shiva_trace_set_breakpoint(ctx, (void *)my_print_string,
-	    val, &error);
+	    val, NULL, &error);
 	if (res == false) {
 		printf("shiva_trace_set_breakpoint failed: %s\n", shiva_error_msg(&error));
 		return -1;

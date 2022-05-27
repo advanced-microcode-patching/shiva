@@ -43,12 +43,14 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 	bool res;
 	int ret, o_prot;
 
+	shiva_debug("Inside shiva_trace_write\n");
 	if (shiva_maps_prot_by_addr(ctx, (uint64_t)addr, &o_prot) == false) {
 	    shiva_error_set(error, "poke pid (%d) at %#lx failed: "
 	    "cannot find memory protection\n", pid, (uint64_t)addr);
 		return false;
 	}
 
+	shiva_debug("Inside shiva_trace_write\n");
 	aligned_vaddr = (uint64_t)addr;
 	aligned_vaddr &= ~4095;
 	/*
@@ -60,6 +62,7 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 		    "mprotect failure: %s\n", pid, (uint64_t)addr, strerror(errno));
 		return false;
 	}
+	shiva_debug("copying %zu bytes from %p to %p\n", len, s, d);
 	/*
 	 * Copy data to target addr
 	 */
@@ -125,7 +128,7 @@ shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(void *)
 
 bool
 shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
-    uint64_t bp_addr, shiva_error_t *error)
+    uint64_t bp_addr, void *option, shiva_error_t *error)
 {
 	struct shiva_trace_handler *current;
 	struct shiva_trace_bp *bp;
@@ -140,6 +143,10 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 	int pid;
 	uint64_t o_call_offset;
 	bool found_handler = false;
+	struct elf_plt plt_entry;
+	elf_plt_iterator_t plt_iter;
+	elf_pltgot_iterator_t pltgot_iter;
+	struct elf_pltgot_entry pltgot_entry;
 
 	TAILQ_FOREACH(current, &ctx->tailq.trace_handlers_tqlist, _linkage) {
 		if (current->handler_fn == handler_fn) {
@@ -149,6 +156,47 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 			case SHIVA_TRACE_BP_JMP:
 				break;
 			case SHIVA_TRACE_BP_INT3:
+				break;
+			case SHIVA_TRACE_BP_PLTGOT:
+				if (elf_plt_by_name(&ctx->elfobj, (char *)option, &plt_entry) == false) {
+					shiva_error_set(error, "elf_plt_by_name(%p, %s, ...) failed\n",
+					    &ctx->elfobj, (char *)option);
+					return false;
+				}
+				elf_pltgot_iterator_init(&ctx->elfobj, &pltgot_iter);
+				while (elf_pltgot_iterator_next(&pltgot_iter, &pltgot_entry) == ELF_ITER_OK) {
+					if (pltgot_entry.flags & ELF_PLTGOT_PLT_STUB_F) {
+						if (pltgot_entry.value != (plt_entry.addr + 6))
+							continue;
+						shiva_debug("Patching GOT entry %#lx\n",
+						    pltgot_entry.offset + shiva_trace_base_addr(&ctx->elfobj));
+						bp = calloc(1, sizeof(*bp));
+						if (bp == NULL) {
+							shiva_error_set(error, "memory allocation failed: %s\n",
+							    strerror(errno));
+							return false;
+						}
+						/*
+						 * This is a PLTGOT hook. So we are actually modifying an fptr (The GOT)
+						 * in the data segment. bp_addr is assigned the address of the GOT entry
+						 * that we are patching (Instead of a code location like usual).
+						 * We may change this convention in the future.
+						 */
+						bp->bp_type = SHIVA_TRACE_BP_PLTGOT;
+						bp->bp_addr = pltgot_entry.offset;
+						uint64_t addr = (uint64_t)handler_fn;
+						shiva_debug("Calling shiva_trace_write\n");
+						*(uint64_t *)(pltgot_entry.offset + shiva_trace_base_addr(&ctx->elfobj)) = handler_fn;
+#if 0
+						res = shiva_trace_write(ctx, pid, (void *)bp->bp_addr, &addr, sizeof(uint64_t), 
+						    error);
+						if (res == false) {
+							fprintf("shiva_trace_write failed\n");
+							return false;
+						}
+#endif
+					}
+				}
 				break;
 			case SHIVA_TRACE_BP_TRAMPOLINE:
 				ud_set_input_buffer(&ctx->disas.ud_obj, inst_ptr, SHIVA_MAX_INST_LEN);
@@ -182,7 +230,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				shiva_debug("Inserted breakpoint: %#lx\n", bp->bp_addr);
 				TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
 				break;
-			case SHIVA_TRACE_BP_CALL:
+			case SHIVA_TRACE_BP_CALL: /* This hooks imm32 calls, and only works in mcmodel=small scenarios */
 				/*
 				 * Get the original inst
 				 */
@@ -223,9 +271,6 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					memcpy(&bp->symbol, &symbol, sizeof(symbol));
 					bp->call_target_symname = (char *)symbol.name;
 				} else {
-					elf_plt_iterator_t plt_iter;
-					struct elf_plt plt_entry;
-
 					elf_plt_iterator_init(&ctx->elfobj, &plt_iter);
 					while (elf_plt_iterator_next(&plt_iter, &plt_entry) == ELF_ITER_OK) {
 						if ((bp->o_target - shiva_trace_base_addr(ctx)) == plt_entry.addr) {

@@ -382,7 +382,8 @@ typedef enum shiva_trace_bp_type {
         SHIVA_TRACE_BP_JMP = 0,
         SHIVA_TRACE_BP_CALL,
         SHIVA_TRACE_BP_INT3,
-        SHIVA_TRACE_BP_TRAMPOLINE
+        SHIVA_TRACE_BP_TRAMPOLINE,
+	SHIVA_TRACE_BP_PLTGOT
 } shiva_trace_bp_type_t;
 
 /*
@@ -466,7 +467,7 @@ bool shiva_trace_register_handler(shiva_ctx_t *, void * (*)(void *), shiva_trace
     shiva_error_t *);
 struct shiva_trace_handler * shiva_trace_find_handler(struct shiva_ctx *, void *);
 struct shiva_trace_bp * shiva_trace_bp_struct(void *);
-bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(void *), uint64_t, shiva_error_t *);
+bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(void *), uint64_t, void *, shiva_error_t *);
 bool shiva_trace_write(struct shiva_ctx *, pid_t, void *, const void *, size_t, shiva_error_t *);
 void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *);
 /*

@@ -74,7 +74,7 @@ shakti_main(shiva_ctx_t *ctx)
 	while (shiva_callsite_iterator_next(&call_iter, &branch) == ELF_ITER_OK) {
 		printf("Set breakpoint on %#lx\n", branch.branch_site + ctx->ulexec.base_vaddr);
 		res = shiva_trace_set_breakpoint(ctx, (void *)&shakti_handler,
-		    branch.branch_site + ctx->ulexec.base_vaddr, &error);
+		    branch.branch_site + ctx->ulexec.base_vaddr, NULL, &error);
 		if (res == false) {
 			printf("shiva_trace_register_breakpoint failed: %s\n",
 			    shiva_error_msg(&error));

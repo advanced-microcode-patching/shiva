@@ -109,7 +109,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		fprintf(stderr, "Failed to run the analyzers\n");
 		return false;
 	}
-	printf("build maps list\n");
 	if (shiva_maps_build_list(ctx) == false) {
 		fprintf(stderr, "shiva_maps_build_list() failed\n");
 		return false;
