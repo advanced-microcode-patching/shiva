@@ -210,7 +210,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	o_stack_end = ELF_PAGEALIGN(o_stack_addr, 0x1000);
 	copy_len = o_stack_end - o_stack_addr;
 
-	printf("base_vaddr now: %#lx\n", ctx->ulexec.base_vaddr);
 	shiva_debug("o_stack_addr: %#lx o_stack_end: %#lx\n", o_stack_addr, o_stack_end);
 	/*
 	 * shiva_ulexec_allocstack() returns a pointer that points to the very
@@ -228,7 +227,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	shiva_debug("Passing control to entry point: %#lx\n", entry_point);
 	shiva_debug("LDSO entry point: %#lx\n", ctx->ulexec.ldso.entry_point);
 
-	printf("base_vaddr now: %#lx\n", ctx->ulexec.base_vaddr);
 	/*
 	 * XXX: In the event that our module installed .got.plt hooks, we
 	 * must disable DT_BINDNOW before passing control to the RTLD, otherwise
@@ -347,7 +345,6 @@ int main(int argc, char **argv, char **envp)
 		exit(EXIT_FAILURE);
 	}
 
-	printf("ulexec.base: %#lx\n", ctx.ulexec.base_vaddr);
 	if (shiva_maps_build_list(&ctx) == false) {
 		fprintf(stderr, "shiva_maps_build_list() failed\n");
 		exit(EXIT_FAILURE);
@@ -378,14 +375,11 @@ int main(int argc, char **argv, char **envp)
 	if (ctx.flags & SHIVA_OPTS_F_ULEXEC_ONLY)
 		goto transfer_control;
 
-	printf("base before module: %#lx\n", ctx.ulexec.base_vaddr);
-
 	if (shiva_module_loader(&ctx, "./modules/shakti_runtime.o",
 	    &ctx.module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");
 		exit(EXIT_FAILURE);
 	}
-	printf("base after module: %#lx\n", ctx.ulexec.base_vaddr);
 
 	/*
 	 * XXX: In the event that our module installed .got.plt hooks, we
