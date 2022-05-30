@@ -324,6 +324,7 @@ shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool inter
 	if (interpreter == false) {
 		shiva_debug("Setting entry point for target: %#lx\n", base_vaddr + elf_entry_point(elfobj));
 		ctx->ulexec.entry_point = base_vaddr + elf_entry_point(elfobj);
+		printf("Setting ctx->ulexec.base_vaddr: %#lx\n", base_vaddr);
 		ctx->ulexec.base_vaddr = base_vaddr;
 		ctx->ulexec.phdr_vaddr = base_vaddr + elf_phoff(elfobj);
 	} else {

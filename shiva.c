@@ -133,6 +133,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		fprintf(stderr, "shiva_maps_get_base() failed\n");
 		return false;
 	}
+	shiva_debug("Setting target base: %#lx\n", ctx->ulexec.base_vaddr);
 	/*
 	 * Loads the runtime module, and then passes control to
 	 * shakti_main() (Within the module) before passing control
@@ -144,6 +145,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		return false;
 	}
 
+	shiva_debug("Target base after module: %#lx\n", ctx->ulexec.base_vaddr);
 	if (elf_type(&ctx->elfobj) != ET_DYN) {
 		fprintf(stderr, "Shiva only supports PIE ELF binaries.\n");
 		return false;
@@ -164,7 +166,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		    ctx, elf_pathname(&ctx->ldsobj));
 		return false;
 	}
-
+	fprintf(stderr, "Target base after ulexec loading LDSO into memory: %#lx\n", ctx->ulexec.base_vaddr);
 	/*
 	 * Get the entry point of the target executable. Stored in AT_ENTRY
 	 * of the auxiliary vector.
@@ -208,6 +210,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	o_stack_end = ELF_PAGEALIGN(o_stack_addr, 0x1000);
 	copy_len = o_stack_end - o_stack_addr;
 
+	printf("base_vaddr now: %#lx\n", ctx->ulexec.base_vaddr);
 	shiva_debug("o_stack_addr: %#lx o_stack_end: %#lx\n", o_stack_addr, o_stack_end);
 	/*
 	 * shiva_ulexec_allocstack() returns a pointer that points to the very
@@ -224,6 +227,19 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	rsp = (uint64_t *)n_stack;
 	shiva_debug("Passing control to entry point: %#lx\n", entry_point);
 	shiva_debug("LDSO entry point: %#lx\n", ctx->ulexec.ldso.entry_point);
+
+	printf("base_vaddr now: %#lx\n", ctx->ulexec.base_vaddr);
+	/*
+	 * XXX: In the event that our module installed .got.plt hooks, we
+	 * must disable DT_BINDNOW before passing control to the RTLD, otherwise
+	 * our hooks will be overwritten by RTLD in strict linking mode.
+	 * We are basically disabling RELRO (read-only relocations) which is a
+	 * security issue. In the future we should inject PLT hooks purely by
+	 * injecting JUMPSLOT relocations.
+	 */
+	(void) shiva_target_dynamic_set(ctx, DT_FLAGS, 0);
+	(void) shiva_target_dynamic_set(ctx, DT_FLAGS_1, 0);
+
 	SHIVA_ULEXEC_LDSO_TRANSFER(rsp, ctx->ulexec.ldso.entry_point, entry_point);
 
 	return true;
@@ -330,6 +346,8 @@ int main(int argc, char **argv, char **envp)
 		fprintf(stderr, "shiva_ulexec_prep() failed\n");
 		exit(EXIT_FAILURE);
 	}
+
+	printf("ulexec.base: %#lx\n", ctx.ulexec.base_vaddr);
 	if (shiva_maps_build_list(&ctx) == false) {
 		fprintf(stderr, "shiva_maps_build_list() failed\n");
 		exit(EXIT_FAILURE);
@@ -360,11 +378,26 @@ int main(int argc, char **argv, char **envp)
 	if (ctx.flags & SHIVA_OPTS_F_ULEXEC_ONLY)
 		goto transfer_control;
 
+	printf("base before module: %#lx\n", ctx.ulexec.base_vaddr);
+
 	if (shiva_module_loader(&ctx, "./modules/shakti_runtime.o",
 	    &ctx.module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");
 		exit(EXIT_FAILURE);
 	}
+	printf("base after module: %#lx\n", ctx.ulexec.base_vaddr);
+
+	/*
+	 * XXX: In the event that our module installed .got.plt hooks, we
+	 * must disable DT_BINDNOW before passing control to the RTLD, otherwise
+	 * our hooks will be overwritten by RTLD in strict linking mode.
+	 * We are basically disabling RELRO (read-only relocations) which is a
+	 * security issue. In the future we should inject PLT hooks purely by
+	 * injecting JUMPSLOT relocations.
+	 */
+	(void) shiva_target_dynamic_set(&ctx, DT_FLAGS, 0);
+	(void) shiva_target_dynamic_set(&ctx, DT_FLAGS_1, 0);
+
 	/*
 	 * Once the module has finished executing, we pass control
 	 * to LDSO.

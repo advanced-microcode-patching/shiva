@@ -336,6 +336,12 @@ bool shiva_analyze_find_calls(shiva_ctx_t *);
 bool shiva_analyze_run(shiva_ctx_t *);
 
 /*
+ * shiva_target.c
+ */
+bool
+shiva_target_dynamic_set(struct shiva_ctx *, uint64_t, uint64_t);
+
+/*
  * shiva_proc.c
  */
 bool shiva_proc_duplicate_image(shiva_ctx_t *ctx);
@@ -474,4 +480,5 @@ void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset
  * shiva_trace_thread.c
  */
 bool shiva_trace_thread_insert(shiva_ctx_t *, pid_t, uint64_t *);
+
 #endif

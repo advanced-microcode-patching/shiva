@@ -166,10 +166,19 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				elf_pltgot_iterator_init(&ctx->elfobj, &pltgot_iter);
 				while (elf_pltgot_iterator_next(&pltgot_iter, &pltgot_entry) == ELF_ITER_OK) {
 					if (pltgot_entry.flags & ELF_PLTGOT_PLT_STUB_F) {
+						/*
+						 * XXX
+						 * If the target binary has a .plt with bound instructions
+						 * then the + 6 calculation will not work. Currently our
+						 * 'test' target binary is built with -fcf-protection=none
+						 * We must add code for compatibility, and libelfmaster's plt
+						 * API needs to be updated to handle as well.
+						 */
 						if (pltgot_entry.value != (plt_entry.addr + 6))
 							continue;
 						shiva_debug("Patching GOT entry %#lx\n",
 						    pltgot_entry.offset + shiva_trace_base_addr(&ctx->elfobj));
+						shiva_debug("plt_entry.addr: %#lx\n", plt_entry.addr);
 						bp = calloc(1, sizeof(*bp));
 						if (bp == NULL) {
 							shiva_error_set(error, "memory allocation failed: %s\n",
@@ -182,19 +191,20 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 						 * that we are patching (Instead of a code location like usual).
 						 * We may change this convention in the future.
 						 */
+						shiva_debug("pltgot.offset: %#lx base_vaddr: %#lx\n",
+						    pltgot_entry.offset, ctx->ulexec.base_vaddr);
 						bp->bp_type = SHIVA_TRACE_BP_PLTGOT;
-						bp->bp_addr = pltgot_entry.offset;
-						uint64_t addr = (uint64_t)handler_fn;
-						shiva_debug("Calling shiva_trace_write\n");
-						*(uint64_t *)(pltgot_entry.offset + shiva_trace_base_addr(&ctx->elfobj)) = handler_fn;
-#if 0
-						res = shiva_trace_write(ctx, pid, (void *)bp->bp_addr, &addr, sizeof(uint64_t), 
-						    error);
-						if (res == false) {
-							fprintf("shiva_trace_write failed\n");
-							return false;
-						}
-#endif
+						bp->bp_addr = pltgot_entry.offset + ctx->ulexec.base_vaddr;
+						uint64_t *gotptr = (uint64_t *)bp->bp_addr;
+						shiva_debug("*gotptr old value: %#lx\n", *gotptr);
+						shiva_debug("Setting gotptr(%p) to %p\n", gotptr, handler_fn);
+						/*
+						 * Currently we only handle PIE target binaries (We must fix this).
+						 * Anyway, PIE binaries have GOT values that are computed with the
+						 * baes address at runtime. We must patch the GOT with an offset from
+						 * the base, and not an absolute address.
+						 */
+						*(uint64_t *)&gotptr[0] = (uint64_t)handler_fn - ctx->ulexec.base_vaddr;
 					}
 				}
 				break;

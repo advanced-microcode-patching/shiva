@@ -1,7 +1,7 @@
 GCC_OPTS= -fPIC -c -ggdb -DDEBUG
 OBJ_LIST=shiva.o shiva_proc.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \
-    shiva_callsite.o
+    shiva_callsite.o shiva_target.o
 INTERP_PATH="/home/elfmaster/git/shiva/shiva"
 STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a udis86/libudis86/.libs/libudis86.a
 
@@ -22,6 +22,7 @@ all:
 	$(CC) $(GCC_OPTS) shiva_analyze.c -o	shiva_analyze.o
 	$(CC) $(GCC_OPTS) shiva_callsite.c -o 	shiva_callsite.o
 	$(CC) $(GCC_OPTS) shiva_proc.c -o	shiva_proc.o
+	$(CC) $(GCC_OPTS) shiva_target.c -o	shiva_target.o
 	$(MUSL) -static-pie -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o shiva
 
 test:
