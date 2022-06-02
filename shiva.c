@@ -166,7 +166,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		    ctx, elf_pathname(&ctx->ldsobj));
 		return false;
 	}
-	fprintf(stderr, "Target base after ulexec loading LDSO into memory: %#lx\n", ctx->ulexec.base_vaddr);
 	/*
 	 * Get the entry point of the target executable. Stored in AT_ENTRY
 	 * of the auxiliary vector.
@@ -227,16 +226,31 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	shiva_debug("Passing control to entry point: %#lx\n", entry_point);
 	shiva_debug("LDSO entry point: %#lx\n", ctx->ulexec.ldso.entry_point);
 
+#if 0
 	/*
 	 * XXX: In the event that our module installed .got.plt hooks, we
 	 * must disable DT_BINDNOW before passing control to the RTLD, otherwise
 	 * our hooks will be overwritten by RTLD in strict linking mode.
 	 * We are basically disabling RELRO (read-only relocations) which is a
 	 * security issue. In the future we should inject PLT hooks purely by
-	 * injecting JUMPSLOT relocations.
+	 * injecting JUMPSLOT relocations (Although this won't natively work
+	 * with RTLD since it isn't aware of Shiva.
 	 */
 	(void) shiva_target_dynamic_set(ctx, DT_FLAGS, 0);
 	(void) shiva_target_dynamic_set(ctx, DT_FLAGS_1, 0);
+#endif
+	/*
+	 * STRICT LINKING (flags: PIE NOW) can be a problem for us since it
+	 * will overwrite any PLT hooks that are set.
+	 *
+	 * Our solution is to create an alternate .rela.plt that excludes the
+	 * JUMP_SLOT relocation entry for the symbol we are hooking.
+	 *
+	 * Update DT_JMPREL to point to our new symbol table.
+	 *
+	 * These steps are to be carried out from within the shiva_trace API,
+	 * specifically shiva_trace_set_breakpoint case PLTGOT_HOOK 
+	 */
 
 	SHIVA_ULEXEC_LDSO_TRANSFER(rsp, ctx->ulexec.ldso.entry_point, entry_point);
 
@@ -389,8 +403,8 @@ int main(int argc, char **argv, char **envp)
 	 * security issue. In the future we should inject PLT hooks purely by
 	 * injecting JUMPSLOT relocations.
 	 */
-	(void) shiva_target_dynamic_set(&ctx, DT_FLAGS, 0);
-	(void) shiva_target_dynamic_set(&ctx, DT_FLAGS_1, 0);
+	//(void) shiva_target_dynamic_set(&ctx, DT_FLAGS, 0);
+	//(void) shiva_target_dynamic_set(&ctx, DT_FLAGS_1, 0);
 
 	/*
 	 * Once the module has finished executing, we pass control

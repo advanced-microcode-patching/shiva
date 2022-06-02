@@ -227,6 +227,10 @@ typedef struct shiva_ctx {
 		struct shiva_module *initcode;
 	} module;
 	struct {
+		Elf64_Rela *jmprel;
+		size_t jmprel_count;
+	} altrelocs;
+	struct {
 		ud_t ud_obj;
 		uint8_t *textptr;
 		uint64_t base;
