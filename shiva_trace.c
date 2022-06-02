@@ -239,8 +239,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 						 *
 						 * Update DT_JMPREL to point to our new symbol table.
 						 *
-						 * These steps are to be carried out from within the shiva_trace API,
-						 * specifically shiva_trace_set_breakpoint case PLTGOT_HOOK
+						 * Update DT_PLTRELASZ with the updated size of .rela.plt
          					 */
 
 						struct elf_section rela_plt;
@@ -288,6 +287,8 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					    	    (uint64_t)ctx->altrelocs.jmprel - ctx->ulexec.base_vaddr);
 						(void) shiva_target_dynamic_set(ctx, DT_PLTRELSZ,
 						    jmprel_count * sizeof(Elf64_Rela));
+						shiva_debug("Inserted .got.plt hook breakpoint: %#lx\n", bp->bp_addr);
+						TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
 						return true;
 					}
 				}

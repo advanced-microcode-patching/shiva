@@ -11,7 +11,7 @@ int n_puts(const char *s)
 {
 	char buf[PATH_MAX];
 
-	snprintf(buf, sizeof(buf), "Hijacked puts. '%s'", s);
+	snprintf(buf, sizeof(buf), "j1mmy's been here. '%s'", s);
 	return puts(buf);
 }
 

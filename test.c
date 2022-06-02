@@ -5,7 +5,7 @@ __thread int tls_i;
 
 void print_string(const char *s)
 {
-	printf("%s\n", s);
+	puts(s);
 	return;
 }
 int main(int argc, char **argv)
