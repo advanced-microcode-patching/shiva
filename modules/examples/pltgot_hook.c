@@ -10,8 +10,20 @@
 int n_puts(const char *s)
 {
 	char buf[PATH_MAX];
+	/*
+	 * Modify the string passed to puts()
+	 */
+	snprintf(buf, sizeof(buf), "hijacked your string: '%s'", s);
 
-	snprintf(buf, sizeof(buf), "j1mmy's been here. '%s'", s);
+	/*
+	 * Call the original puts with our modified string.
+	 * NOTE: We hijacked puts from libc.so via the PLT hook,
+	 * but we are actually invoking puts() from inside the
+	 * body of code in the Shiva executable, since relocations
+	 * are mapped between the module and shiva. So we are
+	 * invoking the musl-libc puts() that is already built into
+	 * /bin/Shiva.
+	 */
 	return puts(buf);
 }
 

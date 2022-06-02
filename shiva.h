@@ -406,6 +406,8 @@ typedef enum shiva_trace_bp_type {
 		TAILQ_FOREACH(bp, &handler->bp_tqlist, _linkage)  { \
 			if (bp->bp_type == SHIVA_TRACE_BP_TRAMPOLINE) \
 				break;  \
+			if (bp->bp_type == SHIVA_TRACE_BP_PLTGOT) \
+				break;  \
 			if ((void *)bp->retaddr == __ret)	\
 				break;	\
 		} \

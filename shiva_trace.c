@@ -214,6 +214,14 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 						bp->bp_type = SHIVA_TRACE_BP_PLTGOT;
 						bp->bp_addr = pltgot_entry.offset + ctx->ulexec.base_vaddr;
 						uint64_t *gotptr = (uint64_t *)bp->bp_addr;
+						memcpy(&bp->o_target, gotptr, sizeof(uint64_t));
+						/*
+						 * This gotptr value will be an offset, and we must add the base
+						 * address to it, atleast with PIE binaries.
+						 */
+						if (elf_type(&ctx->elfobj) == ET_DYN) {
+							bp->o_target += ctx->ulexec.base_vaddr;
+						}
 						shiva_debug("*gotptr old value: %#lx\n", *gotptr);
 						shiva_debug("Setting gotptr(%p) to %p\n", gotptr, handler_fn);
 						/*
@@ -267,6 +275,8 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 							    &symbol,
 							    SHT_DYNSYM) == true) {
 								if (strcmp(symbol.name, (char *)option) == 0) {
+									memcpy(&bp->symbol, &symbol, sizeof(symbol));
+									bp->symbol_location = true;
 									continue;
 								} else {
 									memcpy(ctx->altrelocs.jmprel + jmprel_count,
@@ -278,6 +288,11 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 								    ELF64_R_SYM(rela_plt_ptr[i].r_info));
 								return false;
 							}
+						}
+						if (jmprel_count >= rela_plt.size / rela_plt.entsize) {
+							shiva_error_set(error, "unable to properly de-activate relocation record"
+							    " '%s'\n", (char *)option);
+							return false;
 						}
 						shiva_debug("Setting DT_JMPREL to %#lx - %#lx = %#lx\n",
 						    (uint64_t) ctx->altrelocs.jmprel, ctx->ulexec.base_vaddr,
