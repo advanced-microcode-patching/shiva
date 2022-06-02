@@ -268,7 +268,6 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 							    &symbol,
 							    SHT_DYNSYM) == true) {
 								if (strcmp(symbol.name, (char *)option) == 0) {
-									printf("Symbol matches '%s' and %s\n", symbol.name, option);
 									continue;
 								} else {
 									memcpy(ctx->altrelocs.jmprel + jmprel_count,
@@ -281,7 +280,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 								return false;
 							}
 						}
-						printf("Setting DT_JMPREL to %#lx - %#lx = %#lx\n",
+						shiva_debug("Setting DT_JMPREL to %#lx - %#lx = %#lx\n",
 						    (uint64_t) ctx->altrelocs.jmprel, ctx->ulexec.base_vaddr,
 						   (uint64_t) ctx->altrelocs.jmprel - ctx->ulexec.base_vaddr);
 
