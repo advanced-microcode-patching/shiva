@@ -160,6 +160,34 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 			case SHIVA_TRACE_BP_JMP:
 				break;
 			case SHIVA_TRACE_BP_INT3:
+				/*
+				 * Install 0xcc on MSB of 64bit value
+				 * i.e. 0xdeadbeef becomes 0xdeadbecc
+				 */
+				ud_set_input_buffer(&ctx->disas.ud_obj, inst_ptr, SHIVA_MAX_INST_LEN);
+				bits = elf_class(&ctx->elfobj) == elfclass64 ? 64 : 32;
+				insn_len = ud_insn_len(&ctx->disas.ud_obj);
+				assert(insn_len <= 15);
+				bp = calloc(1, sizeof(*bp));
+				if (bp == NULL) {
+					shiva_error_set(error, "memory allocation failed: %s\n",
+					    strerror(errno));
+					return false;
+				}
+				if (TAILQ_EMPTY(&current->bp_tqlist)) {
+					struct sigaction sa;
+
+					/*
+					 * Create SIGTRAP handler out of handler_fn
+					 */
+					sa.sa_sigaction = (void *)handler_fn;
+					sigemptyset(&sa.sa_mask);
+					sa.sa_flags = SA_RESTART | SA_SIGINFO;
+					sigaction(SIGTRAP, &sa, NULL);
+					memcpy(&current->sa, &sa, sizeof(sa));
+				}
+				bp->bp_addr = bp_addr;
+				bp->bp_len = 1;
 				break;
 			case SHIVA_TRACE_BP_PLTGOT:
 				if (elf_plt_by_name(&ctx->elfobj, (char *)option, &plt_entry) == false) {
@@ -242,13 +270,13 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 						 * STRICT LINKING (flags: PIE NOW) can be a problem for us since it
 						 * will overwrite any PLT hooks that are set.
 						 *
- 						 * Our solution is to create an alternate .rela.plt that excludes the
+						 * Our solution is to create an alternate .rela.plt that excludes the
 						 * JUMP_SLOT relocation entry for the symbol we are hooking.
 						 *
 						 * Update DT_JMPREL to point to our new symbol table.
 						 *
 						 * Update DT_PLTRELASZ with the updated size of .rela.plt
-         					 */
+						 */
 
 						struct elf_section rela_plt;
 						Elf64_Rela *rela_plt_ptr;
@@ -299,7 +327,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 						   (uint64_t) ctx->altrelocs.jmprel - ctx->ulexec.base_vaddr);
 
 						(void) shiva_target_dynamic_set(ctx, DT_JMPREL,
-					    	    (uint64_t)ctx->altrelocs.jmprel - ctx->ulexec.base_vaddr);
+						    (uint64_t)ctx->altrelocs.jmprel - ctx->ulexec.base_vaddr);
 						(void) shiva_target_dynamic_set(ctx, DT_PLTRELSZ,
 						    jmprel_count * sizeof(Elf64_Rela));
 						shiva_debug("Inserted .got.plt hook breakpoint: %#lx\n", bp->bp_addr);

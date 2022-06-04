@@ -1,0 +1,20 @@
+syn.lo: syn.c types.h /usr/include/x86_64-linux-musl/stdio.h \
+ /usr/include/x86_64-linux-musl/features.h \
+ /usr/include/x86_64-linux-musl/bits/alltypes.h \
+ /usr/include/x86_64-linux-musl/inttypes.h \
+ /usr/include/x86_64-linux-musl/stdint.h \
+ /usr/include/x86_64-linux-musl/bits/stdint.h itab.h decode.h syn.h \
+ /usr/include/x86_64-linux-musl/stdarg.h udint.h ../config.h
+types.h:
+/usr/include/x86_64-linux-musl/stdio.h:
+/usr/include/x86_64-linux-musl/features.h:
+/usr/include/x86_64-linux-musl/bits/alltypes.h:
+/usr/include/x86_64-linux-musl/inttypes.h:
+/usr/include/x86_64-linux-musl/stdint.h:
+/usr/include/x86_64-linux-musl/bits/stdint.h:
+itab.h:
+decode.h:
+syn.h:
+/usr/include/x86_64-linux-musl/stdarg.h:
+udint.h:
+../config.h:

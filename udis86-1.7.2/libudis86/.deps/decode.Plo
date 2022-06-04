@@ -1,0 +1,22 @@
+decode.lo: decode.c udint.h ../config.h types.h \
+ /usr/include/x86_64-linux-musl/stdio.h \
+ /usr/include/x86_64-linux-musl/features.h \
+ /usr/include/x86_64-linux-musl/bits/alltypes.h \
+ /usr/include/x86_64-linux-musl/inttypes.h \
+ /usr/include/x86_64-linux-musl/stdint.h \
+ /usr/include/x86_64-linux-musl/bits/stdint.h itab.h decode.h \
+ /usr/include/x86_64-linux-musl/string.h \
+ /usr/include/x86_64-linux-musl/strings.h
+udint.h:
+../config.h:
+types.h:
+/usr/include/x86_64-linux-musl/stdio.h:
+/usr/include/x86_64-linux-musl/features.h:
+/usr/include/x86_64-linux-musl/bits/alltypes.h:
+/usr/include/x86_64-linux-musl/inttypes.h:
+/usr/include/x86_64-linux-musl/stdint.h:
+/usr/include/x86_64-linux-musl/bits/stdint.h:
+itab.h:
+decode.h:
+/usr/include/x86_64-linux-musl/string.h:
+/usr/include/x86_64-linux-musl/strings.h:

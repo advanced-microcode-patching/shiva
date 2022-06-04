@@ -455,6 +455,7 @@ typedef struct shiva_trace_bp {
 typedef struct shiva_trace_handler {
 	shiva_trace_bp_type_t type;
 	void * (*handler_fn)(void *); // points to handler triggered by BP
+	struct sigaction sa;
 	TAILQ_HEAD(, shiva_trace_bp) bp_tqlist; // list of current bp's
 	TAILQ_ENTRY(shiva_trace_handler) _linkage;
 } shiva_trace_handler_t;
