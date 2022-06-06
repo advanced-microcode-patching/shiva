@@ -96,7 +96,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 			}
 		}
 		if (elf_symbol_by_name(&linker->self, current->symname, &symbol) == false) {
-			fprintf("Could not resolve symbol '%s'. Linkage failure!\n",
+			fprintf(stderr, "Could not resolve symbol '%s'. Linkage failure!\n",
 			    current->symname);
 			return false;
 		}

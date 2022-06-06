@@ -308,13 +308,14 @@ int main(int argc, char **argv, char **envp)
 		exit(EXIT_FAILURE);
 	}
 
+#if 0
 	act.sa_handler = shiva_sighandle;
 	sigemptyset(&act.sa_mask);
 	act.sa_flags = 0;
 	sigaction(SIGINT, &act, NULL);
 	sigemptyset(&set);
 	sigaddset(&set, SIGINT);
-
+#endif
 	ctx.envp = envp;
 	ctx.argv = argv;
 

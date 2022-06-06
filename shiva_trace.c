@@ -1,5 +1,12 @@
 #include "shiva.h"
 
+static bool shiva_trace_op_peek(struct shiva_ctx *, pid_t,
+    void *, void *, size_t, shiva_error_t *);
+
+/*
+ * XXX FIXME
+ * temporary version, doesn't store rbp, rip, or rdi.
+ */
 void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *regs)
 {
 	__asm__ __volatile__(
@@ -43,9 +50,8 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 	bool res;
 	int ret, o_prot;
 
-	shiva_debug("Inside shiva_trace_write\n");
 	if (shiva_maps_prot_by_addr(ctx, (uint64_t)addr, &o_prot) == false) {
-	    shiva_error_set(error, "poke pid (%d) at %#lx failed: "
+	    shiva_error_set(error, "shiva_trace_write pid(%d) at %#lx failed: "
 	    "cannot find memory protection\n", pid, (uint64_t)addr);
 		return false;
 	}
@@ -72,7 +78,7 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 	 */
 	ret = mprotect((void *)aligned_vaddr, 4096, o_prot);
 	if (ret < 0) {
-		shiva_error_set(error, "poke pid (%d) at %#lx failed: "
+		shiva_error_set(error, "shiva_trace_write_pid(%d) at %#lx failed: "
 		    "mprotect failure: %s\n", pid, (uint64_t)addr, strerror(errno));
 		return false;
 	}
@@ -139,14 +145,14 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 	uint8_t tramp_inst[12] = "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x50\xc3";
 	uint64_t call_offset, call_site;
 	bool res;
-	uint64_t o_call_offset;
+	uint64_t o_call_offset, trap, qword;
 	bool found_handler = false;
 	struct elf_plt plt_entry;
 	elf_plt_iterator_t plt_iter;
 	elf_pltgot_iterator_t pltgot_iter;
 	struct elf_pltgot_entry pltgot_entry;
 	char *symname;
-	int i, pid, bits;
+	int i, pid, bits, signum;
 	elf_relocation_iterator_t rel_iter;
 	struct elf_relocation rel;
 	bool found_record = false;
@@ -159,26 +165,73 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 			switch(current->type) {
 			case SHIVA_TRACE_BP_JMP:
 				break;
+			case SHIVA_TRACE_BP_SEGV:
+				/*
+				 * This type of breakpoint is 5 bytes and installs an invalid jmp instruction:
+				 * jmp 0xdeadbeef
+				 * This triggers a segfault and invokes a handler for SIGSEGV
+				 */
+				signum = SIGSEGV;
+				break;
+			case SHIVA_TRACE_BP_SIGILL:
+				/*
+				 * This breakpoint inserts a two byte ud2 (undefined instruction) to trigger
+				 * a SIGILL. \x0f\x0b\
+				 */
+				signum = SIGILL;
+				if (TAILQ_EMPTY(&current->bp_tqlist)) {
+					struct sigaction sa;
+					/*
+					 * Create SIGILL handler out of handler_fn
+					 * XXX: future calls to sigaction() within the
+					 * target program must be hooked. We can prevent
+					 * sigaction from overwriting our debug handler
+					 * this way.
+					 */
+					sa.sa_sigaction = (void *)handler_fn;
+					sigemptyset(&sa.sa_mask);
+					sa.sa_flags = SA_RESTART | SA_SIGINFO;
+					sigaction(SIGILL, &sa, NULL);
+					memcpy(&current->sa, &sa, sizeof(sa));
+				}
+				if (shiva_trace_op_peek(ctx, pid, (void *)bp_addr,
+				    &qword, sizeof(uint64_t), error) == false) {
+					shiva_error_set(error,
+					    "shiva_trace_op_peek() failed to read %#lx\n", bp_addr);
+					return false;
+				}
+				trap = 0x0b0f;
+				if (shiva_trace_write(ctx, pid,
+				    (void *)bp_addr, &trap, 4, error) == false) {
+					shiva_error_set(error,
+					    "shiva_trace_write() failed to write to %#lx\n", bp_addr);
+					return false;
+				}
+				bp = calloc(1, sizeof(*bp));
+                                if (bp == NULL) {
+                                        shiva_error_set(error, "memory allocation failed: %s\n",
+                                            strerror(errno));
+                                        return false;
+                                }
+                                bp->bp_addr = bp_addr;
+                                bp->bp_len = 2;
+                                bp->bp_type = current->type;
+                                shiva_debug("Inserted SIGILL breakpoint: %#lx\n", bp->bp_addr);
+                                TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
+				break;
 			case SHIVA_TRACE_BP_INT3:
 				/*
 				 * Install 0xcc on MSB of 64bit value
 				 * i.e. 0xdeadbeef becomes 0xdeadbecc
 				 */
-				ud_set_input_buffer(&ctx->disas.ud_obj, inst_ptr, SHIVA_MAX_INST_LEN);
-				bits = elf_class(&ctx->elfobj) == elfclass64 ? 64 : 32;
-				insn_len = ud_insn_len(&ctx->disas.ud_obj);
-				assert(insn_len <= 15);
-				bp = calloc(1, sizeof(*bp));
-				if (bp == NULL) {
-					shiva_error_set(error, "memory allocation failed: %s\n",
-					    strerror(errno));
-					return false;
-				}
 				if (TAILQ_EMPTY(&current->bp_tqlist)) {
 					struct sigaction sa;
-
 					/*
 					 * Create SIGTRAP handler out of handler_fn
+					 * XXX: future calls to sigaction() within the
+					 * target program must be hooked. We can prevent
+					 * sigaction from overwriting our debug handler
+					 * this way.
 					 */
 					sa.sa_sigaction = (void *)handler_fn;
 					sigemptyset(&sa.sa_mask);
@@ -186,8 +239,26 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					sigaction(SIGTRAP, &sa, NULL);
 					memcpy(&current->sa, &sa, sizeof(sa));
 				}
+				if (shiva_trace_op_peek(ctx, pid, (void *)bp_addr, &qword, sizeof(uint64_t), error) == false) {
+					shiva_error_set(error, "shiva_trace_op_peek() failed to read %#lx\n", bp_addr);
+					return false;
+				}
+				trap = (qword & ~0xff) | 0xcc;
+				if (shiva_trace_write(ctx, pid, (void *)bp_addr, &trap, sizeof(uint64_t), error) == false) {
+					shiva_error_set(error, "shiva_trace_write() failed to write to %#lx\n", bp_addr);
+					return false;
+				}
+				bp = calloc(1, sizeof(*bp));
+				if (bp == NULL) {
+					shiva_error_set(error, "memory allocation failed: %s\n",
+					    strerror(errno));
+					return false;
+				}
 				bp->bp_addr = bp_addr;
 				bp->bp_len = 1;
+				bp->bp_type = current->type;
+				shiva_debug("Inserted int3 breakpoint: %#lx\n", bp->bp_addr);
+				TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
 				break;
 			case SHIVA_TRACE_BP_PLTGOT:
 				if (elf_plt_by_name(&ctx->elfobj, (char *)option, &plt_entry) == false) {

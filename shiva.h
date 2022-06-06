@@ -306,7 +306,7 @@ bool shiva_auxv_set_value(struct shiva_auxv_iterator *, long);
  */
 bool shiva_ulexec_prep(shiva_ctx_t *);
 bool shiva_ulexec_load_elf_binary(struct shiva_ctx *, elfobj_t *, bool);
-
+uint8_t * shiva_ulexec_allocstack(struct shiva_ctx *);
 /*
  * shiva_module.c
  */
@@ -392,6 +392,8 @@ typedef enum shiva_trace_bp_type {
         SHIVA_TRACE_BP_JMP = 0,
         SHIVA_TRACE_BP_CALL,
         SHIVA_TRACE_BP_INT3,
+	SHIVA_TRACE_BP_SEGV,
+	SHIVA_TRACE_BP_SIGILL,
         SHIVA_TRACE_BP_TRAMPOLINE,
 	SHIVA_TRACE_BP_PLTGOT
 } shiva_trace_bp_type_t;
