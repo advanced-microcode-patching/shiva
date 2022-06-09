@@ -103,7 +103,16 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		shiva_debug("Found symbol '%s' within Shiva. Symbol value: %#lx Shiva base: %#lx\n",
 		    current->symname, symbol.value, linker->shiva_base);
 		GOT = (uint64_t *)((uint64_t)(linker->data_vaddr + linker->pltgot_off + current->gotoff));
+#ifdef SHIVA_STANDALONE
+		/*
+		 * NOTE: Shiva is now linked as an ET_EXEC in standalone mode to promote
+		 * certain capabilities, such as 'SHIVA_TRACE_BP_CALL' hooks, which only work
+		 * in small code models.
+		 */
+		*(uint64_t *)GOT = symbol.value;
+#else
 		*(uint64_t *)GOT = symbol.value + linker->shiva_base;
+#endif
 	}
 #if 0
 	/*
@@ -359,7 +368,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 				return true;
 			}
 			/* 
-			 * 2. Look up the symbol from within the debugger binary itself.
+			 * 2. Look up the symbol from within the Shiva binary itself.
 			 */
 internal_lookup:
 			shiva_debug("Looking up symbol %s inside of Shiva\n");
@@ -373,7 +382,11 @@ internal_lookup:
 				 * symbol.value as the symval, instead of symbol.value + linker->text_vaddr
 				 * (Which adds the module text segment to symbol.value).
 				 */
+#ifdef SHIVA_STANDALONE
+				symval = symbol.value;
+#else
 				symval = symbol.value + linker->shiva_base;
+#endif
 				rel_unit = &linker->text_mem[smap.offset + rel.offset];
 				rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 				rel_val = symval + rel.addend - rel_addr;

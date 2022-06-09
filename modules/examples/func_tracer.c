@@ -56,7 +56,6 @@ shakti_main(shiva_ctx_t *ctx)
 	struct shiva_branch_site branch;
 	struct shiva_trace_handler trace_handler;
 
-	printf("Shiva function tracing example\n");
 	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_ATTACH,
 	    NULL, NULL, 0, &error);
 	if (res == false) {
@@ -72,7 +71,6 @@ shakti_main(shiva_ctx_t *ctx)
 	}
 	shiva_callsite_iterator_init(ctx, &call_iter);
 	while (shiva_callsite_iterator_next(&call_iter, &branch) == ELF_ITER_OK) {
-		printf("Set breakpoint on %#lx\n", branch.branch_site + ctx->ulexec.base_vaddr);
 		res = shiva_trace_set_breakpoint(ctx, (void *)&shakti_handler,
 		    branch.branch_site + ctx->ulexec.base_vaddr, NULL, &error);
 		if (res == false) {
