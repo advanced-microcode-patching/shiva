@@ -12,8 +12,12 @@
 void
 bp_handler(int sig, siginfo_t *si, void *data)
 {
+	
+	ucontext_t *ctx = (ucontext_t *)data;
 
-	printf("SIGNUM: %d Breakpoint hit at %p\n", sig, si->si_addr);
+
+	printf("SIGNUM: %d Breakpoint hit at %#lx\n", sig,
+	    ctx->uc_mcontext.gregs[REG_RIP]);
 	return;
 }
 
