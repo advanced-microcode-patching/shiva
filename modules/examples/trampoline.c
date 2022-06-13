@@ -45,7 +45,7 @@ void my_print_string(const char *s)
 	/*
 	 * Restore our trampoline back in place.
 	 */
-	res = shiva_trace_write(ctx, 0, (void *)vaddr, &bp->insn.o_insn, bp->bp_len, &error);
+	res = shiva_trace_write(ctx, 0, (void *)vaddr, &bp->insn.n_insn, bp->bp_len, &error);
         if (res == false) {
                 printf("shiva_trace_write failed: %s\n", shiva_error_msg(&error));
                 exit(-1);
