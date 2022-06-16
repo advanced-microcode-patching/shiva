@@ -205,6 +205,26 @@ typedef struct shiva_trace_regset_x86_64 {
 	uint64_t flags, cs, ss, fs, ds;
 } shiva_trace_regset_x86_64_t;
 
+typedef struct shiva_trace_regset_x86_64 shiva_trace_jumpbuf_t;
+
+#define RAX_OFF 0
+#define RBX_OFF 8
+#define RCX_OFF 16
+#define RDX_OFF 24
+#define RSI_OFF 32
+#define RDI_OFF 40
+#define RBP_OFF 48
+#define RSP_OFF 56
+#define RIP_OFF 64
+#define R8_OFF  72
+#define R9_OFF  80
+#define R10_OFF 88
+#define R11_OFF 96
+#define R12_OFF 104
+#define R13_OFF 112
+#define R14_OFF 120
+#define R15_OFF 128
+
 typedef struct shiva_ctx {
 	char *path; // path to target executable
 	int argc;
@@ -485,6 +505,8 @@ struct shiva_trace_bp * shiva_trace_bp_struct(void *);
 bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(void *), uint64_t, void *, shiva_error_t *);
 bool shiva_trace_write(struct shiva_ctx *, pid_t, void *, const void *, size_t, shiva_error_t *);
 void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *);
+void __attribute__((naked)) shiva_trace_setjmp_x86_64(shiva_trace_jumpbuf_t *);
+void shiva_trace_longjmp_x86_64(shiva_trace_jumpbuf_t *jumpbuf, uint64_t ip);
 /*
  * shiva_trace_thread.c
  */

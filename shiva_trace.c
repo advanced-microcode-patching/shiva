@@ -5,7 +5,7 @@ static bool shiva_trace_op_peek(struct shiva_ctx *, pid_t,
 
 /*
  * XXX FIXME
- * temporary version, doesn't store rbp, rip, or rdi.
+ * temporary version.
  */
 void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *regs)
 {
@@ -25,6 +25,61 @@ void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset
 		"movq %r15, 104(%rdi)\n\t"
 		"ret\n\t"
 		);
+}
+
+/*
+ * This is primarily designed for handler functions. This will save the state
+ * of the code execution location that triggered the breakpoint handler to run.
+ * so that the handler can return execution back to the location where the breakpoint
+ * was after it replaces the original instruction.
+ */
+void __attribute__ ((naked)) shiva_trace_setjmp_x86_64(shiva_trace_jumpbuf_t *jmpbuf)
+{
+	__asm__ __volatile__(
+		"movq %rax, 0(%rdi)\n\t"
+		"movq %rbx, 8(%rdi)\n\t"
+		"movq %rcx, 16(%rdi)\n\t"
+		"movq %rdx, 24(%rdi)\n\t"
+		"movq %rsi, 32(%rdi)\n\t"
+		"movq %rbp, 48(%rdi)\n\t"
+		"lea 8(%rsp), %rdx\n\t"
+		"movq %rdx, 56(%rdi)\n\t"
+		"movq %r8,  72(%rdi)\n\t"
+		"movq %r9,  80(%rdi)\n\t"
+		"movq %r10, 88(%rdi)\n\t"
+		"movq %r11, 96(%rdi)\n\t"
+		"movq %r12, 104(%rdi)\n\t"
+		"movq %r13, 112(%rdi)\n\t"
+		"movq %r14, 120(%rdi)\n\t"
+		"movq %r15, 128(%rdi)\n\t"
+		"xor  %rax, %rax\n\t"
+		"ret\n\t"
+		);
+}
+
+void shiva_trace_longjmp_x86_64(shiva_trace_jumpbuf_t *jumpbuf, uint64_t ip)
+{
+
+	__asm__ __volatile__(
+		"movq 0(%rdi), %rax\n\t"
+		"movq 8(%rdi), %rbx\n\t"
+		"movq 16(%rdi), %rcx\n\t"
+		"movq 24(%rdi), %rdx\n\t"
+		"movq 32(%rdi), %rsi\n\t"
+		"movq 48(%rdi), %rbp\n\t"
+		"movq 56(%rdi), %rsp\n\t"
+		"movq 72(%rdi), %r8\n\t"
+		"movq 80(%rdi), %r9\n\t"
+		"movq 88(%rdi), %r10\n\t"
+		"movq 96(%rdi), %r11\n\t"
+		"movq 104(%rdi), %r12\n\t"
+		"movq 112(%rdi), %r13\n\t"
+		"movq 120(%rdi), %r14\n\t"
+		"movq 128(%rdi), %r15\n\t");
+
+	__asm__ __volatile__ (
+			"movq %0, %%rdx\n\t"
+			"jmp *%%rdx" :: "r"(ip));
 }
 
 uint64_t
@@ -208,16 +263,16 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					return false;
 				}
 				bp = calloc(1, sizeof(*bp));
-                                if (bp == NULL) {
-                                        shiva_error_set(error, "memory allocation failed: %s\n",
-                                            strerror(errno));
-                                        return false;
-                                }
-                                bp->bp_addr = bp_addr;
-                                bp->bp_len = 2;
-                                bp->bp_type = current->type;
-                                shiva_debug("Inserted SIGILL breakpoint: %#lx\n", bp->bp_addr);
-                                TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
+				if (bp == NULL) {
+					shiva_error_set(error, "memory allocation failed: %s\n",
+					    strerror(errno));
+					return false;
+				}
+				bp->bp_addr = bp_addr;
+				bp->bp_len = 2;
+				bp->bp_type = current->type;
+				shiva_debug("Inserted SIGILL breakpoint: %#lx\n", bp->bp_addr);
+				TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
 				break;
 			case SHIVA_TRACE_BP_INT3:
 				/*
@@ -244,6 +299,9 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					return false;
 				}
 				trap = (qword & ~0xff) | 0xcc;
+				//*(uint64_t *)&bp->insn.o_insn[0] = qword;
+				//*(uint64_t *)&bp->insn.n_insn[0] = trap;
+
 				if (shiva_trace_write(ctx, pid, (void *)bp_addr, &trap, sizeof(uint64_t), error) == false) {
 					shiva_error_set(error, "shiva_trace_write() failed to write to %#lx\n", bp_addr);
 					return false;

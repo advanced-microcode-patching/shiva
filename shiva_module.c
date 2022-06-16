@@ -691,7 +691,6 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 			shiva_debug("COUNT: %zu\n", count);
 		}
 	}
-
 	return true;
 }
 
@@ -738,7 +737,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 
 		shiva_maps_iterator_t maps_iter;
 		struct shiva_mmap_entry mmap_entry;
-	
+
 		shiva_maps_iterator_init(ctx, &maps_iter);
 		while (shiva_maps_iterator_next(&maps_iter, &mmap_entry) == SHIVA_ITER_OK) {
 			if (mmap_entry.mmap_type == SHIVA_MMAP_TYPE_HEAP) {
