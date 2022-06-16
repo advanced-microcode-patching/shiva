@@ -13,42 +13,34 @@ void
 bp_handler(int sig, siginfo_t *si, void *data)
 {
 	
-	ucontext_t *ctx = (ucontext_t *)data;
+	ucontext_t *uctx = (ucontext_t *)data;
 	shiva_error_t error;
 	uint64_t rip;
 	bool res;
-
 
 	/*
 	 * RESTORE REGISTER STATE FROM CTX
 	 * and jmp <RIP - 1>
 	 */
 	printf("SIGNUM: %d Breakpoint hit at %#lx\n", sig,
-	    ctx->uc_mcontext.gregs[REG_RIP] - 1);
-	rip = ctx->uc_mcontext.gregs[REG_RIP] - 1;
+	    uctx->uc_mcontext.gregs[REG_RIP] - 1);
+	rip = uctx->uc_mcontext.gregs[REG_RIP] - 1;
 
 	int8_t val = 0x55;
 
+	/*
+	 * Remove breakpoint from instruction
+	 */
 	res = shiva_trace_write(ctx_global, 0, (void *)rip, &val, 1, &error);
 	if (res == false) {
 		printf("shiva_trace_write failed\n");
 		return;
 	}
-
 	/*
-	 * Restore context
+	 * Rewind stack, restore regs, and do an equivelent to
+	 * a longjmp back to the instruction that trapped.
 	 */
-#if 0
-	__asm__ __volatile__ ("pushf\n\t"
-			      "pop %rdx\n\t"
-			      "or %rdx, 0x100\n\t"
-			      "push %rdx\n\t"
-			      "popf");
-#endif
-	printf("Jumping to %#lx\n", rip);
-	printf("Byte: %02x\n", *(uint8_t *)rip);
-	__asm__ __volatile__ ("leave\n\t"
-			      "jmp *%0" :: "r"(rip));
+	SHIVA_TRACE_LONGJMP_RETURN(&uctx->uc_mcontext.gregs[0], rip);
 	return;
 }
 

@@ -216,8 +216,8 @@ typedef struct shiva_trace_regset_x86_64 shiva_trace_jumpbuf_t;
 #define RBP_OFF 48
 #define RSP_OFF 56
 #define RIP_OFF 64
-#define R8_OFF  72
-#define R9_OFF  80
+#define R8_OFF	72
+#define R9_OFF	80
 #define R10_OFF 88
 #define R11_OFF 96
 #define R12_OFF 104
@@ -388,8 +388,8 @@ bool shiva_proc_duplicate_image(shiva_ctx_t *ctx);
 
 
 /*
- *When your handler function executes, assuming is was invoked
- * via a CALLHOOK breakpoint, then it probably wants to call the
+ * When your handler function executes, assuming is was invoked
+ * via a BP_CALL breakpoint, then it probably wants to call the
  * original function and return. This macro allows you to do this,
  * see modules/shakti_runtime.c
  */
@@ -409,12 +409,12 @@ bool shiva_proc_duplicate_image(shiva_ctx_t *ctx);
 }
 
 typedef enum shiva_trace_bp_type {
-        SHIVA_TRACE_BP_JMP = 0,
-        SHIVA_TRACE_BP_CALL,
-        SHIVA_TRACE_BP_INT3,
+	SHIVA_TRACE_BP_JMP = 0,
+	SHIVA_TRACE_BP_CALL,
+	SHIVA_TRACE_BP_INT3,
 	SHIVA_TRACE_BP_SEGV,
 	SHIVA_TRACE_BP_SIGILL,
-        SHIVA_TRACE_BP_TRAMPOLINE,
+	SHIVA_TRACE_BP_TRAMPOLINE,
 	SHIVA_TRACE_BP_PLTGOT
 } shiva_trace_bp_type_t;
 
@@ -427,14 +427,46 @@ typedef enum shiva_trace_bp_type {
 		void *__ret = __builtin_return_address(0); \
 		TAILQ_FOREACH(bp, &handler->bp_tqlist, _linkage)  { \
 			if (bp->bp_type == SHIVA_TRACE_BP_TRAMPOLINE) \
-				break;  \
+				break;	\
 			if (bp->bp_type == SHIVA_TRACE_BP_PLTGOT) \
-				break;  \
+				break;	\
 			if ((void *)bp->retaddr == __ret)	\
 				break;	\
 		} \
 	} while(0); \
 }
+
+/*
+ * A necessary longjmp from a trap handler back to the
+ * instruction that was trapped on. We must reset the
+ * registers and rewind the stack back. TODO: Need to handle
+ * issue with rbp restoration.
+ */
+#define SHIVA_TRACE_LONGJMP_RETURN(regptr, rip_target)	\
+			__asm__ __volatile__("movq %0, %%rdx\n" :: "r"(regptr)); \
+			__asm__ __volatile__(				\
+					"movq 0(%%rdx), %%r8\n\t" \
+					"movq 8(%%rdx), %%r9\n\t"	\
+					"movq 16(%%rdx), %%r10\n\t"	\
+					"movq 24(%%rdx), %%r11\n\t"	\
+					"movq 32(%%rdx), %%r12\n\t"	\
+					"movq 40(%%rdx), %%r13\n\t"	\
+					"movq 48(%%rdx), %%r14\n\t"	\
+					"movq 56(%%rdx), %%r15\n\t" \
+					"movq 64(%%rdx), %%rdi\n\t"	\
+					"movq 72(%%rdx), %%rsi\n\t"	\
+					"movq 88(%%rdx), %%rbx\n\t" \
+					"movq 104(%%rdx), %%rax\n\t" \
+					"movq 112(%%rdx), %%rcx\n\t" \
+					"movq 120(%%rdx), %%rsp\n\t" \
+					"jmp %0" :: "r"(rip_target));
+
+#define SHIVA_TRACE_SET_TRAPFLAG __asm__ __volatile__(	\
+				"pushfq\n\t"	\
+				"pop %rdx\n\t"	\
+				"or %rdx, 0x100\n\t"	\
+				"push %rdx\n\t"	\
+				"popfq");
 
 
 typedef enum shiva_trace_op {
