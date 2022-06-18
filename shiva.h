@@ -114,6 +114,13 @@ struct shiva_branch_site {
 	shiva_branch_type_t branch_type;
 	uint64_t target_vaddr;
 	uint64_t branch_site;
+	uint64_t retaddr; /*
+			   * If this is a SHIVA_BRANCH_CALL then
+			   * retaddr will point to the return address
+			   * of the function being called. For now
+			   * retaddr is not used in any other branch
+			   * site type.
+			   */
 	TAILQ_ENTRY(shiva_branch_site) _linkage;
 };
 

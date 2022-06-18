@@ -460,6 +460,21 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 						(void) shiva_target_dynamic_set(ctx, DT_PLTRELSZ,
 						    jmprel_count * sizeof(Elf64_Rela));
 						shiva_debug("Inserted .got.plt hook breakpoint: %#lx\n", bp->bp_addr);
+						/*
+						 * We must also set all possible return addresses
+						 * for this call <symname>@plt -- keeping track of
+						 * this in the 'struct shiva_trace_bp->plt_retaddrs
+						 * -- This is important information, because when we
+						 *  are within a PLTGOT breakpoint handler we can find
+						 *  the associated shiva_trace_bp struct by seeing if
+						 *  the current return address (At the top of the stack)
+						 *  matches one of the valid retaddrs for the plt call
+						 *  associated with the PLT/GOT breakpoint. If the
+						 *  retaddr at the top of the stack matches one of
+						 *  the addresses in the handlers current_bp->retaddrs_tqlist
+						 *  then the handlers current bp struct is the correct
+						 *  one and correlates to PLT symbol bp->symbol.name.
+						 */
 						TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
 						return true;
 					}

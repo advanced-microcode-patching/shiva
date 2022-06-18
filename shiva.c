@@ -186,7 +186,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	 * mode it wouldn't matter since we can just re-use the stack, auxv, etc. In our case
 	 * though we call back to various data structures, symbols and code within the Shiva
 	 * interpreter, and the Shiva stack data will be corrupted if we don't use a separate
-	 * stack for the executable.
+	 * stack for the target executable.
 	 */
 	n_stack = shiva_ulexec_allocstack(ctx);
 	if (n_stack == NULL) {
@@ -200,12 +200,23 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	rsp--;
 
 	/*
+	 * COPY THE TOP OF OLD STACK TO TOP OF NEW STACK
 	 * We want to copy the top-most page of the old stack onto the top-most
 	 * page of the new stack. To be more specific we're copying less than
 	 * a page, starting at &argc and then copying everything after that.
 	 */
 	o_stack = (uint8_t *)rsp;
 	o_stack_addr = (uint64_t)o_stack;
+	/*
+	 * XXX BUG XXX
+	 * There is a bug here that occasionally results in a segfault
+	 * later on in the code.
+	 * There are some situations I think where the o_stack_end
+	 * (Which points to the highest stack address) needs to be
+	 * page aligned up one more time. There's not enough room
+	 * being allocated for the stacks copylen in some cases with the
+	 * current code... debug this!
+	 */
 	o_stack_end = ELF_PAGEALIGN(o_stack_addr, 0x1000);
 	copy_len = o_stack_end - o_stack_addr;
 

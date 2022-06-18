@@ -9,7 +9,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 	struct elf_section section;
 	struct elf_symbol symbol;
 	const uint8_t *ptr;
-	uint64_t call_site, call_addr, runtime_addr;
+	uint64_t call_site, call_addr, runtime_addr, retaddr;
 	uint64_t current_address = ctx->disas.base;
 	int64_t call_offset;
 	int bits;
@@ -27,6 +27,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 		struct shiva_branch_site *tmp;
 		size_t insn_len = ud_insn_len(&ctx->disas.ud_obj);
 
+		shiva_debug("insn_len: %zu\n", insn_len);
 		memset(&symbol, 0, sizeof(symbol));
 
 		if (ud_insn_mnemonic(&ctx->disas.ud_obj) != UD_Icall) {
@@ -50,6 +51,8 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 		call_site = current_address;
 		call_addr = call_site + call_offset + 5;
 		call_addr &= 0xffffffff;
+		retaddr = call_site + insn_len;
+
 		if (elf_symbol_by_value(&ctx->elfobj, call_addr,
 		    &symbol) == false) {
 			/*
@@ -67,6 +70,10 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 					symbol.type = STT_FUNC;
 					symbol.bind = STB_GLOBAL;
 					symbol.size = 0;
+					tmp->retaddr = retaddr; /* TODO: In the future make sure that we
+								 * set the retaddr for all calls, not
+								 * just plt calls as we are now.
+								 */
 					break;
 				}
 			}

@@ -39,6 +39,9 @@ bp_handler(int sig, siginfo_t *si, void *data)
 	/*
 	 * Rewind stack, restore regs, and do an equivelent to
 	 * a longjmp back to the instruction that trapped.
+	 * TODO: Eventually when there is a compiler wrapper
+	 * (i.e. shiva-gcc) then these macros will automatically
+	 * be placed into certain functions
 	 */
 	SHIVA_TRACE_LONGJMP_RETURN(&uctx->uc_mcontext.gregs[0], rip);
 	return;
