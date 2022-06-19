@@ -507,9 +507,10 @@ typedef struct shiva_trace_bp {
 	uint64_t o_target; // if this is a call or jmp breakpoint, o_target holds original target address
 	int64_t o_call_offset; // if this is a call or jmp breakpoint, o_offset holds the original target offset
 	struct elf_symbol symbol;
-	char *call_target_symname;
-	bool symbol_location;
+	char *call_target_symname; // only used for SHIVA_TRACE_BP_CALL hooks
+	bool symbol_location;	// true if bp->symbol gets set
 	struct shiva_trace_insn insn;
+	struct hsearch_data valid_plt_retaddrs; // only used for SHIVA_TRACE_BP_PLTGOT hooks
 	TAILQ_ENTRY(shiva_trace_bp) _linkage;
 } shiva_trace_bp_t;
 

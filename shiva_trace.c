@@ -187,6 +187,8 @@ shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(void *)
 	return true;
 }
 
+#define MAX_PLT_RETADDR_COUNT 4096
+
 bool
 shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
     uint64_t bp_addr, void *option, shiva_error_t *error)
@@ -212,6 +214,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 	struct elf_relocation rel;
 	bool found_record = false;
 	size_t jmprel_count = 0;
+	struct shiva_branch_site *branch_site;
 
 	TAILQ_FOREACH(current, &ctx->tailq.trace_handlers_tqlist, _linkage) {
 		if (current->handler_fn == handler_fn) {
@@ -475,6 +478,40 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 						 *  then the handlers current bp struct is the correct
 						 *  one and correlates to PLT symbol bp->symbol.name.
 						 */
+						(void) hcreate_r(MAX_PLT_RETADDR_COUNT, &bp->valid_plt_retaddrs);
+						TAILQ_FOREACH(branch_site, &ctx->tailq.branch_tqlist, _linkage) {
+							char *p;
+							size_t copy_len;
+
+							printf("Branch site target: %s\n", branch_site->symbol.name);
+							if (strstr(branch_site->symbol.name, "@plt") == NULL)
+								continue;
+							if (branch_site->branch_type != SHIVA_BRANCH_CALL)
+								continue;
+							printf("Comparing symbol names\n");
+							p = strchr(branch_site->symbol.name, '@');
+							copy_len = p - branch_site->symbol.name;
+							printf("Comparing %s to %s\n", option, branch_site->symbol.name);
+							printf("copy len: %d\n", copy_len);
+							if (strncmp((char *)option, branch_site->symbol.name,
+							    copy_len) == 0) {
+								ENTRY e, *ep;
+								/*
+								 * We found a branch site (A call) that calls
+								 * the PLT symbol that we are hooking via
+								 * PLTGOT. Add the retaddr to the the current
+								 * breakpoints 'valid_plt_retaddrs' cache.
+								 */
+								e.key = (uint64_t *)&branch_site->retaddr;
+								e.data = (uint64_t *)&branch_site->retaddr;
+								printf("Adding PLT retaddr %#lx to cache\n", branch_site->retaddr);
+								if (hsearch_r(e, ENTER, &ep, &bp->valid_plt_retaddrs) == 0) {
+									shiva_error_set(error, "hsearch_r failed: %s\n",
+									    strerror(errno));
+									return false;
+								}
+							}
+						}
 						TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
 						return true;
 					}
