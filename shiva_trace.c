@@ -484,7 +484,6 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 							char *p;
 							size_t copy_len;
 
-							printf("Branch site target: %s\n", branch_site->symbol.name);
 							if (strstr(branch_site->symbol.name, "@plt") == NULL)
 								continue;
 							if (branch_site->branch_type != SHIVA_BRANCH_CALL)
@@ -506,7 +505,6 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 								/*
 								 * Set the PLT address that corresponds to our PLTGOT hook
 								 */
-								printf("Setting plt_addr: %#lx\n", branch_site->target_vaddr);
 								bp->plt_addr = branch_site->target_vaddr;
 								
 #if 0

@@ -4,6 +4,10 @@
 
 void print_string(const char *s)
 {
+	struct timeval tv1, tv2;
+	unsigned long end_time;
+	unsigned long start_time;
+
 	puts(s);
 	return;
 }
