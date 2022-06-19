@@ -68,6 +68,11 @@
 					    "ret" :: "r" (stack), "g" (addr), "g"(entry))
 
 
+typedef struct shiva_addr_struct {
+	uint64_t addr;
+	TAILQ_ENTRY(shiva_addr_struct) _linkage;
+} shiva_addr_struct_t;
+
 typedef enum shiva_iterator_res {
 	SHIVA_ITER_OK = 0,
 	SHIVA_ITER_DONE,
@@ -239,8 +244,9 @@ typedef struct shiva_ctx {
 	char **argv;
 	char **envp;
 	int argcount;
-	elfobj_t elfobj;
-	elfobj_t ldsobj;
+	elfobj_t shiva_elfobj; // shiva executable
+	elfobj_t elfobj;	// target executable
+	elfobj_t ldsobj;	// ldso executable
 	uint64_t flags;
 	int pid;
 	int duplicate_pid;
@@ -504,13 +510,15 @@ typedef struct shiva_trace_bp {
 	size_t bp_len;
 	uint8_t *inst_ptr;
 	uint64_t retaddr;
-	uint64_t o_target; // if this is a call or jmp breakpoint, o_target holds original target address
+	uint64_t plt_addr; // Only used for PLTGOT hooks. This holds the corresponding PLT address.
+	uint64_t o_target; // for CALL/JMP hooks this holds original target. For PLTGOT hooks it holds original gotptr
 	int64_t o_call_offset; // if this is a call or jmp breakpoint, o_offset holds the original target offset
 	struct elf_symbol symbol;
 	char *call_target_symname; // only used for SHIVA_TRACE_BP_CALL hooks
 	bool symbol_location;	// true if bp->symbol gets set
 	struct shiva_trace_insn insn;
 	struct hsearch_data valid_plt_retaddrs; // only used for SHIVA_TRACE_BP_PLTGOT hooks
+	TAILQ_HEAD(, shiva_addr_struct) retaddr_list;
 	TAILQ_ENTRY(shiva_trace_bp) _linkage;
 } shiva_trace_bp_t;
 
@@ -547,6 +555,7 @@ bool shiva_trace_write(struct shiva_ctx *, pid_t, void *, const void *, size_t, 
 void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *);
 void __attribute__((naked)) shiva_trace_setjmp_x86_64(shiva_trace_jumpbuf_t *);
 void shiva_trace_longjmp_x86_64(shiva_trace_jumpbuf_t *jumpbuf, uint64_t ip);
+uint64_t shiva_trace_base_addr(struct shiva_ctx *);
 /*
  * shiva_trace_thread.c
  */

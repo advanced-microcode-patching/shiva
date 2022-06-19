@@ -35,7 +35,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			continue;
 		}
 		shiva_debug("%-20s %s\n", ud_insn_hex(&ctx->disas.ud_obj),
-                    ud_insn_asm(&ctx->disas.ud_obj));
+		    ud_insn_asm(&ctx->disas.ud_obj));
 		ptr = ud_insn_ptr(&ctx->disas.ud_obj);
 		assert(ptr != NULL);
 		if (ptr[0] != 0xe8) {
@@ -70,10 +70,9 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 					symbol.type = STT_FUNC;
 					symbol.bind = STB_GLOBAL;
 					symbol.size = 0;
-					tmp->retaddr = retaddr; /* TODO: In the future make sure that we
-								 * set the retaddr for all calls, not
-								 * just plt calls as we are now.
-								 */
+					printf("Adding retaddr: %#lx\n", retaddr);
+					tmp->retaddr = retaddr;
+					tmp->target_vaddr = plt_entry.addr;
 					break;
 				}
 			}
@@ -91,7 +90,6 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 		}
 		memcpy(&tmp->symbol, &symbol, sizeof(symbol));
 		tmp->branch_type = SHIVA_BRANCH_CALL;
-		tmp->target_vaddr = runtime_addr;
 		tmp->branch_site = call_site;
 		TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 		current_address += insn_len;

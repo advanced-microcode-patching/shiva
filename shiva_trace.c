@@ -478,6 +478,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 						 *  then the handlers current bp struct is the correct
 						 *  one and correlates to PLT symbol bp->symbol.name.
 						 */
+						TAILQ_INIT(&bp->retaddr_list);
 						(void) hcreate_r(MAX_PLT_RETADDR_COUNT, &bp->valid_plt_retaddrs);
 						TAILQ_FOREACH(branch_site, &ctx->tailq.branch_tqlist, _linkage) {
 							char *p;
@@ -488,28 +489,48 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 								continue;
 							if (branch_site->branch_type != SHIVA_BRANCH_CALL)
 								continue;
-							printf("Comparing symbol names\n");
 							p = strchr(branch_site->symbol.name, '@');
 							copy_len = p - branch_site->symbol.name;
-							printf("Comparing %s to %s\n", option, branch_site->symbol.name);
-							printf("copy len: %d\n", copy_len);
 							if (strncmp((char *)option, branch_site->symbol.name,
 							    copy_len) == 0) {
 								ENTRY e, *ep;
+								struct shiva_addr_struct *addr = shiva_malloc(sizeof(*addr));
 								/*
 								 * We found a branch site (A call) that calls
 								 * the PLT symbol that we are hooking via
 								 * PLTGOT. Add the retaddr to the the current
 								 * breakpoints 'valid_plt_retaddrs' cache.
 								 */
-								e.key = (uint64_t *)&branch_site->retaddr;
-								e.data = (uint64_t *)&branch_site->retaddr;
-								printf("Adding PLT retaddr %#lx to cache\n", branch_site->retaddr);
+								addr->addr = branch_site->retaddr + shiva_trace_base_addr(ctx);
+								TAILQ_INSERT_TAIL(&bp->retaddr_list, addr, _linkage);
+								/*
+								 * Set the PLT address that corresponds to our PLTGOT hook
+								 */
+								printf("Setting plt_addr: %#lx\n", branch_site->target_vaddr);
+								bp->plt_addr = branch_site->target_vaddr;
+								
+#if 0
+								/*
+								 * We cannot use an hcreate cache because there's
+								 * some incompatibility when using it cross module
+								 * execution.
+								 */
+								val = branch_site->retaddr + ctx->ulexec.base_vaddr;
+								sprintf(tmp, "%#lx", val);
+								memcpy(ptr_val, &val, sizeof(val));
+								e.key = (char *)tmp;
+								e.data = (void *)ptr_val;
+								printf("Adding PLT retaddr %s to cache\n", e.key);
+								printf("data: %#lx\n", *(uint64_t *)e.data);
 								if (hsearch_r(e, ENTER, &ep, &bp->valid_plt_retaddrs) == 0) {
 									shiva_error_set(error, "hsearch_r failed: %s\n",
 									    strerror(errno));
 									return false;
 								}
+								if (hsearch_r(e, FIND, &ep, &bp->valid_plt_retaddrs) != 0) {
+									printf("FOUND IT: data: %#lx\n", *(uint64_t *)e.data);
+								}
+#endif
 							}
 						}
 						TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);

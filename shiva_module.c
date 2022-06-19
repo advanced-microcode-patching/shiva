@@ -920,6 +920,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		    "/proc/self/exe", elf_error_msg(&error));
 		return false;
 	}
+	memcpy(&ctx->shiva_elfobj, &linker->self, sizeof(elfobj_t));
 
 	if (calculate_text_size(linker) == false) {
 		shiva_debug("Failed to calculate .text size for parasite module\n");

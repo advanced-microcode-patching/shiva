@@ -35,4 +35,27 @@ shiva_malloc(size_t len)
 	return mem;
 }
 
+char * shiva_itoa(long x, char *t)
+{
+	int i;
+	int j;
+
+	i = 0;
+	do
+	{
+		t[i] = (x % 10) + '0';
+		x /= 10;
+		i++;
+	} while (x!=0);
+
+	t[i] = 0;
+
+	for (j=0; j < i / 2; j++) {
+		t[j] ^= t[i - j - 1];
+		t[i - j - 1] ^= t[j];
+		t[j] ^= t[i - j - 1];
+	}
+
+	return t;
+}
 
