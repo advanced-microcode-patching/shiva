@@ -51,7 +51,7 @@ standalone:
 test:
 	gcc test.c -o test -fcf-protection=none
 	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test.c -o test2 -fcf-protection=none
-	gcc -fcf-protection=none -fno-stack-protector test_vuln.c -o test_vuln
+	gcc -fno-stack-protector test_vuln.c -o test_vuln -fcf-protection=none
 clean:
 	rm -f test
 	rm -f test2
