@@ -49,12 +49,16 @@ standalone:
 	$(MUSL) -DSHIVA_STANDALONE -static -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o ./standalone/shiva
 
 test:
+	rm -f test test2 test_vuln test_vuln2
 	gcc test.c -o test -fcf-protection=none
 	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test.c -o test2 -fcf-protection=none
-	gcc -fcf-protection=none -fno-stack-protector test_vuln.c -o test_vuln
+	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test_vuln.c -o test_vuln -fno-stack-protector -fcf-protection=none
+	gcc test_vuln.c -o test_vuln2 -fno-stack-protector -fcf-protection=none
 clean:
 	rm -f test
 	rm -f test2
+	rm -f test_vuln
+	rm -f test_vuln2
 	rm -f *.o
 	rm -f shiva
 	rm -rf ./ldso

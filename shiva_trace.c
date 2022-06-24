@@ -425,6 +425,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 						 */
 						memset(&symbol, 0, sizeof(symbol));
 						rela_plt_ptr = (Elf64_Rela *)((char *)ctx->ulexec.base_vaddr + rela_plt.offset);
+						shiva_debug("rela_plt_ptr: %p\n", rela_plt_ptr);
 						if (ctx->altrelocs.jmprel == NULL)
 							ctx->altrelocs.jmprel = shiva_malloc(rela_plt.size);
 						for (i = 0, jmprel_count = 0; i < rela_plt.size / rela_plt.entsize; i++) {

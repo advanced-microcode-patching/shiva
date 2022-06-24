@@ -70,7 +70,6 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 					symbol.type = STT_FUNC;
 					symbol.bind = STB_GLOBAL;
 					symbol.size = 0;
-					printf("Adding retaddr: %#lx\n", retaddr);
 					tmp->retaddr = retaddr;
 					tmp->target_vaddr = plt_entry.addr;
 					break;

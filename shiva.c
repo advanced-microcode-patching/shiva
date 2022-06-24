@@ -51,6 +51,14 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 	return true;
 }
 
+int test_mark(void)
+{
+	int i = 1;
+
+	if (i < 1)
+		return 1;
+	else return 0;
+}
 bool
 shiva_build_target_argv(struct shiva_ctx *ctx, char **argv, int argc)
 {
@@ -263,6 +271,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	 * specifically shiva_trace_set_breakpoint case PLTGOT_HOOK 
 	 */
 
+	test_mark();
 	SHIVA_ULEXEC_LDSO_TRANSFER(rsp, ctx->ulexec.ldso.entry_point, entry_point);
 
 	return true;
@@ -423,6 +432,7 @@ int main(int argc, char **argv, char **envp)
 	 * to LDSO.
 	 */
 transfer_control:
+	test_mark();
 	shiva_debug("Passing control to entry point: %#lx\n", ctx.ulexec.entry_point);
 	shiva_debug("LDSO entry point: %#lx\n", ctx.ulexec.ldso.entry_point);
 	SHIVA_ULEXEC_LDSO_TRANSFER(ctx.ulexec.rsp_start, ctx.ulexec.ldso.entry_point,
