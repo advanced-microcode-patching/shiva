@@ -76,7 +76,7 @@ int plt_handler(void *arg)
 			}
 		}
 	}
-	printf("!!! Detected invalid return address\n");
+	printf("!!! Detected illegal return address in PLT\n");
 	abort();
 }
 
@@ -111,8 +111,6 @@ shakti_main(shiva_ctx_t *ctx)
 		 */
 		if (strcmp(plt_entry.symname, "PLT-0") == 0)
 			continue;
-		printf("Setting PLTGOT breakpoint for %s %#lx\n", plt_entry.symname,
-		    plt_entry.addr);
 		res = shiva_trace_set_breakpoint(ctx, (void *)&plt_handler,
 		    0, plt_entry.symname, &error);
 		if (res == false) {
