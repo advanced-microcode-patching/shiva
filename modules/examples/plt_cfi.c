@@ -7,26 +7,13 @@
 
 #include "../shiva.h"
 
-int n_puts(const char *s)
-{
-	char buf[PATH_MAX];
-	/*
-	 * Modify the string passed to puts()
-	 */
-	snprintf(buf, sizeof(buf), "hijacked your string: '%s'", s);
-
-	/*
-	 * Call the original puts with our modified string.
-	 * NOTE: We hijacked puts from libc.so via the PLT hook,
-	 * but we are actually invoking puts() from inside the
-	 * body of code in the Shiva executable, since relocations
-	 * are mapped between the module and shiva. So we are
-	 * invoking the musl-libc puts() that is already built into
-	 * /bin/Shiva.
-	 */
-	return puts(buf);
-}
-
+/*
+ * This function services all PLT calls, and enforces
+ * forwards and backwards edge CFI. If the return address
+ * of the function that was invoked doesn't match it's
+ * CFI data stored in the breakpoints retaddr's list,
+ * then we cancel execution with an exit.
+ */
 int plt_handler(void *arg)
 {
 	shiva_trace_getregs_x86_64(&ctx_global->regs.regset_x86_64);
@@ -77,7 +64,7 @@ int plt_handler(void *arg)
 		}
 	}
 	printf("!!! Detected illegal return address in PLT\n");
-	abort();
+	exit(EXIT_FAILURE);
 }
 
 
