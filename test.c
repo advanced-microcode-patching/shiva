@@ -1,14 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <time.h>
 
 void print_string(const char *s)
 {
-	struct timeval tv1, tv2;
-	unsigned long end_time;
-	unsigned long start_time;
-
+	struct timespec tps, tpe;
+	clock_gettime(CLOCK_MONOTONIC_RAW, &tps);
 	puts(s);
+	clock_gettime(CLOCK_MONOTONIC_RAW, &tpe);
+	printf("%lu s, %lu ns\n", tpe.tv_sec - tps.tv_sec,
+	    tpe.tv_nsec - tps.tv_nsec);
+
 	return;
 }
 int main(int argc, char **argv)
