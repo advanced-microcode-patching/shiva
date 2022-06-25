@@ -1,7 +1,7 @@
 STANDALONE_DIR = './standalone'
 LDSO_DIR = './ldso'
 
-GCC_OPTS_STANDALONE= -fPIC -c -ggdb -DSHIVA_STANDALONE
+GCC_OPTS_STANDALONE= -fPIC -c -ggdb -DSHIVA_STANDALONE -DDEBUG
 GCC_OPTS_LDSO= -fPIC -c -ggdb
 OBJ_LIST=shiva.o shiva_proc.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \
@@ -29,7 +29,7 @@ interp:
 	$(CC) $(GCC_OPTS_LDSO) shiva_callsite.c -o	shiva_callsite.o
 	$(CC) $(GCC_OPTS_LDSO) shiva_proc.c -o	shiva_proc.o
 	$(CC) $(GCC_OPTS_LDSO) shiva_target.c -o	shiva_target.o
-	$(MUSL) -static-pie -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o ./ldso/shiva
+	$(MUSL) -static-pie -Wl,-undefined=prctl -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o ./ldso/shiva
 standalone:
 	[ -d $(STANDALONE_DIR) ] || mkdir -p $(STANDALONE_DIR)
 	$(CC) $(GCC_OPTS_STANDALONE) shiva.c -o		shiva.o
@@ -46,14 +46,15 @@ standalone:
 	$(CC) $(GCC_OPTS_STANDALONE) shiva_callsite.c -o	shiva_callsite.o
 	$(CC) $(GCC_OPTS_STANDALONE) shiva_proc.c -o	shiva_proc.o
 	$(CC) $(GCC_OPTS_STANDALONE) shiva_target.c -o	shiva_target.o
-	$(MUSL) -DSHIVA_STANDALONE -static -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o ./standalone/shiva
+	$(MUSL) -DSHIVA_STANDALONE -static -Wl,-undefined=prctl -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o ./standalone/shiva
 
 test:
-	rm -f test test2 test_vuln test_vuln2
 	gcc test.c -o test -fcf-protection=none
 	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test.c -o test2 -fcf-protection=none
 	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test_vuln.c -o test_vuln -fno-stack-protector -fcf-protection=none
 	gcc test_vuln.c -o test_vuln2 -fno-stack-protector -fcf-protection=none
+	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test_exec.c -o test_exec -fcf-protection=none
+	gcc test_exec.c -o test_exec2 -fcf-protection=none
 clean:
 	rm -f test
 	rm -f test2

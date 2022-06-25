@@ -5,5 +5,6 @@ all:
 	gcc -mcmodel=large -I ../ -fno-stack-protector -c int3_bp.c
 	gcc -mcmodel=large -I ../ -fno-stack-protector -c sigill_bp.c
 	gcc -mcmodel=large -I ../ -fno-stack-protector -c plt_cfi.c
+	gcc -mcmodel=large -I ../ -fno-stack-protector -c sandbox.c
 clean:
 	rm -f *.o
