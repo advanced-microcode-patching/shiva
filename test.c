@@ -5,11 +5,11 @@
 void print_string(const char *s)
 {
 	struct timespec tps, tpe;
-	clock_gettime(CLOCK_MONOTONIC_RAW, &tps);
+	//clock_gettime(CLOCK_MONOTONIC_RAW, &tps);
 	puts(s);
-	clock_gettime(CLOCK_MONOTONIC_RAW, &tpe);
-	printf("%lu s, %lu ns\n", tpe.tv_sec - tps.tv_sec,
-	    tpe.tv_nsec - tps.tv_nsec);
+	//clock_gettime(CLOCK_MONOTONIC_RAW, &tpe);
+	//printf("%lu s, %lu ns\n", tpe.tv_sec - tps.tv_sec,
+	 //   tpe.tv_nsec - tps.tv_nsec);
 
 	return;
 }
