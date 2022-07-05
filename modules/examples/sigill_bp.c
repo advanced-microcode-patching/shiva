@@ -41,7 +41,6 @@ shakti_main(shiva_ctx_t *ctx)
 		printf("couldn't find sybol main in target\n");
 		return -1;
 	}
-	printf("Setting breakpoint at %#lx\n", symbol.value + ctx->ulexec.base_vaddr);
 	res = shiva_trace_set_breakpoint(ctx, (void *)&bp_handler,
 	    symbol.value + ctx->ulexec.base_vaddr, NULL, &error);
 	if (res == false) {
