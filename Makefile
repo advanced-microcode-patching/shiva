@@ -55,6 +55,8 @@ test:
 	gcc test_vuln.c -o test_vuln2 -fno-stack-protector -fcf-protection=none
 	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test_inject.c -o test_inject -fcf-protection=none
 	gcc test_inject.c -o test_inject2 -fcf-protection=none
+	gcc test_antidebug.c -o test_antidebug -fcf-protection=none
+	gcc crackme.c -o crackme -fcf-protection=none
 clean:
 	rm -f test
 	rm -f test2

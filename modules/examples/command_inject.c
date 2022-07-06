@@ -10,10 +10,9 @@
 int n_system(const char *s)
 {
 
-	printf("s: %s\n", s);
 	if (strstr(s, ";") != NULL || strstr(s, "|") != NULL) {
 		printf("Detected possible OS command injection attack '%s'\n", s);
-		abort();
+		exit(EXIT_FAILURE);
 	}
 	return system(s);
 }
