@@ -609,7 +609,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				 * right now we are passing o_target - base_addr to get the symbols
 				 * offset to look up within the binary.
 				 */
-				if (elf_symbol_by_value(&ctx->elfobj,
+				if (elf_symbol_by_value_lookup(&ctx->elfobj,
 				    bp->o_target - shiva_trace_base_addr(ctx), &symbol) == true) {
 					bp->symbol_location = true;
 					memcpy(&bp->symbol, &symbol, sizeof(symbol));

@@ -17,7 +17,7 @@ int main(int argc, char **argv)
 {
 	int i;
 
-	for (i = 0; i < 10000; i++)
+	for (i = 0; i < 10; i++)
 		print_string("Hello World");
 	print_string(argv[1]);
 	exit(0);
