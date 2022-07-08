@@ -56,6 +56,7 @@ shakti_main(shiva_ctx_t *ctx)
 		.len = sizeof(filter)/sizeof(filter[0]),
 		.filter = filter
 	};
+
 	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) {
 		printf("prctl failed\n");
 		exit(-1);

@@ -53,7 +53,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 		call_addr &= 0xffffffff;
 		retaddr = call_site + insn_len;
 
-		if (elf_symbol_by_value(&ctx->elfobj, call_addr,
+		if (elf_symbol_by_value_lookup(&ctx->elfobj, call_addr,
 		    &symbol) == false) {
 			/*
 			 * It's possible the call is calling a plt entry

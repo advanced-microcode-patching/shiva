@@ -1,7 +1,7 @@
 STANDALONE_DIR = './standalone'
 LDSO_DIR = './ldso'
 
-GCC_OPTS_STANDALONE= -fPIC -c -ggdb -DSHIVA_STANDALONE 
+GCC_OPTS_STANDALONE= -fPIC -c -ggdb -DSHIVA_STANDALONE -DDEBUG
 GCC_OPTS_LDSO= -fPIC -c -ggdb
 OBJ_LIST=shiva.o shiva_proc.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \

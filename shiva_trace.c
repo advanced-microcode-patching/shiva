@@ -548,7 +548,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					    strerror(errno));
 					return false;
 				}
-				if (elf_symbol_by_value(&ctx->elfobj,
+				if (elf_symbol_by_value_lookup(&ctx->elfobj,
 				    bp_addr - shiva_trace_base_addr(ctx), &symbol) == true) {
 					bp->symbol_location = true;
 					memcpy(&bp->symbol, &symbol, sizeof(symbol));
