@@ -6,11 +6,10 @@
 #include "../shiva.h"
 
 /*
- * This handler is being used to hook function calls within
- * the binary.
+ * Handles hooked callsites
  */
 void *
-shakti_handler(void *arg)
+callsite_handler(void *arg)
 {
 	shiva_trace_getregs_x86_64(&ctx_global->regs.regset_x86_64);
 
@@ -22,19 +21,13 @@ shakti_handler(void *arg)
 	struct shiva_trace_bp *bp;
 	uint64_t o_target;
 
-	/*
-	 * Even after we call shakti_store_regs_x86_64 we must
-	 * fix the clobbered rbp, rip, and rdi registers with
-	 * their correct values at the time this handler was
-	 * called.
-	 */
 	ctx->regs.regset_x86_64.rbp = (uint64_t)frmaddr;
 	ctx->regs.regset_x86_64.rip = (uint64_t)retaddr - 5;
 	ctx->regs.regset_x86_64.rdi = (uint64_t)arg;
 
-	handler = shiva_trace_find_handler(ctx, &shakti_handler);
+	handler = shiva_trace_find_handler(ctx, &callsite_handler);
 	if (handler == NULL) {
-		printf("Failed to find handler struct for shakti_handler\n");
+		printf("Failed to find handler struct for callsite_handler\n");
 		exit(-1);
 	}
 	/*
@@ -62,7 +55,7 @@ shakti_main(shiva_ctx_t *ctx)
 		printf("shiva_trace failed: %s\n", shiva_error_msg(&error));
 		return -1;
 	}
-	res = shiva_trace_register_handler(ctx, (void *)&shakti_handler,
+	res = shiva_trace_register_handler(ctx, (void *)&callsite_handler,
 	    SHIVA_TRACE_BP_CALL, &error);
 	if (res == false) {
 		printf("shiva_register_handler failed: %s\n",
@@ -71,8 +64,7 @@ shakti_main(shiva_ctx_t *ctx)
 	}
 	shiva_callsite_iterator_init(ctx, &call_iter);
 	while (shiva_callsite_iterator_next(&call_iter, &branch) == ELF_ITER_OK) {
-		printf("Setting breakpoint: %#lx\n", branch.branch_site + ctx->ulexec.base_vaddr);
-		res = shiva_trace_set_breakpoint(ctx, (void *)&shakti_handler,
+		res = shiva_trace_set_breakpoint(ctx, (void *)&callsite_handler,
 		    branch.branch_site + ctx->ulexec.base_vaddr, NULL, &error);
 		if (res == false) {
 			printf("shiva_trace_register_breakpoint failed: %s\n",
