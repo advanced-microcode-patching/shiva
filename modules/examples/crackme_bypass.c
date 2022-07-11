@@ -34,7 +34,7 @@ shakti_main(shiva_ctx_t *ctx)
 		return -1;
 	}
 	if (elf_symbol_by_name(&ctx->elfobj, "check_serial", &symbol) == false) {
-		printf("failed to find symbol 'print_string'\n");
+		printf("failed to find symbol 'check_serial'\n");
 		return -1;
 	}
 	uint64_t val = symbol.value + ctx->ulexec.base_vaddr;
