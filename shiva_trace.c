@@ -566,6 +566,27 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					free(bp);
 					return false;
 				}
+				/*
+				 * Set a valid list of return addresses for the function we are
+				 * setting a trampoline hook on. This control flow information is
+				 * created by shiva_analyze.c:shiva_analyze_find_calls()
+				 */
+				TAILQ_INIT(&bp->retaddr_list);
+				TAILQ_FOREACH(branch_site, &ctx->tailq.branch_tqlist, _linkage) {
+					if (branch_site->branch_type != SHIVA_BRANCH_CALL)
+						continue;
+					if ((branch_site->target_vaddr + shiva_trace_base_addr(ctx)) ==
+					    (uint64_t)bp_addr) {
+						struct shiva_addr_struct *addr = shiva_malloc(sizeof(*addr));
+
+						addr->addr = branch_site->retaddr + shiva_trace_base_addr(ctx);
+						shiva_debug(
+						    "Setting trampoline retaddr for call to %#lx: retaddr: %lx\n",
+						    (uint64_t)bp_addr, addr->addr);
+
+						TAILQ_INSERT_TAIL(&bp->retaddr_list, addr, _linkage);
+					}
+				}
 				shiva_debug("Inserted breakpoint: %#lx\n", bp->bp_addr);
 				TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
 				break;
@@ -601,7 +622,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				bp->bp_type = current->type;
 				bp->bp_addr = bp_addr;
 				bp->bp_len = 5; // length of breakpoint is size of imm call insn
-				bp->retaddr = bp_addr + bp->bp_len;
+				bp->callsite_retaddr = bp_addr + bp->bp_len;
 
 				/*
 				 * XXX when we start handling non-PIE binaries we will be passing

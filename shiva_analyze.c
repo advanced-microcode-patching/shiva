@@ -70,9 +70,6 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 					symbol.type = STT_FUNC;
 					symbol.bind = STB_GLOBAL;
 					symbol.size = 0;
-					tmp->retaddr = retaddr;
-					tmp->target_vaddr = plt_entry.addr;
-					break;
 				}
 			}
 			if (symbol.name == NULL) {
@@ -87,6 +84,8 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 				symbol.bind = STB_GLOBAL;
 			}
 		}
+		tmp->retaddr = retaddr;
+		tmp->target_vaddr = call_addr;
 		memcpy(&tmp->symbol, &symbol, sizeof(symbol));
 		tmp->branch_type = SHIVA_BRANCH_CALL;
 		tmp->branch_site = call_site;

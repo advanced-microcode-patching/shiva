@@ -434,16 +434,22 @@ typedef enum shiva_trace_bp_type {
 /*
  * Get the breakpoint struct that correlates to the handler
  * function that you are currently in.
+ * NOTE: Can ONLY be used from within a module callback/handler
  */
 #define SHIVA_TRACE_BP_STRUCT(bp, handler) { \
 	do {\
 		void *__ret = __builtin_return_address(0); \
+		struct shiva_addr_struct *addr;			\
 		TAILQ_FOREACH(bp, &handler->bp_tqlist, _linkage)  { \
 			if (bp->bp_type == SHIVA_TRACE_BP_TRAMPOLINE) \
 				break;	\
-			if (bp->bp_type == SHIVA_TRACE_BP_PLTGOT) \
-				break;	\
-			if ((void *)bp->retaddr == __ret)	\
+			if (bp->bp_type == SHIVA_TRACE_BP_PLTGOT) { \
+				TAILQ_FOREACH(addr, &bp->retaddr_list, _linkage) { \
+					if (addr->addr == __ret)	\
+						break;	\
+				}	\
+			}	\
+			if ((void *)bp->callsite_retaddr == __ret)	\
 				break;	\
 		} \
 	} while(0); \
@@ -509,8 +515,8 @@ typedef struct shiva_trace_bp {
 	uint64_t bp_addr;
 	size_t bp_len;
 	uint8_t *inst_ptr;
-	uint64_t retaddr;
-	uint64_t plt_addr; // Only used for PLTGOT hooks. This holds the corresponding PLT address.
+	uint64_t callsite_retaddr; // only used for CALL hooks
+	uint64_t plt_addr; // Only used for PLTGOT hooks. This holds the corresponding PLT stub address.
 	uint64_t o_target; // for CALL/JMP hooks this holds original target. For PLTGOT hooks it holds original gotptr
 	int64_t o_call_offset; // if this is a call or jmp breakpoint, o_offset holds the original target offset
 	struct elf_symbol symbol;

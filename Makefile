@@ -58,6 +58,7 @@ test:
 	gcc test_antidebug.c -o test_antidebug -fcf-protection=none
 	gcc crackme.c -o crackme -fcf-protection=none
 	gcc test_stripped.c -o test_stripped -fcf-protection=none
+	gcc test.c -o test_cfc
 clean:
 	rm -f test
 	rm -f test2
