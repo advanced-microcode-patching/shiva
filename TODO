@@ -1,0 +1,70 @@
+
+-= Handle loading multiple modules:
+
+- DT_SHIVA_NEEDED entries can be used for module dependencies
+- Running Shiva directly doesn't require needed depenencies but should offer a -m option
+  to specify paths.
+
+-= Handle ET_EXEC targets
+
+- Modify userland exec code to handle ET_EXEC targets.
+- Create a macro SHIVA_TARGET_ADDRESS(uint64_t addr) that should be used anytime
+  we reference an address from the target binary. If the target is PIE then
+  SHIVA_TARGET_ADDRESS will compute the address with the base address, i.e.
+  addr + ctx->ulexec.base_vaddr -- otherwise if the target is ET_EXEC the
+  macro knows to use addr as an absolute addres.
+- All modules must also use the SHIVA_TARGET_ADDRESS macro when accessing
+a target address.
+
+-= Get SHIVA_TRACE_BP_CALL breakpoints working with a large code model.
+
+- Immediate call only has 2GB offset range positive or negative. We must mmap()
+an executable stub segment (Similar to a PLT stub) that our hooked call offset
+can reach within 2GB. The stub will simply do:
+	movq $64bit_address, %rax
+	jmp *%rax
+
+-= Finish INT3 breakpoints all the way
+
+   Currently INT3 breakpoints trigger the callback signal handler, and the
+handler is able to restore the previous byte, and rewind back to the opcode
+that the breakpoint was set on. The failure is that we don't re-set the
+breakpoint after we executed the instruction, this is tricky without PTRACE,
+although I have an idea of how we might use the TF (TRACE flag) to cause us to
+trigger a secondary handler (After our breakpoint handler) and the secondary
+handler will re-set the breakpoint that we just removed to execute its original.
+
+- Same must be done for SIGILL, and SIGSEGV breakpoint types.
+
+
+-= Shiva segfaults when run in interpreter mode sometimes.
+
+Pretty sure this is a bug related to where I copy the top of the old stack to the top of the
+new stack, in shiva.c --
+
+	o_stack = (uint8_t *)rsp;
+	o_stack_addr = (uint64_t)o_stack;
+	/*
+	 * XXX BUG XXX
+	 * There is a bug here that occasionally results in a segfault
+	 * later on in the code.
+	 * There are some situations I think where the o_stack_end
+	 * (Which points to the highest stack address) needs to be
+	 * page aligned up one more time. There's not enough room
+	 * being allocated for the stacks copylen in some cases with the
+	 * current code... debug this!
+	 */
+	o_stack_end = ELF_PAGEALIGN(o_stack_addr, 0x1000);
+	copy_len = o_stack_end - o_stack_addr;
+
+	shiva_debug("o_stack_addr: %#lx o_stack_end: %#lx\n", o_stack_addr, o_stack_end);
+	/*
+	 * shiva_ulexec_allocstack() returns a pointer that points to the very
+	 * end of the stack (Top of the stack really).
+	 */
+	shiva_debug("copy_len: %d\n", copy_len);
+	shiva_debug("Copying to %p from %p\n", n_stack - copy_len, o_stack);
+	n_stack = n_stack - copy_len;
+	memcpy(n_stack, o_stack, copy_len);
+
+
