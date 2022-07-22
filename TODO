@@ -68,3 +68,13 @@ new stack, in shiva.c --
 	memcpy(n_stack, o_stack, copy_len);
 
 
+-= shiva_trace_get_regs() / shiva_trace_set_regs() not complete
+
+
+-= Get fcf-protection PLT stub (i.e. .plt.sec etc.) support working
+
+- libelfmaster is what handles the PLT resolutions under the hood
+and needs to be fixed to properly handle -fcf-protection. The plt is
+differently. Usually there is just a .plt and a .got.plt, now there
+is: .plt, .plt.sec, .plt.got, and .got.plt
+

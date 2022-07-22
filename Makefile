@@ -3,7 +3,7 @@ LDSO_DIR = './ldso'
 
 GCC_OPTS_STANDALONE= -fPIC -c -ggdb -DSHIVA_STANDALONE
 GCC_OPTS_LDSO= -fPIC -c -ggdb
-OBJ_LIST=shiva.o shiva_proc.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
+OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \
     shiva_callsite.o shiva_target.o
 INTERP_PATH="/home/elfmaster/git/shiva/ldso/shiva"
@@ -27,7 +27,6 @@ interp:
 	$(CC) $(GCC_OPTS_LDSO) shiva_maps.c -o	shiva_maps.o
 	$(CC) $(GCC_OPTS_LDSO) shiva_analyze.c -o	shiva_analyze.o
 	$(CC) $(GCC_OPTS_LDSO) shiva_callsite.c -o	shiva_callsite.o
-	$(CC) $(GCC_OPTS_LDSO) shiva_proc.c -o	shiva_proc.o
 	$(CC) $(GCC_OPTS_LDSO) shiva_target.c -o	shiva_target.o
 	$(MUSL) -static-pie -Wl,-undefined=system -Wl,-undefined=prctl -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o ./ldso/shiva
 standalone:
@@ -44,7 +43,6 @@ standalone:
 	$(CC) $(GCC_OPTS_STANDALONE) shiva_maps.c -o	shiva_maps.o
 	$(CC) $(GCC_OPTS_STANDALONE) shiva_analyze.c -o	shiva_analyze.o
 	$(CC) $(GCC_OPTS_STANDALONE) shiva_callsite.c -o	shiva_callsite.o
-	$(CC) $(GCC_OPTS_STANDALONE) shiva_proc.c -o	shiva_proc.o
 	$(CC) $(GCC_OPTS_STANDALONE) shiva_target.c -o	shiva_target.o
 	$(MUSL) -DSHIVA_STANDALONE -static -Wl,-undefined=system -Wl,-undefined=prctl -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o ./standalone/shiva
 
