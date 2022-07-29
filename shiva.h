@@ -114,9 +114,12 @@ typedef enum shiva_branch_type {
 	SHIVA_BRANCH_RET
 } shiva_branch_type_t;
 
+#define SHIVA_BRANCH_F_PLTCALL  (1UL << 0)
+
 struct shiva_branch_site {
 	struct elf_symbol symbol; // symbol being called
 	shiva_branch_type_t branch_type;
+	uint64_t branch_flags;
 	uint64_t target_vaddr;
 	uint64_t branch_site;
 	uint64_t retaddr; /*

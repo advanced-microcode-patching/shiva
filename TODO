@@ -1,11 +1,11 @@
 
--= Handle loading multiple modules:
+1. Handle loading multiple modules:
 
 - DT_SHIVA_NEEDED entries can be used for module dependencies
 - Running Shiva directly doesn't require needed depenencies but should offer a -m option
   to specify paths.
 
--= Handle ET_EXEC targets
+2. Handle ET_EXEC targets
 
 - Modify userland exec code to handle ET_EXEC targets.
 - Create a macro SHIVA_TARGET_ADDRESS(uint64_t addr) that should be used anytime
@@ -16,7 +16,7 @@
 - All modules must also use the SHIVA_TARGET_ADDRESS macro when accessing
 a target address.
 
--= Get SHIVA_TRACE_BP_CALL breakpoints working with a large code model.
+3. Get SHIVA_TRACE_BP_CALL breakpoints working with a large code model.
 
 - Immediate call only has 2GB offset range positive or negative. We must mmap()
 an executable stub segment (Similar to a PLT stub) that our hooked call offset
@@ -24,7 +24,7 @@ can reach within 2GB. The stub will simply do:
 	movq $64bit_address, %rax
 	jmp *%rax
 
--= Finish INT3 breakpoints all the way
+4. Finish INT3 breakpoints all the way
 
    Currently INT3 breakpoints trigger the callback signal handler, and the
 handler is able to restore the previous byte, and rewind back to the opcode
@@ -37,7 +37,7 @@ handler will re-set the breakpoint that we just removed to execute its original.
 - Same must be done for SIGILL, and SIGSEGV breakpoint types.
 
 
--= Shiva segfaults when run in interpreter mode sometimes.
+5. Shiva segfaults when run in interpreter mode sometimes.
 
 Pretty sure this is a bug related to where I copy the top of the old stack to the top of the
 new stack, in shiva.c --
@@ -68,13 +68,19 @@ new stack, in shiva.c --
 	memcpy(n_stack, o_stack, copy_len);
 
 
--= shiva_trace_get_regs() / shiva_trace_set_regs() not complete
+6. shiva_trace_get_regs() / shiva_trace_set_regs() not complete
 
 
--= Get fcf-protection PLT stub (i.e. .plt.sec etc.) support working
+7. Get fcf-protection PLT stub (i.e. .plt.sec etc.) support working (COMPLETED)
 
 - libelfmaster is what handles the PLT resolutions under the hood
 and needs to be fixed to properly handle -fcf-protection. The plt is
 differently. Usually there is just a .plt and a .got.plt, now there
 is: .plt, .plt.sec, .plt.got, and .got.plt
+
+
+8. Use file mappings in the future for mapping in ld-linux and the target
+
+When we map ld-linux and the target ELF executable into memory we store them
+into anonymous memory mappings. GDB
 

@@ -12,9 +12,7 @@ void *
 callsite_handler(void *arg)
 {
 	shiva_trace_getregs_x86_64(&ctx_global->regs.regset_x86_64);
-
 	struct shiva_ctx *ctx = ctx_global;
-
 	void *retaddr = __builtin_return_address(0);
 	void *frmaddr = __builtin_frame_address(1);
 	struct shiva_trace_handler *handler;
@@ -31,9 +29,8 @@ callsite_handler(void *arg)
 		exit(-1);
 	}
 	/*
-	 * Get the shiva_trace_bp struct pointer that correlates
-	 * to the call-hook-breakpoint. Then find the call-hook
-	 * breakpoint that triggered our handler.
+	 * Get the breakpoint struct associated with the call-hook-breakpoint
+	 * "SHIVA_TRACE_BP_CALL" that triggered our handler.
 	 */
 	SHIVA_TRACE_BP_STRUCT(bp, handler);
 	printf("[CALL] %s\n", bp->call_target_symname);
@@ -64,6 +61,8 @@ shakti_main(shiva_ctx_t *ctx)
 	}
 	shiva_callsite_iterator_init(ctx, &call_iter);
 	while (shiva_callsite_iterator_next(&call_iter, &branch) == ELF_ITER_OK) {
+		if ((branch.branch_flags & SHIVA_BRANCH_F_PLTCALL) == 0)
+			continue;
 		res = shiva_trace_set_breakpoint(ctx, (void *)&callsite_handler,
 		    branch.branch_site + ctx->ulexec.base_vaddr, NULL, &error);
 		if (res == false) {

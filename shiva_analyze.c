@@ -70,6 +70,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 					symbol.type = STT_FUNC;
 					symbol.bind = STB_GLOBAL;
 					symbol.size = 0;
+					tmp->branch_flags |= SHIVA_BRANCH_F_PLTCALL;
 				}
 			}
 			if (symbol.name == NULL) {
