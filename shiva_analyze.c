@@ -9,7 +9,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 	struct elf_section section;
 	struct elf_symbol symbol;
 	const uint8_t *ptr;
-	uint64_t call_site, call_addr, runtime_addr, retaddr;
+	uint64_t call_site, call_addr, retaddr;
 	uint64_t current_address = ctx->disas.base;
 	int64_t call_offset;
 	int bits;

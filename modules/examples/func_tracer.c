@@ -46,6 +46,10 @@ shakti_main(shiva_ctx_t *ctx)
 	struct shiva_branch_site branch;
 	struct shiva_trace_handler trace_handler;
 
+	printf("Target '%s': %#lx\n", ctx->path, ctx->ulexec.base_vaddr);
+	printf("LDSO '/lib64/ld-linux.so': %#lx\n", ctx->ulexec.ldso.base_vaddr);
+	printf("Module './shakti_runtime.o': %#lx\n", &callsite_handler);
+
 	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_ATTACH,
 	    NULL, NULL, 0, &error);
 	if (res == false) {
@@ -61,8 +65,8 @@ shakti_main(shiva_ctx_t *ctx)
 	}
 	shiva_callsite_iterator_init(ctx, &call_iter);
 	while (shiva_callsite_iterator_next(&call_iter, &branch) == ELF_ITER_OK) {
-		if ((branch.branch_flags & SHIVA_BRANCH_F_PLTCALL) == 0)
-			continue;
+		//if ((branch.branch_flags & SHIVA_BRANCH_F_PLTCALL) == 0)
+			//continue;
 		res = shiva_trace_set_breakpoint(ctx, (void *)&callsite_handler,
 		    branch.branch_site + ctx->ulexec.base_vaddr, NULL, &error);
 		if (res == false) {

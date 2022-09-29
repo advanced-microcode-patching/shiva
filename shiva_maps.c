@@ -161,7 +161,6 @@ shiva_maps_build_list(struct shiva_ctx *ctx)
 void
 shiva_maps_iterator_init(struct shiva_ctx *ctx, struct shiva_maps_iterator *iter)
 {
-	int i = 0;
 
 	iter->current = TAILQ_FIRST(&ctx->tailq.mmap_tqlist);
 	iter->ctx = ctx;

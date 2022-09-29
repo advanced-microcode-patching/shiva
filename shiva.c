@@ -17,8 +17,7 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 {
 	elf_error_t error;
 	struct elf_section section;
-	uint8_t *code;
-	int i, bits;
+	int bits;
 
 	if (elf_open_object(ctx->path, &ctx->elfobj, ELF_LOAD_F_FORENSICS,
 	    &error) == false) {
@@ -88,7 +87,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 {
 	struct elf_section section;
 	elf_error_t error;
-	char *interp;
 	uint64_t *rsp;
 	shiva_auxv_iterator_t auxv_iter;
 	struct shiva_auxv_entry auxv_entry;
@@ -272,6 +270,9 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	 */
 
 	test_mark();
+	printf("RSP: %#lx\n", rsp);
+	uint64_t *ptr = (void *)rsp;
+	printf("stack value: %#lx\n", *ptr);
 	SHIVA_ULEXEC_LDSO_TRANSFER(rsp, ctx->ulexec.ldso.entry_point, entry_point);
 
 	return true;
@@ -281,13 +282,10 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 int main(int argc, char **argv, char **envp)
 {
 	shiva_ctx_t ctx;
-	int opt, i, subend;
 	struct elf_section section;
-	struct sigaction act;
-	sigset_t set;
 	shiva_maps_iterator_t maps_iter;
 	struct shiva_mmap_entry mmap_entry;
-	char *path, *p, *target_path;
+	char *p, *target_path;
 
 	/*
 	 * Initialize everything in the context.
@@ -297,7 +295,7 @@ int main(int argc, char **argv, char **envp)
 	/*
 	 * Determine whether we are in interpreter mode
 	 */
-	target_path = realpath("/proc/self/exe", path);
+	target_path = realpath("/proc/self/exe", NULL);
 	if (target_path == NULL) {
 		fprintf(stderr, "realpath failed: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);

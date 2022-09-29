@@ -68,7 +68,6 @@ bool
 shiva_trace_thread_insert(struct shiva_ctx *ctx, pid_t pid, uint64_t *out)
 {
 	struct shiva_trace_thread *thread;
-	shiva_error_t error;
 
 	thread = calloc(1, sizeof(*thread));
 	if (thread == NULL) {

@@ -37,8 +37,6 @@ shiva_auxv_iterator_init(struct shiva_ctx *ctx, struct shiva_auxv_iterator *iter
 shiva_iterator_res_t
 shiva_auxv_iterator_next(struct shiva_auxv_iterator *iter, struct shiva_auxv_entry *entry)
 {
-	int i = 0;
-	struct shiva_ctx *ctx = 0;
 
 	if (iter->auxv[iter->index].a_type == AT_NULL)
 		return SHIVA_ITER_DONE;

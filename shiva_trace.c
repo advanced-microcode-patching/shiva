@@ -96,13 +96,11 @@ bool
 shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
     const void *src, size_t len, shiva_error_t *error)
 {
-	size_t rem = len % sizeof(void *);
-	size_t quot = len / sizeof(void *);
+	size_t aligned_len;
 	uint8_t *s = (uint8_t *)src;
 	uint8_t *d = (uint8_t *)dst;
 	uint64_t aligned_vaddr;
 	uint64_t addr = (uint64_t)dst;
-	bool res;
 	int ret, o_prot;
 
 	if (shiva_maps_prot_by_addr(ctx, (uint64_t)addr, &o_prot) == false) {
@@ -110,14 +108,15 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 	    "cannot find memory protection\n", pid, (uint64_t)addr);
 		return false;
 	}
-
-	shiva_debug("Inside shiva_trace_write\n");
-	aligned_vaddr = (uint64_t)addr;
-	aligned_vaddr &= ~4095;
+	aligned_vaddr = ELF_PAGESTART((uint64_t)addr);
+	aligned_len = ELF_PAGEALIGN(len, PAGE_SIZE);
+	if (addr + len > aligned_vaddr + aligned_len) {
+		aligned_len += PAGE_SIZE;
+	}
 	/*
 	 * Make virtual address writable if it is not.
 	 */
-	ret = mprotect((void *)aligned_vaddr, 4096, PROT_READ|PROT_WRITE);
+	ret = mprotect((void *)aligned_vaddr, aligned_len, o_prot|PROT_WRITE);
 	if (ret < 0) {
 		shiva_error_set(error, "poke pid (%d) at %#lx failed: "
 		    "mprotect failure: %s\n", pid, (uint64_t)addr, strerror(errno));
@@ -131,7 +130,7 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 	/*
 	 * Reset memory protection
 	 */
-	ret = mprotect((void *)aligned_vaddr, 4096, o_prot);
+	ret = mprotect((void *)aligned_vaddr, aligned_len, o_prot);
 	if (ret < 0) {
 		shiva_error_set(error, "shiva_trace_write_pid(%d) at %#lx failed: "
 		    "mprotect failure: %s\n", pid, (uint64_t)addr, strerror(errno));
@@ -202,17 +201,16 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 	uint8_t tramp_inst[12] = "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x50\xc3";
 	uint64_t call_offset, call_site;
 	bool res;
-	uint64_t o_call_offset, trap, qword;
+	uint64_t trap, qword;
 	bool found_handler = false;
 	struct elf_plt plt_entry;
 	elf_plt_iterator_t plt_iter;
 	elf_pltgot_iterator_t pltgot_iter;
 	struct elf_pltgot_entry pltgot_entry;
 	char *symname;
-	int i, pid, bits, signum;
+	int i, signum, bits;
 	elf_relocation_iterator_t rel_iter;
 	struct elf_relocation rel;
-	bool found_record = false;
 	size_t jmprel_count = 0;
 	struct shiva_branch_site *branch_site;
 
@@ -252,14 +250,14 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					sigaction(SIGILL, &sa, NULL);
 					memcpy(&current->sa, &sa, sizeof(sa));
 				}
-				if (shiva_trace_op_peek(ctx, pid, (void *)bp_addr,
+				if (shiva_trace_op_peek(ctx, 0, (void *)bp_addr,
 				    &qword, sizeof(uint64_t), error) == false) {
 					shiva_error_set(error,
 					    "shiva_trace_op_peek() failed to read %#lx\n", bp_addr);
 					return false;
 				}
 				trap = 0x0b0f;
-				if (shiva_trace_write(ctx, pid,
+				if (shiva_trace_write(ctx, 0,
 				    (void *)bp_addr, &trap, 4, error) == false) {
 					shiva_error_set(error,
 					    "shiva_trace_write() failed to write to %#lx\n", bp_addr);
@@ -297,7 +295,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					sigaction(SIGTRAP, &sa, NULL);
 					memcpy(&current->sa, &sa, sizeof(sa));
 				}
-				if (shiva_trace_op_peek(ctx, pid, (void *)bp_addr, &qword, sizeof(uint64_t), error) == false) {
+				if (shiva_trace_op_peek(ctx, 0, (void *)bp_addr, &qword, sizeof(uint64_t), error) == false) {
 					shiva_error_set(error, "shiva_trace_op_peek() failed to read %#lx\n", bp_addr);
 					return false;
 				}
@@ -305,7 +303,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				//*(uint64_t *)&bp->insn.o_insn[0] = qword;
 				//*(uint64_t *)&bp->insn.n_insn[0] = trap;
 
-				if (shiva_trace_write(ctx, pid, (void *)bp_addr, &trap, sizeof(uint64_t), error) == false) {
+				if (shiva_trace_write(ctx, 0, (void *)bp_addr, &trap, sizeof(uint64_t), error) == false) {
 					shiva_error_set(error, "shiva_trace_write() failed to write to %#lx\n", bp_addr);
 					return false;
 				}
@@ -493,7 +491,6 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 							copy_len = p - branch_site->symbol.name;
 							if (strncmp((char *)option, branch_site->symbol.name,
 							    copy_len) == 0) {
-								ENTRY e, *ep;
 								struct shiva_addr_struct *addr = shiva_malloc(sizeof(*addr));
 								/*
 								 * We found a branch site (A call) that calls
@@ -560,7 +557,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				bp->bp_addr = bp_addr;
 				bp->bp_len = sizeof(tramp_inst);
 				bp->bp_type = current->type;
-				res = shiva_trace_write(ctx, pid, (void *)bp_addr, tramp_inst, bp->bp_len,
+				res = shiva_trace_write(ctx, 0, (void *)bp_addr, tramp_inst, bp->bp_len,
 				    error);
 				if (res == false) {
 					free(bp);
@@ -650,16 +647,10 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				call_site = bp_addr;
 				call_offset = ((uint64_t)current->handler_fn - call_site - 5);
 				call_offset &= 0xffffffff;
-				/*
-				if (call_offset > 0xffffffff) {
-					shiva_error_set(error, "shiva_trace_set_breakpoint() failed: "
-					    "call offset %#lx is too large\n", call_offset);
-					return false;
-				} */
 				*(uint32_t *)&call_inst[1] = call_offset;
 				shiva_debug("call_offset = %#lx - %#lx - 5: %#lx\n", current->handler_fn,
 				    call_site, call_offset);
-				res = shiva_trace_write(ctx, pid, (void *)bp_addr, call_inst, bp->bp_len,
+				res = shiva_trace_write(ctx, 0, (void *)bp_addr, call_inst, bp->bp_len,
 				    error);
 				if (res == false) {
 					free(bp);
@@ -724,12 +715,13 @@ static bool
 shiva_trace_op_peek(struct shiva_ctx *ctx, pid_t pid,
     void *addr, void *data, size_t len, shiva_error_t *error)
 {
-
+#if 0
 	if (shiva_maps_validate_addr(ctx, (uint64_t)addr) == false) {
 		shiva_error_set(error, "peek pid (%d) at %#lx failed: "
 		    "cannot read from debugger memory\n", pid, (uint64_t)addr);
 		return false;
 	}
+#endif
 	if (shiva_maps_validate_addr(ctx, (uint64_t)addr + len) == false) {
 		shiva_error_set(error, "peek pid (%d) at %#lx failed: "
 		    "cannot read from debugger memory\n", pid, (uint64_t)addr);

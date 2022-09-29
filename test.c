@@ -1,3 +1,6 @@
+#include <string.h>
+#include <stdint.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -19,9 +22,11 @@ void print_string(const char *s)
 int main(int argc, char **argv)
 {
 	int i;
+	char *var;
 
-	for (i = 0; i < 100000; i++)
+	for (i = 0; i < 1000; i++)
 		print_string("Hello World");
-	print_string(argv[1]);
+	if (argc > 1)
+		print_string(argv[1]);
 	exit(0);
 }
