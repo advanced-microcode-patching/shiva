@@ -362,9 +362,6 @@ shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool inter
 			perror("mmap");
 			exit(EXIT_FAILURE);
 		}
-		k = phdr.vaddr + phdr.memsz;
-		if (k > brk_addr)
-			brk_addr = k;
 		last_filesz = phdr.filesz;
 		last_memsz = phdr.memsz;
 		last_vaddr = phdr.vaddr;
