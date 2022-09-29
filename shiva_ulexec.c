@@ -57,7 +57,6 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out, Elf64_auxv_t
 	 * the shiva_ulexec_save_stack() function.
 	 */
 	strdata = (char *)(esp_start + count);
-	printf("strdata: %p\n", strdata);
 	s = ctx->ulexec.argstr;
 	*esp++ = ctx->argc;
 	for (argc = ctx->argc; argc > 0; argc--) {
@@ -125,7 +124,6 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out, Elf64_auxv_t
 	 * of our stack setup.
 	 */
 	*out = (uint64_t)esp_start;
-	printf("ESP START (&argc): %#lx\n", esp_start);
 	return esp_start;
 }
 
@@ -354,11 +352,9 @@ shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool inter
 		 */
 		load_addr = base_vaddr + phdr.vaddr;
 		load_addr = ELF_PAGESTART(load_addr);
-		printf("Mapping segment(%#lx): %#lx of size %zu\n", phdr.vaddr, load_addr, phdr.memsz);
 		memsz = phdr.memsz;
 		size_t segment_len = phdr.filesz + ELF_PAGEOFFSET(phdr.vaddr);
 		segment_len = ELF_PAGEALIGN(segment_len, 0x1000);
-		printf("segment len: %#lx\n", segment_len);
 		mem = mmap((void *)load_addr, segment_len,
 		    elfprot, mmap_flags, fd, 
 		    phdr.offset - ELF_PAGEOFFSET(phdr.vaddr));
@@ -377,22 +373,9 @@ shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool inter
 	 * Initialize .bss
 	 */
 	size_t zerolen, i;
-	printf("mem: %p\n", mem);
-	printf("PAGEOFFSET(%#lx) = %#lx\n", last_vaddr, ELF_PAGEOFFSET(last_vaddr));
-	printf("phdr.filesz: %#lx\n", last_filesz);
 	uint8_t *bss = mem + ELF_PAGEOFFSET(last_vaddr) + last_filesz;
 	brk_addr = ELF_PAGEALIGN((uintptr_t)bss, 0x1000);
-
-	printf("Subtracting brk: %#lx from .bss %p\n", brk_addr,
-	    bss);
-#if 0
-	if (brk(ELF_PAGEALIGN(brk_addr, 0x1000) + base_vaddr) < 0) {
-		perror("brk");
-		return false;
-	}
-#endif
 	zerolen = brk_addr - (uintptr_t)bss;
-	printf("zerolen: %d\n", zerolen);
 	memset(bss, 0, zerolen);
 
 	if (interpreter == false) {
@@ -459,7 +442,7 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 	}
 	shiva_auxv_iterator_init(ctx, &a_iter, ctx->ulexec.auxv.vector);
 	while (shiva_auxv_iterator_next(&a_iter, &a_entry) == SHIVA_ITER_OK) {
-		printf("AUXV TYPE: %d AUXV VAL: %#lx\n", a_entry.type, a_entry.value);
+		//printf("AUXV TYPE: %d AUXV VAL: %#lx\n", a_entry.type, a_entry.value);
 	}
 
 #if 0
