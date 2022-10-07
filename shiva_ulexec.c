@@ -437,15 +437,11 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 		fprintf(stderr, "shiva_ulexec_build_auxv_stack() failed\n");
 		return false;
 	}
+#if 0
 	shiva_auxv_iterator_init(ctx, &a_iter, ctx->ulexec.auxv.vector);
 	while (shiva_auxv_iterator_next(&a_iter, &a_entry) == SHIVA_ITER_OK) {
-		//printf("AUXV TYPE: %d AUXV VAL: %#lx\n", a_entry.type, a_entry.value);
+		printf("AUXV TYPE: %d AUXV VAL: %#lx\n", a_entry.type, a_entry.value);
 	}
-
-#if 0
-	prctl(PR_SET_MM, PR_SET_MM_AUXV, (unsigned long)ctx->ulexec.auxv.vector,
-	    20);
 #endif
-
 	return true;
 }

@@ -269,10 +269,8 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	 * specifically shiva_trace_set_breakpoint case PLTGOT_HOOK 
 	 */
 
-	test_mark();
-	printf("RSP: %#lx\n", rsp);
+	test_mark(); /* Used for debugging Shiva with GDB. I set a breakpoint on test_mark() */
 	uint64_t *ptr = (void *)rsp;
-	printf("stack value: %#lx\n", *ptr);
 	SHIVA_ULEXEC_LDSO_TRANSFER(rsp, ctx->ulexec.ldso.entry_point, entry_point);
 
 	return true;
