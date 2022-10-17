@@ -245,6 +245,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 
 #if 0
 	/*
+	 * OLD SOLUTION-- DOESN'T work.
 	 * XXX: In the event that our module installed .got.plt hooks, we
 	 * must disable DT_BINDNOW before passing control to the RTLD, otherwise
 	 * our hooks will be overwritten by RTLD in strict linking mode.
@@ -257,6 +258,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	(void) shiva_target_dynamic_set(ctx, DT_FLAGS_1, 0);
 #endif
 	/*
+	 * NEW Solution-- works.
 	 * STRICT LINKING (flags: PIE NOW) can be a problem for us since it
 	 * will overwrite any PLT hooks that are set.
 	 *
@@ -320,6 +322,7 @@ int main(int argc, char **argv, char **envp)
 	if (argc < 2 || (argc == 2 && argv[1][0] == '-')) {
 		printf("Usage: %s [-u] <prog> [<prog> args]\n", argv[0]);
 		printf("-u	userland-exec mode. shiva simply loads and executes the target program\n");
+		printf("-s	static ELF binary (Doesn't use an RTLD)\n");
 		printf("example: shiva -u /some/program <program args>\n");
 		exit(EXIT_FAILURE);
 	}
@@ -356,6 +359,9 @@ int main(int argc, char **argv, char **envp)
 			switch (*p) {
 			case 'u':
 				ctx.flags |= SHIVA_OPTS_F_ULEXEC_ONLY;
+				break;
+			case 's':
+				ctx.flags |= SHIVA_OPTS_F_STATIC_ELF;
 				break;
 			default:
 				break;
