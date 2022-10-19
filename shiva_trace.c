@@ -9,6 +9,7 @@ static bool shiva_trace_op_peek(struct shiva_ctx *, pid_t,
  */
 void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *regs)
 {
+#if defined(__x86_64__)
 	__asm__ __volatile__(
 		"movq %rax, (%rdi)\n\t"
 		"movq %rbx, 8(%rdi)\n\t"
@@ -25,6 +26,7 @@ void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset
 		"movq %r15, 104(%rdi)\n\t"
 		"ret\n\t"
 		);
+#endif
 }
 
 /*
@@ -35,6 +37,7 @@ void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset
  */
 void __attribute__ ((naked)) shiva_trace_setjmp_x86_64(shiva_trace_jumpbuf_t *jmpbuf)
 {
+#if defined(__x86_64__)
 	__asm__ __volatile__(
 		"movq %rax, 0(%rdi)\n\t"
 		"movq %rbx, 8(%rdi)\n\t"
@@ -55,11 +58,12 @@ void __attribute__ ((naked)) shiva_trace_setjmp_x86_64(shiva_trace_jumpbuf_t *jm
 		"xor  %rax, %rax\n\t"
 		"ret\n\t"
 		);
+#endif
 }
 
 void shiva_trace_longjmp_x86_64(shiva_trace_jumpbuf_t *jumpbuf, uint64_t ip)
 {
-
+#if defined(__x86_64__)
 	__asm__ __volatile__(
 		"movq 0(%rdi), %rax\n\t"
 		"movq 8(%rdi), %rbx\n\t"
@@ -80,6 +84,7 @@ void shiva_trace_longjmp_x86_64(shiva_trace_jumpbuf_t *jumpbuf, uint64_t ip)
 	__asm__ __volatile__ (
 			"movq %0, %%rdx\n\t"
 			"jmp *%%rdx" :: "r"(ip));
+#endif
 }
 
 uint64_t
@@ -535,9 +540,9 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				}
 				break;
 			case SHIVA_TRACE_BP_TRAMPOLINE:
-				ud_set_input_buffer(&ctx->disas.ud_obj, inst_ptr, SHIVA_MAX_INST_LEN);
+				//ud_set_input_buffer(&ctx->disas.ud_obj, inst_ptr, SHIVA_MAX_INST_LEN);
 				bits = elf_class(&ctx->elfobj) == elfclass64 ? 64 : 32;
-				insn_len = ud_insn_len(&ctx->disas.ud_obj);
+				insn_len = sizeof(tramp_inst); //ud_insn_len(&ctx->disas.ud_obj);
 				assert(insn_len <= 15);
 				bp = calloc(1, sizeof(*bp));
 				if (bp == NULL) {
@@ -596,9 +601,9 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				/*
 				 * Get the original inst
 				 */
-				ud_set_input_buffer(&ctx->disas.ud_obj, inst_ptr, SHIVA_MAX_INST_LEN);
+				//ud_set_input_buffer(&ctx->disas.ud_obj, inst_ptr, SHIVA_MAX_INST_LEN);
 				bits = elf_class(&ctx->elfobj) == elfclass64 ? 64 : 32;
-				insn_len = ud_insn_len(&ctx->disas.ud_obj);
+				insn_len = 5; //ud_insn_len(&ctx->disas.ud_obj);
 				assert(insn_len <= 15);
 				bp = calloc(1, sizeof(*bp));
 				if (bp == NULL) {

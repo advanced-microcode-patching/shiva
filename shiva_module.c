@@ -20,9 +20,11 @@ uint8_t plt_stub[6] = "\xff\x25\x00\x00\x00\x00";
 static void
 transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
 {
+#ifdef __x86_64__
 	__asm__ __volatile__ ("mov %0, %%rdi\n" :: "r"(ctx));
 	__asm__ __volatile__ ("mov %0, %%rax\n"
 			      "call *%%rax" :: "r" (entry));
+#endif
 	return;
 }
 /*

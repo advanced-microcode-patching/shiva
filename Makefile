@@ -1,13 +1,17 @@
 STANDALONE_DIR = './standalone'
 LDSO_DIR = './ldso'
 
-GCC_OPTS_STANDALONE= -fPIC -DDEBUG -Wall -ggdb -c -DSHIVA_STANDALONE
+GCC_OPTS_STANDALONE= -fPIC -w -ggdb -c -DSHIVA_STANDALONE
 GCC_OPTS_LDSO= -fPIC -c -DDEBUG -ggdb
 OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \
     shiva_callsite.o shiva_target.o
 INTERP_PATH="/home/elfmaster/git/shiva/ldso/shiva"
+ifeq ($(uname -m),x86_64)
 STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a libudis86.a
+else
+STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a
+endif
 
 CC=gcc
 MUSL=musl-gcc
@@ -46,17 +50,10 @@ standalone:
 	$(CC) $(GCC_OPTS_STANDALONE) shiva_target.c -o	shiva_target.o
 	$(MUSL) -DSHIVA_STANDALONE -static -Wl,-undefined=system -Wl,-undefined=prctl -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o ./standalone/shiva
 
-test:
-	gcc test.c -o test -fcf-protection=none
-	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test.c -o test2 -fcf-protection=none
-	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test_vuln.c -o test_vuln -fno-stack-protector -fcf-protection=none
-	gcc test_vuln.c -o test_vuln2 -fno-stack-protector -fcf-protection=none
-	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test_inject.c -o test_inject -fcf-protection=none
-	gcc test_inject.c -o test_inject2 -fcf-protection=none
-	gcc test_antidebug.c -o test_antidebug -fcf-protection=none
-	gcc crackme.c -o crackme -fcf-protection=none
-	gcc test_stripped.c -o test_stripped -fcf-protection=none
-	gcc test.c -o test_cfc
+test_aarch64:
+	gcc test.c -o test
+	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test.c -o test2
+
 clean:
 	rm -f test
 	rm -f test2

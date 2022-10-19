@@ -55,8 +55,13 @@
  * Path to real dynamic linker.
  * XXX this should be configurable via environment.
  */
+#if defined(__x86_64__)
 #define SHIVA_LDSO_PATH "/lib64/ld-linux-x86-64.so.2"
+#elif defined(__aarch64__)
+#define SHIVA_LDSO_PATH "/lib/ld-linux-aarch64.so.1"
+#endif
 
+#if defined(__x86_64__)
 #define SHIVA_ULEXEC_LDSO_TRANSFER(stack, addr, entry) __asm__ __volatile__("mov %0, %%rsp\n" \
 					    "push %1\n" \
 					    "mov %2, %%rax\n" \
@@ -68,6 +73,17 @@
 					    "mov $0, %%rbp\n" \
 					    "ret" :: "r" (stack), "g" (addr), "g"(entry))
 
+#elif defined(__aarch64__)
+#define SHIVA_ULEXEC_LDSO_TRANSFER(stack, addr, entry) __asm__ __volatile__("");
+#endif
+
+/*
+ * On ARM this flag isn't found in mman.h, but we need it. The kernel
+ * mmap respects it nonetheless.
+ */
+#ifndef MAP_32BIT
+#define MAP_32BIT 0x40
+#endif
 
 typedef struct shiva_addr_struct {
 	uint64_t addr;
@@ -410,6 +426,7 @@ bool shiva_proc_duplicate_image(shiva_ctx_t *ctx);
  * original function and return. This macro allows you to do this,
  * see modules/shakti_runtime.c
  */
+#if defined(__x86_64__)
 #define SHIVA_TRACE_CALL_ORIGINAL(bp) { \
 	do {\
 		void * (*o_func)(void *, void *, void *, void *, \
@@ -424,6 +441,15 @@ bool shiva_proc_duplicate_image(shiva_ctx_t *ctx);
 		       (void *)ctx_global->regs.regset_x86_64.r10);	\
 	} while(0); \
 }
+#elif defined(__aarch64__)
+#define SHIVA_TRACE_CALL_ORIGINAL(bp) { \
+	do {\
+		void * (*o_func)(void *, void *, void *, void *, \
+		    void *, void *, void *);	\
+		o_func = (void *)bp->o_target; \
+	} while(0); \
+}
+#endif
 
 typedef enum shiva_trace_bp_type {
 	SHIVA_TRACE_BP_JMP = 0,
@@ -465,6 +491,7 @@ typedef enum shiva_trace_bp_type {
  * registers and rewind the stack back. TODO: Need to handle
  * issue with rbp restoration.
  */
+#if defined(__x86_64__)
 #define SHIVA_TRACE_LONGJMP_RETURN(regptr, rip_target)	\
 			__asm__ __volatile__("movq %0, %%rdx\n" :: "r"(regptr)); \
 			__asm__ __volatile__(				\
@@ -483,7 +510,11 @@ typedef enum shiva_trace_bp_type {
 					"movq 112(%%rdx), %%rcx\n\t" \
 					"movq 120(%%rdx), %%rsp\n\t" \
 					"jmp %0" :: "r"(rip_target));
+#elif defined(__aarch64__)
+#define SHIVA_TRACE_LONGJMP_RETURN(regptr, rip_target) __asm __volatile__("");
+#endif
 
+#if defined(__x86_64__)
 #define SHIVA_TRACE_SET_TRAPFLAG __asm__ __volatile__(	\
 				"pushfq\n\t"	\
 				"pop %rdx\n\t"	\
@@ -491,6 +522,7 @@ typedef enum shiva_trace_bp_type {
 				"push %rdx\n\t"	\
 				"popfq");
 
+#endif
 
 typedef enum shiva_trace_op {
 	SHIVA_TRACE_OP_CONT = 0,

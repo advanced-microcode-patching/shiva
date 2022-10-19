@@ -17,7 +17,9 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 	if (elf_section_by_name(&ctx->elfobj, ".text", &section) == false) {
 		fprintf(stderr, "elf_section_by_name() failed\n");
 		return false;
+	
 	}
+#ifdef __x86_64__
 	bits = elf_class(&ctx->elfobj) == elfclass64 ? 64 : 32;
 	ud_init(&ctx->disas.ud_obj);
 	ud_set_input_buffer(&ctx->disas.ud_obj, ctx->disas.textptr, section.size);
@@ -93,6 +95,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 		TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 		current_address += insn_len;
 	}
+#endif
 	return true;
 }
 
