@@ -74,7 +74,10 @@
 					    "ret" :: "r" (stack), "g" (addr), "g"(entry))
 
 #elif defined(__aarch64__)
-#define SHIVA_ULEXEC_LDSO_TRANSFER(stack, addr, entry) __asm__ __volatile__("");
+#define SHIVA_ULEXEC_LDSO_TRANSFER(stack, addr, entry) __asm__ __volatile__("mov sp, %0\n" \
+						"mov x30, %1	\n"	\
+						"ret		" \
+						:: "r" (stack), "r" (addr));
 #endif
 
 /*
