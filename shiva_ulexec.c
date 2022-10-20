@@ -272,6 +272,7 @@ shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool inter
 	size_t memsz, total_segment_len, last_memsz, last_filesz;
 	int fd = elf_fd(elfobj);
 	uint64_t k = 0, brk_addr = 0;
+	uint64_t elf_bss = 0, last_bss = 0;
 
 	elf_segment_iterator_init(elfobj, &phdr_iter);
 	for (;;) {
@@ -338,7 +339,7 @@ shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool inter
 			 */
 			shiva_debug("Mapping %#lx\n", base_vaddr);
 			mem = mmap((void *)base_vaddr, phdr.filesz + ELF_PAGEOFFSET(phdr.vaddr),
-			    elfprot, mmap_flags, fd, 0);
+			    elfprot, mmap_flags, fd, phdr.offset - ELF_PAGEOFFSET(phdr.vaddr));
 			if (mem == MAP_FAILED) {
 				perror("mmap");
 				exit(EXIT_FAILURE);
@@ -362,19 +363,42 @@ shiva_ulexec_load_elf_binary(struct shiva_ctx *ctx, elfobj_t *elfobj, bool inter
 			perror("mmap");
 			exit(EXIT_FAILURE);
 		}
+
 		last_filesz = phdr.filesz;
 		last_memsz = phdr.memsz;
 		last_vaddr = phdr.vaddr;
+		k = (uint64_t)mem + phdr.filesz + ELF_PAGEOFFSET(phdr.vaddr);
+		if (k > elf_bss)
+			elf_bss = k;
+		k = (uint64_t)mem + phdr.memsz + ELF_PAGEOFFSET(phdr.vaddr);
+		if (k > last_bss)
+			last_bss = k;
+
 	}
 	/*
 	 * Initialize .bss
 	 */
-	size_t zerolen, i;
-	uint8_t *bss = mem + ELF_PAGEOFFSET(last_vaddr) + last_filesz;
-	brk_addr = ELF_PAGEALIGN((uintptr_t)bss, 0x1000);
-	zerolen = brk_addr - (uintptr_t)bss;
-	memset(bss, 0, zerolen);
-
+	size_t nbyte;
+	nbyte = ELF_PAGEOFFSET(elf_bss);
+	if (nbyte > 0) {
+		nbyte = 4096 - nbyte;
+		memset((void *)elf_bss, 0, nbyte);
+	}
+	/*
+	 * If the .bss extends beyond the current page of .data
+	 * we must add an anonymous memory mapping to create the
+	 * rest of the .bss
+	 */
+	elf_bss = ELF_PAGEALIGN(elf_bss, 0x1000);
+	last_bss = ELF_PAGEALIGN(last_bss, 0x1000);
+	if (last_bss > elf_bss) {
+		mem = mmap((void *)elf_bss, last_bss - elf_bss,
+		    PROT_READ|PROT_WRITE, MAP_FIXED|MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+		if (mem == MAP_FAILED) {
+			perror("mmap .bss");
+			exit(EXIT_FAILURE);
+		}
+	}
 	if (interpreter == false) {
 		shiva_debug("Setting entry point for target: %#lx\n", base_vaddr + elf_entry_point(elfobj));
 		ctx->ulexec.entry_point = base_vaddr + elf_entry_point(elfobj);
