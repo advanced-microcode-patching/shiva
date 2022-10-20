@@ -76,6 +76,7 @@
 #elif defined(__aarch64__)
 #define SHIVA_ULEXEC_LDSO_TRANSFER(stack, addr, entry) __asm__ __volatile__("mov sp, %0\n" \
 						"mov x30, %1	\n"	\
+						"mov x0, #0	\n"	\
 						"ret		" \
 						:: "r" (stack), "r" (addr));
 #endif
