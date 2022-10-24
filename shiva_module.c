@@ -2,6 +2,8 @@
 #include "shiva_debug.h"
 #include <sys/mman.h>
 
+#define RELOC_MASK(n)	(1U << (n - 1))
+
 /*
  * The purpose of this code is to take a relocatable object,
  * and turn it into a runtime executable module. This means
@@ -197,6 +199,20 @@ get_section_mapping(struct shiva_module *linker, char *shdrname, struct shiva_mo
 	return false;
 }
 
+/*
+ * Looks for a symbol within the /opt/bin/shiva executable process address space
+ */
+static bool
+internal_symresolve(struct shiva_module *linker, char *symname, struct elf_symbol *symbol)
+{
+	struct elf_symbol tmp;
+	struct elfobj *elfobj = &linker->self;
+
+	if (elf_symbol_by_name(elfobj, symname, &tmp) == false)
+		return false;
+	memcpy(symbol, &tmp, sizeof(*symbol));
+	return true;
+}
 bool
 apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 {
@@ -207,9 +223,11 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 	uint64_t symval;
 	uint64_t rel_addr;
 	uint64_t rel_val;
+	uint32_t insn_bytes;
 	struct elf_symbol symbol;
 	ENTRY e, *ep;
 	struct shiva_module_got_entry got_entry;
+	bool res;
 
 	char *shdrname = strrchr(rel.shdrname, '.');
 	if (shdrname == NULL) {
@@ -223,7 +241,127 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 	shiva_debug("Successfully retrieved section mapping for %s\n", shdrname);
 	shiva_debug("linker->text_vaddr: %#lx\n", linker->text_vaddr);
 	shiva_debug("smap.offset: %#lx\n", smap.offset);
+#if defined(__aarch64__)
+	switch(rel.type) {
+		/* R_AARCH64_ABS64: computation S + A */
+		/* This relocation can reference both a symbol and a section
+		 * name, so we must handle both scenarios.
+		 */
+	case R_AARCH64_ABS64:
+		/*
+		 * Is the symbol a section header, such as .eh_frame or .rodata,
+		 * that lives within the module body itself?
+		 */
+		shiva_debug("Applying R_AARCH64_ABS64 relocation for %s\n", rel.symname);
+		TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
+			if (strcmp(smap_current->name, rel.symname) != 0)
+				continue;
+			symval = smap_current->vaddr;
+			rel_unit = &linker->text_mem[smap.offset + rel.offset];
+			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+			rel_val = symval + rel.addend;
+			*(uint64_t *)&rel_unit[0] = rel_val;
+			return true;
+		}
+		/*
+		 * Is the symbol found in the ET_REL Shiva module?
+		 */
+		if (elf_symbol_by_name(&linker->elfobj, rel.symname,
+		    &symbol) == true) {
+			/*
+			 * If the symbol is a NOTYPE then it is an external reference
+			 * to a symbol somewhere else (i.e. shiva_ctx_t *global_ctx).
+			 * Probably exists in the Shiva binary (Which is loaded into
+			 * our executable process image :)) NOTE: All of libelfmaster
+			 * and libmusl are statically linked into Shiva, so there are
+			 * relocations that apply to these symbols externally.
+			 */
+			if (symbol.type == STT_NOTYPE) {
+				res = internal_symresolve(linker, rel.symname,
+				    &symbol);
+				if (res == true) {
+#ifdef SHIVA_STANDALONE
+					symval = symbol.value;
+#else
+					symval = symbol.value + linker->shiva_base;
+#endif		 
+					rel_unit = &linker->text_mem[smap.offset + rel.offset];
+					rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+					rel_val = symval + rel.addend;
+					shiva_debug("Symbol: %s\n", rel.symname);
+					shiva_debug("rel_val = %#lx + %#lx - %#lx\n", symval, rel.addend, rel_addr);
+					shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
+					*(uint64_t *)&rel_unit[0] = rel_val;
+					return true;
+				} else {
+					fprintf(stderr, "Failed to find relocation symbol: %s in Shiva ELF image\n", rel.symname);
+					return false;
+				}
+			} else {
+				/*
+				 * A symbol was found in the Shiva ET_REL module that
+				 * is not a section name.
+				 */
+				symval = linker->text_vaddr + symbol.value;
+				rel_unit = &linker->text_mem[smap.offset + rel.offset];
+				rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+				rel_val = symval + rel.addend;
+				shiva_debug("Symbol: %s\n", rel.symname);
+				shiva_debug("rel_val = %#lx + %#lx - %#lx\n", symval, rel.addend, rel_addr);
+				shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
+				*(uint64_t *)&rel_unit[0] = rel_val;
+			}
+		}
+		break;
+	case R_AARCH64_CALL26: /* ((S + A - P) >> 2) & 0x3ffffff */
+		/*
+		 * NOTE: Every immediate call (i.e. bl <offset>) will cause our
+		 * linker to emit an internal PLT stub within the module.
+		 * So in this case, the symbol 'S' is the address of the PLT
+		 * stub.
+		 */
+		TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {
+			if (strcmp(rel.symname, current->symname) != 0)
+				continue;
+			shiva_debug("Applying R_AARCH64_CALL26 relocation for %s\n", current->symname);
+			rel_unit = &linker->text_mem[smap.offset + rel.offset];
+			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+			rel_val = current->vaddr + rel.addend - rel_addr;
+			shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
+			memcpy(&insn_bytes, &rel_unit[0], sizeof(uint32_t));
+			insn_bytes = (insn_bytes & ~RELOC_MASK(26) | rel_val & RELOC_MASK(26));
+			*(uint32_t *)&rel_unit[0] = insn_bytes;
+			return true;
+		}
+		break;
+	case R_AARCH64_ADD_ABS_LO12_NC: /* (S + A) & 0xfff */
+		/*
+		 * Does the relocation symbol reference a section header name?
+		 */
+		TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
+			if (strcmp(smap_current->name, rel.symname) != 0)
+				continue;
+			symval = smap_current->vaddr;
+			rel_unit = &linker->text_mem[smap.offset + rel.offset];
+			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+			rel_val = symval + rel.addend;
+			memcpy(&insn_bytes, &rel_unit[0], sizeof(uint32_t));
+			insn_bytes = (insn_bytes & ~RELOC_MASK(12) | rel_val & RELOC_MASK(12));
+			*(uint64_t *)&rel_unit[0] = insn_bytes;
+			return true;
+		}
+		/* TODO: Does this reloc apply to functions or data object? */
+		break;
 
+
+	}
+#endif
+
+
+		
+
+
+#if defined(__x86_64__)
 	switch(rel.type) {
 	case R_X86_64_PLTOFF64: /* computation L - GOT + A */
 		TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {
@@ -287,9 +425,9 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 				 * to the base of '.rodata'
 				 */
 				if (get_section_mapping(linker, ".rodata", &smap_tmp) == false) {
-                			shiva_debug("Failed to retrieve section data for %s\n", rel.shdrname);
-                			return false;
-        			}
+					shiva_debug("Failed to retrieve section data for %s\n", rel.shdrname);
+					return false;
+				}
 
 				rel_val = (symbol.value + smap_tmp.vaddr) + rel.addend -
 				    (linker->data_vaddr + linker->pltgot_off);
@@ -397,6 +535,7 @@ internal_lookup:
 			}
 		}
 	}
+#endif
 	return false;
 }
 bool
@@ -529,9 +668,13 @@ calculate_data_size(struct shiva_module *linker)
 	elf_relocation_iterator_init(&linker->elfobj, &rel_iter);
 	while (elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK) {
 		switch(rel.type) {
+#ifdef __x86_64__
 		case R_X86_64_PLT32:
 		case R_X86_64_GOT64:
 		case R_X86_64_PLTOFF64:
+#elif __aarch64__
+		case R_AARCH64_CALL26:
+#endif
 			/*
 			 * Create room for the modules pltgot
 			 */
@@ -602,7 +745,11 @@ calculate_text_size(struct shiva_module *linker)
 	linker->plt_off = linker->text_size;
 	elf_relocation_iterator_init(&linker->elfobj, &rel_iter);
 	while (elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK) {
+#ifdef __x86_64__
 		if (rel.type == R_X86_64_PLT32 || rel.type == R_X86_64_PLTOFF64) {
+#elif __aarch64__
+		if (rel.type == R_AARCH64_CALL26) {
+#endif
 			/*
 			 * Create room for each PLT stub
 			 */
@@ -830,8 +977,26 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 			}
 			TAILQ_INSERT_TAIL(&linker->tailq.section_maplist, n, _linkage);
 		}
+		/*
+		 * ELF Relocs for creating internal PLT linkage to external (And local) calls.
+		 * X86_64 --
+		 *	Small code model: R_X86_64_PLT32 indicates that we are patching
+		 *	call offsets into the PLT.
+		 *
+		 *	Large code model: R_X86_64_PLTOFF indicates that we are patching
+		 *	an absolute address that will be called indirectly
+		 * AARCH64 --
+		 *	Small and Large code model will use R_AARCH_CALL26 relocations
+		 *	to encode 26bit offsets.
+		 */
+#ifdef __x86_64__
 		if (rel.type != R_X86_64_PLT32 && rel.type != R_X86_64_PLTOFF64)
 			continue;
+#elif __aarch64__
+		if (rel.type != R_AARCH64_CALL26)
+			continue;
+#endif
+
 		/*
 		 * We have a tailq list for the address/offset of each PLT entry
 		 * and it's corresponding symbol.
