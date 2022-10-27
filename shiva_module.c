@@ -22,13 +22,11 @@ uint8_t plt_stub[6] = "\xff\x25\x00\x00\x00\x00";
 static void
 transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
 {
-#ifdef __x86_64__
-	__asm__ __volatile__ ("mov %0, %%rdi\n" :: "r"(ctx));
-	__asm__ __volatile__ ("mov %0, %%rax\n"
-			      "call *%%rax" :: "r" (entry));
-#endif
-	return;
+	void (*fn)(void *arg) = (void (*)(void *))entry;
+
+	return fn(ctx);
 }
+
 /*
  * Module entry point. Lookup symbol "main"
  */
@@ -326,7 +324,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 			shiva_debug("Applying R_AARCH64_CALL26 relocation for %s\n", current->symname);
 			rel_unit = &linker->text_mem[smap.offset + rel.offset];
 			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
-			rel_val = current->vaddr + rel.addend - rel_addr;
+			rel_val = ((current->vaddr + rel.addend - rel_addr) >> 2);
 			shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
 			memcpy(&insn_bytes, &rel_unit[0], sizeof(uint32_t));
 			insn_bytes = (insn_bytes & ~RELOC_MASK(26) | rel_val & RELOC_MASK(26));
@@ -337,6 +335,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 	case R_AARCH64_ADD_ABS_LO12_NC: /* (S + A) & 0xfff */
 		/*
 		 * Does the relocation symbol reference a section header name?
+		 * i.e. '.text'.
 		 */
 		TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
 			if (strcmp(smap_current->name, rel.symname) != 0)
@@ -347,13 +346,38 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 			rel_val = symval + rel.addend;
 			memcpy(&insn_bytes, &rel_unit[0], sizeof(uint32_t));
 			insn_bytes = (insn_bytes & ~RELOC_MASK(12) | rel_val & RELOC_MASK(12));
-			*(uint64_t *)&rel_unit[0] = insn_bytes;
+			*(uint32_t *)&rel_unit[0] = insn_bytes;
 			return true;
 		}
 		/* TODO: Does this reloc apply to functions or data object? */
 		break;
-
-
+	case R_AARCH64_ADR_PREL_PG_HI21: /* ((PAGE(S+A) - PAGE(P)) >> 12) & 0x1fffff */
+		/*
+		 * Does the relocation symbol reference a section header name?
+		 * It usually references `.text` as it's symbol.
+		 */
+		TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
+			if (strcmp(smap_current->name, rel.symname) != 0)
+				continue;
+			symval = smap_current->vaddr;
+			rel_unit = &linker->text_mem[smap.offset + rel.offset];
+			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+			rel_val = ELF_PAGESTART(symval + rel.addend) - ELF_PAGESTART(rel_addr);
+			rel_val = rel_val >> 12;
+			memcpy(&insn_bytes, &rel_unit[0], sizeof(uint32_t));
+			/*
+			 * Re-encode the instruction with the new IMM field of ADR
+			 */
+			insn_bytes = (insn_bytes & ~((RELOC_MASK (2) << 29) | (RELOC_MASK(19) << 5)))
+			    | ((rel_val & RELOC_MASK(2)) << 29) | ((rel_val & (RELOC_MASK(19) << 2)) << 3);
+			*(uint32_t *)&rel_unit[0] = insn_bytes;
+			return true;
+		}
+		/*
+		 * TODO: Does this reloc apply to function or data symbols too?
+		 * haven't seen it yet.
+		 */
+		break;
 	}
 #endif
 

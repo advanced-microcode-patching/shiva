@@ -7,6 +7,6 @@ all:
 	gcc -mcmodel=large -fno-pic -I ../ -fno-stack-protector -c plt_cfi.c
 	gcc -mcmodel=large -fno-pic -I ../ -fno-stack-protector -c sandbox.c
 	gcc -mcmodel=large -fno-pic -I ../ -fno-stack-protector -c command_inject.c
-	gcc -mcmodel=large -fno-pic -I ../ -fno-stack-protector -c crackme_bypass.c
+	gcc -mcmodel=large -fno-pic -I ../ -fno-stack-protector -c simple.c
 clean:
 	rm -f *.o
