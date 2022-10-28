@@ -150,7 +150,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		fprintf(stderr, "shiva_module_loader failed\n");
 		return false;
 	}
-
 	shiva_debug("Target base after module: %#lx\n", ctx->ulexec.base_vaddr);
 	if (elf_type(&ctx->elfobj) != ET_DYN) {
 		fprintf(stderr, "Shiva only supports PIE ELF binaries.\n");

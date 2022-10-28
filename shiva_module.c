@@ -2,7 +2,7 @@
 #include "shiva_debug.h"
 #include <sys/mman.h>
 
-#define RELOC_MASK(n)	(1U << (n - 1))
+#define RELOC_MASK(n)	((1U << n) - 1)
 
 /*
  * The purpose of this code is to take a relocatable object,
@@ -11,6 +11,7 @@
  * segment, and SHF_WRITE sections into the data segment.
  */
 
+#ifdef __x86_64__
 /*
  * Our custom PLT stubs are a simple IP relative indirect
  * JMP into the global offset table.
@@ -18,6 +19,19 @@
  * NOTE: Our linker uses strict linking.
  */
 uint8_t plt_stub[6] = "\xff\x25\x00\x00\x00\x00";
+#elif __aarch64__
+/*
+ * Our PLT stub requires more bytes in ARM64 assembly.
+ */
+#if 0
+uint8_t plt_stub[32] = "\x10\x00\x00\x90" \ /* adrp	x16, 0		*/
+		       "\x11\x02\x40\xf9" \ /* ldr	x17, [x16]	*/
+		       "\x10\x02\x00\x91" \ /* add	x16, x16, #0x0	*/
+		       "\x20\x02\x1f\xd6";  /* br x17			*/
+#endif
+uint8_t plt_stub[8] = "\x11\x00\x00\x58"  /* ldr	x17, got_entry_mem */
+		      "\x20\x02\x1f\xd6"; /* br x17			   */
+#endif
 
 static void
 transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
@@ -175,7 +189,25 @@ patch_plt_stubs(struct shiva_module *linker)
 		gotaddr = linker->data_vaddr + linker->pltgot_off + got_entry.gotoff;
 		pltaddr = linker->text_vaddr + (linker->plt_off + i * sizeof(plt_stub));
 		gotoff = gotaddr - pltaddr - sizeof(plt_stub);
+#ifdef __x86_64__
 		*(uint32_t *)&stub[2] = gotoff;
+#elif __aarch64__
+		/*
+		 * We patch the Shiva module PLT stub, one 4-byte word at a time. Our
+		 * stub is 16 bytes in total.
+		 */
+#if 0
+		uint32_t rval = (ELF_PAGESTART(gotaddr) - ELF_PAGESTART(pltaddr - sizeof(plt_stub))) >> 12;
+		uint32_t insn_bytes = *(uint32_t *)&stub[0];
+		insn_bytes = (insn_bytes & ~((RELOC_MASK (2) << 29) | (RELOC_MASK(19) << 5)))
+		    | ((rval & RELOC_MASK(2)) << 29) | ((rval & (RELOC_MASK(19) << 2)) << 3);
+		*(uint32_t *)&stub[0] = insn_bytes;
+#endif
+		uint32_t rval = ((gotaddr - pltaddr) >> 2);
+		uint32_t insn_bytes = *(uint32_t *)&stub[0];
+		insn_bytes = (insn_bytes & ~(RELOC_MASK(19) << 5)) | ((rval & RELOC_MASK(19)) << 5);
+		*(uint32_t *)&stub[0] = insn_bytes;
+#endif
 		i++;
 		shiva_debug("SYMNAME: %s PLTADDR: %#lx GOTADDR: %#lx GOTOFF: %#lx\n", current->symname, pltaddr, gotaddr, gotoff);
 		shiva_debug("Fixedup PLT stub with GOT offset: %#lx\n", gotoff);
@@ -324,7 +356,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 			shiva_debug("Applying R_AARCH64_CALL26 relocation for %s\n", current->symname);
 			rel_unit = &linker->text_mem[smap.offset + rel.offset];
 			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
-			rel_val = ((current->vaddr + rel.addend - rel_addr) >> 2);
+			rel_val = ((current->vaddr + rel.addend - rel_addr)) >> 2;
 			shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
 			memcpy(&insn_bytes, &rel_unit[0], sizeof(uint32_t));
 			insn_bytes = (insn_bytes & ~RELOC_MASK(26) | rel_val & RELOC_MASK(26));
@@ -340,12 +372,17 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 		TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
 			if (strcmp(smap_current->name, rel.symname) != 0)
 				continue;
+			shiva_debug("Applying R_AARCH64_ADD_ABS_LO12_NC relocation for %s\n",
+			    rel.symname);
 			symval = smap_current->vaddr;
 			rel_unit = &linker->text_mem[smap.offset + rel.offset];
 			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 			rel_val = symval + rel.addend;
+			shiva_debug("rel_addr: %#lx symval: %#lx rel.addend: %#lx\n",
+			    rel_addr, symval, rel.addend);
 			memcpy(&insn_bytes, &rel_unit[0], sizeof(uint32_t));
-			insn_bytes = (insn_bytes & ~RELOC_MASK(12) | rel_val & RELOC_MASK(12));
+			insn_bytes = (insn_bytes & ~(RELOC_MASK(12) << 10)) | ((rel_val & RELOC_MASK(12)) << 10);
+			shiva_debug("insn_bytes: %#x\n", (uint32_t)insn_bytes);
 			*(uint32_t *)&rel_unit[0] = insn_bytes;
 			return true;
 		}
@@ -356,9 +393,12 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 		 * Does the relocation symbol reference a section header name?
 		 * It usually references `.text` as it's symbol.
 		 */
+
 		TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
 			if (strcmp(smap_current->name, rel.symname) != 0)
 				continue;
+			shiva_debug("Applying R_AARCH64_ADR_PREL_PG_HI21 relocation for %s\n",
+			    rel.symname);
 			symval = smap_current->vaddr;
 			rel_unit = &linker->text_mem[smap.offset + rel.offset];
 			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
@@ -1136,6 +1176,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		return false;
 	}
 	shiva_debug("Entry point address: %#lx\n", entry);
+	test_mark();
 	transfer_to_module(ctx, entry);
 	shiva_debug("Successfully executed module\n");
 	return true;

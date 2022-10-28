@@ -1,12 +1,12 @@
 STANDALONE_DIR = './standalone'
 LDSO_DIR = './ldso'
 
-GCC_OPTS_STANDALONE= -fPIC -w -ggdb -c -DSHIVA_STANDALONE
+GCC_OPTS_STANDALONE= -fPIC -w -ggdb -c -DDEBUG -DSHIVA_STANDALONE
 GCC_OPTS_LDSO= -fPIC -c -DDEBUG -ggdb
 OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \
     shiva_callsite.o shiva_target.o
-INTERP_PATH="/home/elfmaster/git/shiva/ldso/shiva"
+INTERP_PATH="/home/elfmaster/amp/shiva/ldso/shiva"
 ifeq ($(uname -m),x86_64)
 STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a libudis86.a
 else
