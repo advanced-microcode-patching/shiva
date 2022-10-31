@@ -113,6 +113,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		shiva_debug("Found symbol '%s' within Shiva. Symbol value: %#lx Shiva base: %#lx\n",
 		    current->symname, symbol.value, linker->shiva_base);
 		GOT = (uint64_t *)((uint64_t)(linker->data_vaddr + linker->pltgot_off + current->gotoff));
+#ifdef __x86_64__
 #ifdef SHIVA_STANDALONE
 		/*
 		 * NOTE: Shiva is now linked as an ET_EXEC in standalone mode to promote
@@ -122,6 +123,12 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		*(uint64_t *)GOT = symbol.value;
 #else
 		*(uint64_t *)GOT = symbol.value + linker->shiva_base;
+#endif
+#elif __aarch64__
+		/*
+		 * NOTE aarch64 version of Shiva is an ET_EXEC always.
+		 */
+		*(uint64_t *)GOT = symbol.value;
 #endif
 	}
 #if 0
@@ -310,11 +317,15 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 				res = internal_symresolve(linker, rel.symname,
 				    &symbol);
 				if (res == true) {
+#ifdef __x86_64__
 #ifdef SHIVA_STANDALONE
 					symval = symbol.value;
 #else
 					symval = symbol.value + linker->shiva_base;
-#endif		 
+#endif
+#elif __aarch64__
+					symval = symbol.value;
+#endif		
 					rel_unit = &linker->text_mem[smap.offset + rel.offset];
 					rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 					rel_val = symval + rel.addend;
@@ -340,6 +351,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 				shiva_debug("rel_val = %#lx + %#lx - %#lx\n", symval, rel.addend, rel_addr);
 				shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
 				*(uint64_t *)&rel_unit[0] = rel_val;
+				return true;
 			}
 		}
 		break;
@@ -580,10 +592,19 @@ internal_lookup:
 				 * symbol.value as the symval, instead of symbol.value + linker->text_vaddr
 				 * (Which adds the module text segment to symbol.value).
 				 */
+/*
+ * NOTE:
+ * aarch64 interpreter is ET_EXEC and we don't need to add
+ * the linker->shiva_base to it.
+ */
+#ifdef __x86_64__
 #ifdef SHIVA_STANDALONE
 				symval = symbol.value;
 #else
 				symval = symbol.value + linker->shiva_base;
+#endif
+#elif __aarch64__
+				symval = symbol.value;
 #endif
 				rel_unit = &linker->text_mem[smap.offset + rel.offset];
 				rel_addr = linker->text_vaddr + smap.offset + rel.offset;

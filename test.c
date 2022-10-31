@@ -28,7 +28,7 @@ int main(int argc, char **argv)
 	int i;
 	char *var;
 
-	for (i = 0; i < 1000; i++)
+	for (i = 0; i < 10; i++)
 		print_string("Hello World");
 	if (argc > 1)
 		print_string(argv[1]);
