@@ -204,6 +204,12 @@ typedef struct shiva_mmap_entry {
 	TAILQ_ENTRY(shiva_mmap_entry) _linkage;
 } shiva_mmap_entry_t;
 
+typedef enum shiva_linking_mode {
+	SHIVA_LINKING_MICROCODE_PATCH = 0,
+	SHIVA_LINKING_MODULE,
+	SHIVA_LINKING_UNKNOWN
+} shiva_linking_mode_t;
+
 struct shiva_module {
 	int fd;
 	uint64_t flags;
@@ -222,7 +228,8 @@ struct shiva_module {
 	uint64_t data_vaddr;
 	uint64_t shiva_base; /* base address of shiva executable at runtime */
 	elfobj_t elfobj; /* elfobj to the module */
-	elfobj_t self; /* elfobj to self (Debugger binary) */
+	elfobj_t self; /* elfobj to self (Shiva binary) */
+	elfobj_t *target_elfobj; /* elfobj of target executable */
 	struct {
 		TAILQ_HEAD(, shiva_module_got_entry) got_list;
 		TAILQ_HEAD(, shiva_module_section_mapping) section_maplist;
@@ -231,6 +238,7 @@ struct shiva_module {
 	struct {
 		struct hsearch_data got;
 	} cache;
+	shiva_linking_mode_t mode;
 };
 
 typedef struct shiva_trace_regset_x86_64 {

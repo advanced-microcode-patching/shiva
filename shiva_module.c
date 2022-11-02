@@ -243,7 +243,8 @@ static bool
 internal_symresolve(struct shiva_module *linker, char *symname, struct elf_symbol *symbol)
 {
 	struct elf_symbol tmp;
-	struct elfobj *elfobj = &linker->self;
+	struct elfobj *elfobj = linker->mode == SHIVA_LINKING_MODULE ?
+	    &linker->self : linker->target_elfobj;
 
 	if (elf_symbol_by_name(elfobj, symname, &tmp) == false)
 		return false;
@@ -287,7 +288,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 	case R_AARCH64_ABS64:
 		/*
 		 * Is the symbol a section header, such as .eh_frame or .rodata,
-		 * that lives within the module body itself?
+		 * that lives within the Shiva-module itself?
 		 */
 		shiva_debug("Applying R_AARCH64_ABS64 relocation for %s\n", rel.symname);
 		TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
@@ -1115,6 +1116,27 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 }
 
 /*
+ * Our linker has two modes:
+ * 1. Link Shiva modules, who's init function is always STT_FUNC:shakti_main()
+ * 2. Link a microcode patch driven by targetted symbol interposition.
+ */
+void
+set_linker_mode(struct shiva_module *linker)
+{
+	struct elf_symbol symbol;
+
+	if (elf_symbol_by_name(&linker->elfobj, "shakti_main", &symbol) == false) {
+		linker->mode = SHIVA_LINKING_MICROCODE_PATCH;
+	} else {
+		if (symbol.type != STT_FUNC || symbol.bind != STB_GLOBAL) {
+			linker->mode = SHIVA_LINKING_MICROCODE_PATCH;
+		} else {
+			linker->mode = SHIVA_LINKING_MODULE;
+		}
+	}
+	return;
+}
+/*
  * NOTE: const char *path: path to the ELF module
  */
 bool
@@ -1132,6 +1154,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		return false;
 	}
 	memset(linker, 0, sizeof(*linker));
+	linker->target_elfobj = &ctx->elfobj;
 	linker->flags = flags;
 	linker->shiva_base = ctx->shiva.base;
 	*linkerptr = linker;
@@ -1164,6 +1187,18 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	}
 	memcpy(&ctx->shiva_elfobj, &linker->self, sizeof(elfobj_t));
 
+	set_linker_mode(linker);
+	switch(linker->mode) {
+	case SHIVA_LINKING_MODULE:
+		shiva_debug("Shiva linker mode: <MODULE>\n");
+		break;
+	case SHIVA_LINKING_MICROCODE_PATCH:
+		shiva_debug("Shiva linker mode: <MICROCODE PATCH>\n");
+		break;
+	case SHIVA_LINKING_UNKNOWN:
+		shiva_debug("Unknown linking mode, quitting\n");
+		return false;
+	}
 	if (calculate_text_size(linker) == false) {
 		shiva_debug("Failed to calculate .text size for parasite module\n");
 		return false;
@@ -1192,12 +1227,23 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		shiva_debug("Failed to resolve PLTGOT entries\n");
 		return false;
 	}
+
+	/*
+	 * If we are linking a Shiva module, then we pass control to the
+	 * init function of the module "shakti_main()"
+	 * Otherwise, if we are linking a microcode patch we don't pass
+	 * control to it directly, it is executed through patching hooks.
+	 */
+	if (linker->mode == SHIVA_LINKING_MICROCODE_PATCH) {
+		shiva_debug("Finished relocating patch\n");
+		return true;
+	}
+
 	if (module_entrypoint(linker, &entry) == false) {
 		shiva_debug("Failed to get module entry point\n");
 		return false;
 	}
-	shiva_debug("Entry point address: %#lx\n", entry);
-	test_mark();
+	shiva_debug("ModuleEntry point address: %#lx\n", entry);
 	transfer_to_module(ctx, entry);
 	shiva_debug("Successfully executed module\n");
 	return true;
