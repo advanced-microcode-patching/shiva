@@ -33,6 +33,24 @@ uint8_t plt_stub[8] = "\x11\x00\x00\x58"  /* ldr	x17, got_entry_mem */
 		      "\x20\x02\x1f\xd6"; /* br x17			   */
 #endif
 
+/*
+ * Returns the name of the ELF section that the symbol lives in, within the
+ * loaded ET_REL module.
+ */
+static char *
+module_symbol_shndx_str(struct shiva_module *linker, struct elf_symbol *symbol)
+{
+	struct elf_section *section = shiva_malloc(sizeof(*section));
+	uint16_t shndx = symbol->shndx;
+	/*
+	 * What section does our symbol live in?
+	 */
+	if (elf_section_by_index(&linker->elfobj, shndx, section)
+	    == false)
+		return NULL;
+	return section->name;
+}
+
 static void
 transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
 {
@@ -41,8 +59,14 @@ transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
 	return fn(ctx);
 }
 
+static bool
+apply_external_patch_links(struct shiva_module *linker)
+{
+
+	return true;
+}
 /*
- * Module entry point. Lookup symbol "main"
+ * Module entry point. Lookup symbol "shakti_main"
  */
 static bool
 module_entrypoint(struct shiva_module *linker, uint64_t *entry)
@@ -105,10 +129,24 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				continue;
 			}
 		}
-		if (elf_symbol_by_name(&linker->self, current->symname, &symbol) == false) {
-			fprintf(stderr, "Could not resolve symbol '%s'. Linkage failure!\n",
-			    current->symname);
-			return false;
+		/*
+		 * If the PLTGOT entry doesn't point to a symbol within the Shiva module
+		 * itself, then let's check to see if we find it in the target executable.
+		 * Only applicable if linking mode is set: SHIVA_LINKING_MICROCODE_PATCH
+		 */
+		if (linker->mode == SHIVA_LINKING_MICROCODE_PATCH) {
+			if (elf_symbol_by_name(linker->target_elfobj, current->symname,
+			    &symbol) == false) {
+				fprintf(stderr, "Could not resolve symbol '%s' in %s. Linkage failure\n",
+				    current->symname, elf_pathname(linker->target_elfobj));
+				return false;
+			}
+		} else if (linker->mode == SHIVA_LINKING_MODULE) {
+			if (elf_symbol_by_name(&linker->self, current->symname, &symbol) == false) {
+				fprintf(stderr, "Could not resolve symbol '%s'. Linkage failure!\n",
+				    current->symname);
+				return false;
+			}
 		}
 		shiva_debug("Found symbol '%s' within Shiva. Symbol value: %#lx Shiva base: %#lx\n",
 		    current->symname, symbol.value, linker->shiva_base);
@@ -266,6 +304,8 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 	ENTRY e, *ep;
 	struct shiva_module_got_entry got_entry;
 	bool res;
+	char *symbol_section;
+	struct elf_section tmp_shdr;
 
 	char *shdrname = strrchr(rel.shdrname, '.');
 	if (shdrname == NULL) {
@@ -278,6 +318,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 	}
 	shiva_debug("Successfully retrieved section mapping for %s\n", shdrname);
 	shiva_debug("linker->text_vaddr: %#lx\n", linker->text_vaddr);
+	shiva_debug("linker->data_vaddr: %#lx\n", linker->data_vaddr);
 	shiva_debug("smap.offset: %#lx\n", smap.offset);
 #if defined(__aarch64__)
 	switch(rel.type) {
@@ -290,7 +331,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 		 * Is the symbol a section header, such as .eh_frame or .rodata,
 		 * that lives within the Shiva-module itself?
 		 */
-		shiva_debug("Applying R_AARCH64_ABS64 relocation for %s\n", rel.symname);
+		shiva_debug("Applying R_AARCH64_ABS64 relocation for symbol %s\n", rel.symname);
 		TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
 			if (strcmp(smap_current->name, rel.symname) != 0)
 				continue;
@@ -313,6 +354,10 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 			 * our executable process image :)) NOTE: All of libelfmaster
 			 * and libmusl are statically linked into Shiva, so there are
 			 * relocations that apply to these symbols externally.
+			 *
+			 * internal_symresolve will look for the symbol within the Shiva
+			 * binary if linking mode is set to SHIVA_LINKING_MODULE, otherwise
+			 * internal_symresolve will check the target ELF executable.
 			 */
 			if (symbol.type == STT_NOTYPE) {
 				res = internal_symresolve(linker, rel.symname,
@@ -325,13 +370,13 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 					symval = symbol.value + linker->shiva_base;
 #endif
 #elif __aarch64__
-					symval = symbol.value;
-#endif		
+					symval = symbol.value + linker->target_base;
+#endif
 					rel_unit = &linker->text_mem[smap.offset + rel.offset];
 					rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 					rel_val = symval + rel.addend;
 					shiva_debug("Symbol: %s\n", rel.symname);
-					shiva_debug("rel_val = %#lx + %#lx - %#lx\n", symval, rel.addend, rel_addr);
+					shiva_debug("rel_val = %#lx + %#lx\n", symval, rel.addend);
 					shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
 					*(uint64_t *)&rel_unit[0] = rel_val;
 					return true;
@@ -344,12 +389,37 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 				 * A symbol was found in the Shiva ET_REL module that
 				 * is not a section name.
 				 */
-				symval = linker->text_vaddr + symbol.value;
-				rel_unit = &linker->text_mem[smap.offset + rel.offset];
-				rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+				symbol_section = module_symbol_shndx_str(linker, &symbol);
+				if (symbol_section == NULL) {
+					fprintf(stderr, "Failed to find home-section for symbol: %s "
+					    "in module '%s'\n", symbol.name, elf_pathname(&linker->elfobj));
+					return false;
+				}
+				if (elf_section_by_name(&linker->elfobj, symbol_section, &tmp_shdr) == false) {
+					fprintf(stderr, "Unable to look up symbol '%s' in module '%s'\n",
+					    symbol.name, elf_pathname(&linker->elfobj));
+			 		return false;
+				}
+				if (tmp_shdr.flags & SHF_ALLOC) {
+					if (!(tmp_shdr.flags & SHF_WRITE)) {
+					/*
+					 * If the symbol lives in a section that's SHF_ALLOC but not
+					 * SHF_WRITE then it goes into our modules text segment. For
+					 * example symbols in .rodata, and .text would be stored in
+					 * the text segment of the module.
+					 */
+						symval = linker->text_vaddr + symbol.value;
+						rel_unit = &linker->text_mem[smap.offset + rel.offset];
+						rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+					} else {
+						symval = linker->data_vaddr + symbol.value;
+						rel_unit = &linker->text_mem[smap.offset + rel.offset];
+						rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+					}
+				}
 				rel_val = symval + rel.addend;
 				shiva_debug("Symbol: %s\n", rel.symname);
-				shiva_debug("rel_val = %#lx + %#lx - %#lx\n", symval, rel.addend, rel_addr);
+				shiva_debug("rel_val = %#lx + %#lx\n", symval, rel.addend);
 				shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
 				*(uint64_t *)&rel_unit[0] = rel_val;
 				return true;
@@ -367,9 +437,12 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 			if (strcmp(rel.symname, current->symname) != 0)
 				continue;
 			shiva_debug("Applying R_AARCH64_CALL26 relocation for %s\n", current->symname);
+			shiva_debug("%s@shivaPLT: %#lx\n", current->symname, current->vaddr);
 			rel_unit = &linker->text_mem[smap.offset + rel.offset];
 			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 			rel_val = ((current->vaddr + rel.addend - rel_addr)) >> 2;
+			shiva_debug("rel_val = ((%#lx + %#lx - %#lx) >> 2)\n", current->vaddr,
+			    rel.addend, rel_addr);
 			shiva_debug("rel_addr: %#lx rel_val: %#x\n", rel_addr, rel_val);
 			memcpy(&insn_bytes, &rel_unit[0], sizeof(uint32_t));
 			insn_bytes = (insn_bytes & ~RELOC_MASK(26) | rel_val & RELOC_MASK(26));
@@ -393,6 +466,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 			rel_val = symval + rel.addend;
 			shiva_debug("rel_addr: %#lx symval: %#lx rel.addend: %#lx\n",
 			    rel_addr, symval, rel.addend);
+			shiva_debug("rel_val = (%#lx + %#lx) & 0xfff;\n", symval, rel.addend);
 			memcpy(&insn_bytes, &rel_unit[0], sizeof(uint32_t));
 			insn_bytes = (insn_bytes & ~(RELOC_MASK(12) << 10)) | ((rel_val & RELOC_MASK(12)) << 10);
 			shiva_debug("insn_bytes: %#x\n", (uint32_t)insn_bytes);
@@ -663,6 +737,10 @@ relocate_module(struct shiva_module *linker)
  * section. Without the segment_offset this function would not be re-entrant.
  * The segment_offset tells us at which offset within the segment to copy the given
  * section data to.
+ *
+ * NOTE: Sections should be created on aligned boundaries, especially as it
+ * pertains to ARM, otherwise the relocation encodings can't decode to values
+ * based on a power of 2.
  */
 bool
 elf_section_map(elfobj_t *elfobj, uint8_t *dst, struct elf_section section,
@@ -1042,7 +1120,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 		}
 	}
 	shiva_debug("count: %zu off: %zu\n", count, off);
-	linker->plt_off = off;
+	linker->plt_off = (off + 16) & ~15;
 	elf_relocation_iterator_init(&linker->elfobj, &rel_iter);
 	for (i = 0; elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK;) {
 		if (i == 0) {
@@ -1157,6 +1235,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	linker->target_elfobj = &ctx->elfobj;
 	linker->flags = flags;
 	linker->shiva_base = ctx->shiva.base;
+	linker->target_base = ctx->ulexec.base_vaddr;
 	*linkerptr = linker;
 	
 	TAILQ_INIT(&linker->tailq.section_maplist);
@@ -1232,10 +1311,16 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	 * If we are linking a Shiva module, then we pass control to the
 	 * init function of the module "shakti_main()"
 	 * Otherwise, if we are linking a microcode patch we don't pass
-	 * control to it directly, it is executed through patching hooks.
+	 * control to it directly, it is executed through patching hooks
+	 * within the target executable.
 	 */
 	if (linker->mode == SHIVA_LINKING_MICROCODE_PATCH) {
 		shiva_debug("Finished relocating patch\n");
+		if (apply_external_patch_links(linker) == false) {
+			shiva_debug("Failed to apply patches to target executable: %s\n",
+			    elf_pathname(linker->target_elfobj));
+			return false;
+		}
 		return true;
 	}
 

@@ -227,6 +227,7 @@ struct shiva_module {
 	uint64_t text_vaddr;
 	uint64_t data_vaddr;
 	uint64_t shiva_base; /* base address of shiva executable at runtime */
+	uint64_t target_base;
 	elfobj_t elfobj; /* elfobj to the module */
 	elfobj_t self; /* elfobj to self (Shiva binary) */
 	elfobj_t *target_elfobj; /* elfobj of target executable */
