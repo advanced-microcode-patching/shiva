@@ -150,7 +150,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		fprintf(stderr, "shiva_module_loader failed\n");
 		return false;
 	}
-
 	shiva_debug("Target base after module: %#lx\n", ctx->ulexec.base_vaddr);
 	if (elf_type(&ctx->elfobj) != ET_DYN) {
 		fprintf(stderr, "Shiva only supports PIE ELF binaries.\n");
@@ -240,7 +239,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	 * rsp must now point to our new stack, right at &argc
 	 */
 	rsp = (uint64_t *)n_stack;
-	shiva_debug("Passing control to entry point: %#lx\n", entry_point);
+	shiva_debug("Target entry point: %#lx\n", entry_point);
 	shiva_debug("LDSO entry point: %#lx\n", ctx->ulexec.ldso.entry_point);
 
 #if 0
@@ -387,6 +386,13 @@ int main(int argc, char **argv, char **envp)
 		exit(EXIT_FAILURE);
 	}
 
+	/*
+	 * XXX
+	 * In ARM this seems to find the wrong base address for Shiva. Fortunately
+	 * our interpreter is only ET_EXEC (Not ET_DYN) in aarch64. Nonetheless
+	 * why is this code returnin the stack address instead of the base of Shiva?
+	 * TODO
+	 */
 	shiva_maps_iterator_init(&ctx, &maps_iter);
 	while (shiva_maps_iterator_next(&maps_iter, &mmap_entry) == SHIVA_ITER_OK) {
 		if (mmap_entry.mmap_type == SHIVA_MMAP_TYPE_SHIVA && mmap_entry.prot == PROT_READ) {

@@ -5,6 +5,9 @@
 
 #include "../shiva.h"
 
+int global_data = 5;
+int global_data2;
+
 /*
  * Handles hooked callsites
  */
@@ -63,6 +66,8 @@ shakti_main(shiva_ctx_t *ctx)
 		    shiva_error_msg(&error));
 		return -1;
 	}
+	global_data = 1;
+	global_data2 = 5;
 	shiva_callsite_iterator_init(ctx, &call_iter);
 	while (shiva_callsite_iterator_next(&call_iter, &branch) == ELF_ITER_OK) {
 		//if ((branch.branch_flags & SHIVA_BRANCH_F_PLTCALL) == 0)

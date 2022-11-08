@@ -5,6 +5,10 @@
 #include <stdlib.h>
 #include <time.h>
 
+int abc;
+int abc2;
+uint32_t abc3[4096];
+
 void print_string(const char *s)
 {
 	struct timespec tps, tpe;
@@ -24,9 +28,10 @@ int main(int argc, char **argv)
 	int i;
 	char *var;
 
-	for (i = 0; i < 1000; i++)
+	for (i = 0; i < 10; i++)
 		print_string("Hello World");
 	if (argc > 1)
 		print_string(argv[1]);
+	abc = 5;
 	exit(0);
 }
