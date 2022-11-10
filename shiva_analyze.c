@@ -3,6 +3,8 @@
  */
 #include "shiva.h"
 
+#define BIT_MASK(n)	((1U << n) - 1)
+
 bool
 shiva_analyze_find_calls(struct shiva_ctx *ctx)
 {
@@ -95,6 +97,46 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 		TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 		current_address += insn_len;
 	}
+#elif __aarch64__
+	size_t c, i, j;
+
+	if (cs_open(CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN,
+	    &ctx->disas.handle) != CS_ERR_OK)
+		return false;
+	c = cs_disasm(ctx->disas.handle, ctx->disas.textptr, section.size - 1,
+	    section.address, 0, &ctx->disas.insn);
+	for (j = 0; j < c; j++)
+		printf("0x%"PRIx64":\t%s\t\t%s\n", ctx->disas.insn[j].address,
+		    ctx->disas.insn[j].mnemonic, ctx->disas.insn[j].op_str);
+#if 0
+	
+	printf("Address of .text: %#lx\n", section.address);
+	printf("Looping through %d bytes\n", section.size);
+	for (i = 0; i < section.size; i+=4) {
+		uint64_t insn;
+		uint8_t *iptr = &insn;
+
+		if (elf_read_address(&ctx->elfobj,
+		    section.address + i, &insn, ELF_DWORD /*32bit*/) == false) {
+			fprintf(stderr, "elf_read_address() failed\n");
+			return false;
+		}
+		/*
+		 * AARCH64 bl instruction (Branch with link)
+		 */
+
+		if ((insn & 0xff000000) == 0x94) {
+			int64_t imm;
+
+			imm = insn & BIT_MASK(26 - 1);
+			printf("Imm: %x", insn);
+			printf("Found BL instruction: %x\n", insn);
+
+		}
+		printf(".");
+		printf("i: %d\n", i);
+	}
+#endif
 #endif
 	return true;
 }

@@ -10,7 +10,7 @@ INTERP_PATH="/home/elfmaster/amp/shiva/ldso/shiva"
 ifeq ($(uname -m),x86_64)
 STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a libudis86.a
 else
-STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a
+STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a libcapstone.a
 endif
 
 CC=gcc

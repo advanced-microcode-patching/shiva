@@ -21,6 +21,8 @@
 #include <sys/prctl.h>
 #include <sys/wait.h>
 
+#include <capstone/capstone.h>
+
 #include "./udis86-1.7.2/udis86.h"
 #include "/opt/elfmaster/include/libelfmaster.h"
 #include "shiva_debug.h"
@@ -297,7 +299,12 @@ typedef struct shiva_ctx {
 		size_t jmprel_count;
 	} altrelocs;
 	struct {
+#if __x86_64__
 		ud_t ud_obj;
+#elif __aarch64__
+		csh handle;
+		cs_insn *insn;
+#endif
 		uint8_t *textptr;
 		uint64_t base;
 	} disas;
