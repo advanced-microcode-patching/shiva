@@ -4,6 +4,9 @@
 #include "shiva.h"
 
 #define BIT_MASK(n)	((1U << n) - 1)
+#ifdef __aarch64__
+#define ARM_INSN_LEN 4
+#endif
 
 bool
 shiva_analyze_find_calls(struct shiva_ctx *ctx)
@@ -99,15 +102,39 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 	}
 #elif __aarch64__
 	size_t c, i, j;
-
+	size_t code_len = section.size - 1;
+	uint64_t code_vaddr = section.address; /* Points to .text */
+	struct elf_symbol;
+	uint8_t *code_ptr = ctx->disas.textptr;
+	elf_symtab_iterator_t symtab_iter;
+	cs_detail insnack_detail = {{0}};
+	cs_insn insnack = {0};
+	ctx->disas.insn = &insnack;
 	if (cs_open(CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN,
-	    &ctx->disas.handle) != CS_ERR_OK)
+	    &ctx->disas.handle) != CS_ERR_OK) {
+		fprintf(stderr, "cs_open failed\n");
 		return false;
-	c = cs_disasm(ctx->disas.handle, ctx->disas.textptr, section.size - 1,
-	    section.address, 0, &ctx->disas.insn);
-	for (j = 0; j < c; j++)
-		printf("0x%"PRIx64":\t%s\t\t%s\n", ctx->disas.insn[j].address,
-		    ctx->disas.insn[j].mnemonic, ctx->disas.insn[j].op_str);
+	}
+
+	shiva_debug("disassembling text(%#lx), %d bytes\n", section.address, section.size);
+	for (c = 0 ;; c += ARM_INSN_LEN) {
+		bool res;
+
+		shiva_debug("Address: %#lx\n", section.address + c);
+		shiva_debug("(uint32_t)textptr: %#x\n", *(uint32_t *)&code_ptr[c]);
+		if (c >= section.size)
+			break;
+		res = cs_disasm_iter(ctx->disas.handle, &code_ptr, &code_len,
+		    &code_vaddr, ctx->disas.insn);
+		for (;;) {
+			if (*(uint32_t *)code_ptr != 0)
+				break;
+			code_ptr += ARM_INSN_LEN;
+			code_vaddr += ARM_INSN_LEN;
+		}
+		shiva_debug("0x%"PRIx64":\t%s\t\t%s\n", ctx->disas.insn->address,
+		    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
+	}
 #if 0
 	
 	printf("Address of .text: %#lx\n", section.address);

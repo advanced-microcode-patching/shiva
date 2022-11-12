@@ -51,8 +51,8 @@ standalone:
 	$(MUSL) -DSHIVA_STANDALONE -static -Wl,-undefined=system -Wl,-undefined=prctl -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o ./standalone/shiva
 
 test_aarch64:
-	gcc test.c -o test
-	gcc -Wl,--dynamic-linker=$(INTERP_PATH) test.c -o test2
+	gcc -g test.c -o test
+	gcc -g -Wl,--dynamic-linker=$(INTERP_PATH) test.c -o test2
 
 clean:
 	rm -f test
