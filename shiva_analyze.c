@@ -134,6 +134,62 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 		}
 		shiva_debug("0x%"PRIx64":\t%s\t\t%s\n", ctx->disas.insn->address,
 		    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
+		if (strcmp(ctx->disas.insn->mnemonic, "bl") == 0) {
+			struct shiva_branch_site *tmp;
+			uint64_t addr;
+			char *p = strchr(ctx->disas.insn->op_str, '#');
+
+			if (p == NULL) {
+				fprintf(stderr, "unexpected error parsing: '%s'\n",
+				    ctx->disas.insn->op_str);
+				return false;
+			}
+			call_site = section.address + c;
+			call_addr = strtoul((p + 1), NULL, 16);
+			retaddr = call_site + ARM_INSN_LEN;
+			memset(&symbol, 0, sizeof(symbol));
+			tmp = calloc(1, sizeof(*tmp));
+			if (tmp == NULL) {
+				perror("calloc");
+				return false;
+			}
+
+			if (elf_symbol_by_value_lookup(&ctx->elfobj, call_addr,
+			    &symbol) == false) {
+				struct elf_plt plt_entry;
+				elf_plt_iterator_t plt_iter;
+
+				elf_plt_iterator_init(&ctx->elfobj, &plt_iter);
+				while (elf_plt_iterator_next(&plt_iter, &plt_entry) == ELF_ITER_OK) {
+					if (plt_entry.addr == call_addr) {
+						symbol.name = shiva_xfmtstrdup("%s@plt", plt_entry.symname);
+						symbol.type = STT_FUNC;
+						symbol.bind = STB_GLOBAL;
+						symbol.size = 0;
+						tmp->branch_flags |= SHIVA_BRANCH_F_PLTCALL;
+					}
+				}
+				if (symbol.name == NULL) {
+					symbol.name = shiva_xfmtstrdup("fn_%#lx", call_addr);
+					if (symbol.name == NULL) {
+						perror("strdup");
+						return false;
+					}
+					symbol.value = call_addr;
+					symbol.type = STT_FUNC;
+					symbol.size = symbol.size;
+					symbol.bind = STB_GLOBAL;
+				}
+			}
+			tmp->retaddr = retaddr;
+			tmp->target_vaddr = call_addr;
+			memcpy(&tmp->symbol, &symbol, sizeof(symbol));
+			tmp->branch_type = SHIVA_BRANCH_CALL;
+			tmp->branch_site = call_site;
+			shiva_debug("Inserting branch for symbol %s\n", symbol.name);
+			TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
+		}
+
 	}
 #if 0
 	
