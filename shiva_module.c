@@ -75,10 +75,12 @@ install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	bool res;
 
 	call_offset = (target_vaddr - ((e->branch_site + ctx->ulexec.base_vaddr))) >> 2;
+
 	shiva_debug("target_vaddr: %#lx branch_site: %#lx\n",
 	    target_vaddr, e->branch_site + ctx->ulexec.base_vaddr);
 	shiva_debug("call_offset: %#lx encoded: %#lx\n", call_offset * 4, call_offset);
 	shiva_debug("old insn_bytes: %#x\n", insn_bytes);
+	
 	insn_bytes = (insn_bytes & ~RELOC_MASK(26)) | (call_offset & RELOC_MASK(26));
 	/*
 	 * XXX
@@ -89,7 +91,6 @@ install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	 * with the modeled use cases of Shiva trace API which is meant to be invoked
 	 * by modules.
 	 */
-	printf("new insn_bytes: %x\n", insn_bytes);
 	res = shiva_trace_write(ctx, 0, (void *)e->branch_site + ctx->ulexec.base_vaddr,
 	    (void *)&insn_bytes, 4, &error);
 	if (res == false) {
