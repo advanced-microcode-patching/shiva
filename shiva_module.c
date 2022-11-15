@@ -61,27 +61,42 @@ transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
 
 static bool
 install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
-    struct shiva_branch_site *e, uint64_t o_insn)
+    struct shiva_branch_site *e, struct elf_symbol *patch_symbol)
 {
-	uint64_t target_vaddr = e->symbol.value + ctx->ulexec.base_vaddr;
-	uint64_t insn_bytes = o_insn;
-	uint64_t call_offset;
+	/*
+	 * The patch_symbol->value will be a symbol value found within the patch
+	 * module, containing an offset into the text section which is the first
+	 * section within a Shiva modules text segment.
+	 */
+	uint64_t target_vaddr = patch_symbol->value + linker->text_vaddr;
+	uint32_t insn_bytes = e->o_insn;
+	uint32_t call_offset;
 	shiva_error_t error;
 	bool res;
 
-	call_offset = (target_vaddr - ((e->branch_site + ctx->ulexec.base_vaddr) + 8)) >> 2;
-	shiva_debug("call_offset: %#lx\n", call_offset);
-	insn_bytes = (e->o_insn & ~RELOC_MASK(26)) | (e->o_insn & RELOC_MASK(26));
+	call_offset = (target_vaddr - ((e->branch_site + ctx->ulexec.base_vaddr))) >> 2;
+	shiva_debug("target_vaddr: %#lx branch_site: %#lx\n",
+	    target_vaddr, e->branch_site + ctx->ulexec.base_vaddr);
+	shiva_debug("call_offset: %#lx encoded: %#lx\n", call_offset * 4, call_offset);
+	shiva_debug("old insn_bytes: %#x\n", insn_bytes);
+	insn_bytes = (insn_bytes & ~RELOC_MASK(26)) | (call_offset & RELOC_MASK(26));
 	/*
 	 * XXX
 	 * Technically the shiva_trace API shouldn't be used from within Shiva.
 	 * It's Akin to the Kernel invoking syscalls. Although atleast we aren't
 	 * calling shiva_trace(), but rather one of it's utility functions for
-	 * writing to memory. The official way is to use SHIVA_TRACE_POKE though.
+	 * writing to memory. This won't cause any harm, but it's not congruent
+	 * with the modeled use cases of Shiva trace API which is meant to be invoked
+	 * by modules.
 	 */
-	res = shiva_trace_write(ctx, 0, (void *)e->branch_site, (void *)&insn_bytes,
-	    4, &error);
-	return res;
+	printf("new insn_bytes: %x\n", insn_bytes);
+	res = shiva_trace_write(ctx, 0, (void *)e->branch_site + ctx->ulexec.base_vaddr,
+	    (void *)&insn_bytes, 4, &error);
+	if (res == false) {
+		fprintf(stderr, "sihva_trace_write failed: %s\n", shiva_error_msg(&error));
+		return false;
+	}
+	return true;
 }
 
 static bool
@@ -116,13 +131,13 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 		 */
 		if (elf_symbol_by_name(&linker->elfobj, e.symbol.name,
 		    &symbol) == true) {
-			if (e.symbol.type != STT_FUNC ||
-			    e.symbol.bind != STB_GLOBAL)
+			if (symbol.type != STT_FUNC ||
+			    symbol.bind != STB_GLOBAL)
 				continue;
 #if __aarch64__
 			shiva_debug("Installing patch offset on target at %#lx for %s\n",
-			    e.branch_site, e.symbol.name);
-			res = install_aarch64_call26_patch(ctx, linker, &e, e.o_insn);
+			    e.branch_site, symbol.name);
+			res = install_aarch64_call26_patch(ctx, linker, &e, &symbol);
 #endif
 		}
 	}
@@ -183,7 +198,15 @@ resolve_pltgot_entries(struct shiva_module *linker)
 	TAILQ_FOREACH(current, &linker->tailq.got_list, _linkage) {
 		struct elf_symbol symbol;
 
+		/*
+		 * First look for the functions symbol within the loaded Shiva module
+		 */
 		if (elf_symbol_by_name(&linker->elfobj, current->symname, &symbol) == true) {
+			/*
+			 * TODO: investigate why we are accepting STT_OBJECT here. This is our
+			 * PLT/GOT for the Shiva module. Should only be function calls in this
+			 * part of the GOT, I think...
+			 */
 			if (symbol.type == STT_FUNC || symbol.type == STT_OBJECT) {
 				shiva_debug("Setting [%#lx] GOT entry '%s' to %#lx\n",
 				    linker->data_vaddr + linker->pltgot_off + current->gotoff, current->symname, symbol.value + linker->text_vaddr);
@@ -198,11 +221,44 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		 * Only applicable if linking mode is set: SHIVA_LINKING_MICROCODE_PATCH
 		 */
 		if (linker->mode == SHIVA_LINKING_MICROCODE_PATCH) {
+			bool in_target = false;
+			struct elf_plt plt_entry;
+
 			if (elf_symbol_by_name(linker->target_elfobj, current->symname,
-			    &symbol) == false) {
-				fprintf(stderr, "Could not resolve symbol '%s' in %s. Linkage failure\n",
-				    current->symname, elf_pathname(linker->target_elfobj));
-				return false;
+			    &symbol) == true) {
+				if (symbol.value == 0 && symbol.type == STT_FUNC) {
+				/*
+				 * Symbol value is 0?? Probably a PLT call.
+				 * If the function that our patch is calling exists within the target
+				 * executable as a PLT call to a shared library function (Probably in libc)
+				 * then let's try to resolve the same symbol within the Shiva binary.
+				 * XXX This is temporary in the future we need to write a resolver
+				 * for imported shared library symbols.
+				 */
+					if (elf_plt_by_name(linker->target_elfobj,
+					    symbol.name, &plt_entry) == true) {
+						if (elf_symbol_by_name(&linker->self,
+						    symbol.name, &symbol) == false) {
+							fprintf(stderr, "failed to resolve symbol '%s'\n", symbol.name);
+							return false;
+						}
+					}
+				} else if (symbol.value > 0 && symbol.type == STT_FUNC) {
+					shiva_debug("resolved symbol IN TARGET\n");
+					in_target = true;
+				}
+			} else {
+				if (elf_symbol_by_name(&linker->self, symbol.name, &symbol) == false) {
+					fprintf(stderr, "failed to resolve symbol '%s'\n", symbol.name);
+					return false;
+				}
+			}
+			if (in_target == true) {
+				shiva_debug("Found symbol '%s' within target ELF executable. Symbol value: %#lx\n",
+				    current->symname, symbol.value);
+			} else {
+				shiva_debug("Found symbol '%s' within Shiva binary. Symbol value: %#lx\n",
+				    current->symname, symbol.value);
 			}
 		} else if (linker->mode == SHIVA_LINKING_MODULE) {
 			if (elf_symbol_by_name(&linker->self, current->symname, &symbol) == false) {
@@ -210,9 +266,13 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				    current->symname);
 				return false;
 			}
+			shiva_debug("Found symbol '%s':%#lx within the Shiva API\n", current->symname,
+			    symbol.value);
+		} else {
+			fprintf(stderr, " Undefined linking behavior\n");
+			shiva_debug("undefined linking behavior\n");
+			return false;
 		}
-		shiva_debug("Found symbol '%s' within Shiva. Symbol value: %#lx Shiva base: %#lx\n",
-		    current->symname, symbol.value, linker->shiva_base);
 		GOT = (uint64_t *)((uint64_t)(linker->data_vaddr + linker->pltgot_off + current->gotoff));
 #ifdef __x86_64__
 #ifdef SHIVA_STANDALONE

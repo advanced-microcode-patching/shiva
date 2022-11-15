@@ -106,6 +106,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 	uint64_t code_vaddr = section.address; /* Points to .text */
 	struct elf_symbol;
 	uint8_t *code_ptr = ctx->disas.textptr;
+	uint8_t *tmp_ptr = code_ptr;
 	elf_symtab_iterator_t symtab_iter;
 	cs_detail insnack_detail = {{0}};
 	cs_insn insnack = {0};
@@ -131,6 +132,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 				break;
 			code_ptr += ARM_INSN_LEN;
 			code_vaddr += ARM_INSN_LEN;
+			c += ARM_INSN_LEN;
 		}
 		shiva_debug("0x%"PRIx64":\t%s\t\t%s\n", ctx->disas.insn->address,
 		    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
@@ -183,6 +185,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			}
 			tmp->retaddr = retaddr;
 			tmp->target_vaddr = call_addr;
+			memcpy(&tmp->o_insn, tmp_ptr + c, ARM_INSN_LEN);
 			memcpy(&tmp->symbol, &symbol, sizeof(symbol));
 			tmp->branch_type = SHIVA_BRANCH_CALL;
 			tmp->branch_site = call_site;

@@ -48,7 +48,11 @@
 #define SHIVA_STACK_SIZE	(PAGE_SIZE * 1000)
 
 #define SHIVA_LDSO_BASE		0x1000000
+#if defined(__x86_64__)
 #define SHIVA_TARGET_BASE	0x40000000
+#elif defined(__aarch64__)
+#define SHIVA_TARGET_BASE	0x8000000
+#endif
 
 #define SHIVA_MODULE_F_RUNTIME	(1UL << 0)
 #define SHIVA_MODULE_F_INIT	(1UL << 1)
@@ -143,7 +147,7 @@ struct shiva_branch_site {
 #if __x86_64__
 	uint8_t o_insn[15];
 #elif __aarch64__
-	uint64_t o_insn;
+	uint32_t o_insn;
 #endif
 	struct elf_symbol symbol; // symbol being called
 	shiva_branch_type_t branch_type;

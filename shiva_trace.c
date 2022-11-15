@@ -121,6 +121,7 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 	/*
 	 * Make virtual address writable if it is not.
 	 */
+	printf("MPROTECT %#lx\n", aligned_vaddr);
 	ret = mprotect((void *)aligned_vaddr, aligned_len, o_prot|PROT_WRITE);
 	if (ret < 0) {
 		shiva_error_set(error, "poke pid (%d) at %#lx failed: "
@@ -131,6 +132,7 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 	/*
 	 * Copy data to target addr
 	 */
+	printf("COPYING %p to %p\n", s, d);
 	memcpy(d, s, len);
 	/*
 	 * Reset memory protection
@@ -141,6 +143,7 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 		    "mprotect failure: %s\n", pid, (uint64_t)addr, strerror(errno));
 		return false;
 	}
+	printf("RETURNING TRUE\n");
 	return true;
 }
 
