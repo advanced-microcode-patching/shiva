@@ -182,10 +182,17 @@ got_entry_by_name(struct shiva_module *linker, char *name, struct shiva_module_g
 }
 
 /*
- * Our custom interpreter is built with musl-libc. Lets
- * locate the path to our interpreter (i.e. /home/elfmaster/shiva_interp)
- * and resolve the modules external library calls to the corresponding
- * musl-libc functions in memory.
+ * Shiva Module's have a .got.plt section at the end
+ * of the data segment in memory.
+ * 
+ * "Shiva Module layout"
+ * [text segment]: 0x8000000 (.text, .rodata)
+ * [data segment]: 0x9000000 (.data, .got, .bss)
+ *
+ * We patch the .got with the correct address to
+ * either a libc function (That is resolved to
+ * the musl-libc within the Shiva executable) or
+ * a function native to the Shiva module itself.
  */
 static bool
 resolve_pltgot_entries(struct shiva_module *linker)
@@ -249,6 +256,11 @@ resolve_pltgot_entries(struct shiva_module *linker)
 					in_target = true;
 				}
 			} else {
+				/*
+				 * The symbol isn't in the target ELF exectutable, or in the Shiva
+				 * module. Let's try to get it from the Shiva linker itself (Which
+				 * has musl-libc linked into it statically).
+				 */
 				if (elf_symbol_by_name(&linker->self, symbol.name, &symbol) == false) {
 					fprintf(stderr, "failed to resolve symbol '%s'\n", symbol.name);
 					return false;

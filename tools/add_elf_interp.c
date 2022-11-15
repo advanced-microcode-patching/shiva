@@ -42,7 +42,20 @@ int main(int argc, char **argv)
 	ehdr = (ElfW(Ehdr) *)mem;
 	phdr = (ElfW(Phdr) *)&mem[ehdr->e_phoff];
 	for (i = 0; i < ehdr->e_phnum; i++) {
-		if (phdr[i].p_type == PT_NOTE) {
+		if (phdr[i].p_type == PT_INTERP) {
+			if (strlen(argv[2]) >= phdr[i].p_filesz) {
+				printf("PT_INTERP segment is only %zu bytes\n", phdr[i].p_filesz);
+				exit(0);
+			}
+			strncpy((char *)&mem[phdr[i].p_offset], argv[2], phdr[i].p_filesz);
+                        mem[phdr[i].p_offset + phdr[i].p_filesz - 1] = '\0';
+                        phdr[i].p_type = PT_INTERP;
+                        phdr[i].p_filesz = strlen(argv[2]) + 1;
+                        msync(mem, MS_SYNC, st.st_size);
+                        munmap(mem, st.st_size);
+                        printf("Done.\n");
+			break;
+		} else if (phdr[i].p_type == PT_NOTE) {
 			if (strlen(argv[2]) >= phdr[i].p_filesz) {
 				printf("PT_NOTE segment is only %zu bytes\n", phdr[i].p_filesz);
 				exit(0);
