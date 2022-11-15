@@ -140,6 +140,11 @@ typedef enum shiva_branch_type {
 #define SHIVA_BRANCH_F_PLTCALL  (1UL << 0)
 
 struct shiva_branch_site {
+#if __x86_64__
+	uint8_t o_insn[15];
+#elif __aarch64__
+	uint64_t o_insn;
+#endif
 	struct elf_symbol symbol; // symbol being called
 	shiva_branch_type_t branch_type;
 	uint64_t branch_flags;

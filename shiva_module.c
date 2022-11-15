@@ -60,9 +60,72 @@ transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
 }
 
 static bool
-apply_external_patch_links(struct shiva_module *linker)
+install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
+    struct shiva_branch_site *e, uint64_t o_insn)
 {
+	uint64_t target_vaddr = e->symbol.value + ctx->ulexec.base_vaddr;
+	uint64_t insn_bytes = o_insn;
+	uint64_t call_offset;
+	shiva_error_t error;
+	bool res;
 
+	call_offset = (target_vaddr - ((e->branch_site + ctx->ulexec.base_vaddr) + 8)) >> 2;
+	shiva_debug("call_offset: %#lx\n", call_offset);
+	insn_bytes = (e->o_insn & ~RELOC_MASK(26)) | (e->o_insn & RELOC_MASK(26));
+	/*
+	 * XXX
+	 * Technically the shiva_trace API shouldn't be used from within Shiva.
+	 * It's Akin to the Kernel invoking syscalls. Although atleast we aren't
+	 * calling shiva_trace(), but rather one of it's utility functions for
+	 * writing to memory. The official way is to use SHIVA_TRACE_POKE though.
+	 */
+	res = shiva_trace_write(ctx, 0, (void *)e->branch_site, (void *)&insn_bytes,
+	    4, &error);
+	return res;
+}
+
+static bool
+apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
+{
+	shiva_callsite_iterator_t callsites;
+	struct shiva_branch_site e;
+	shiva_iterator_res_t ires;
+	struct elf_symbol symbol;
+	bool res;
+
+#if __x86_64__
+	fprintf(stderr, "Cannot apply external patch links on x86_64. Unsupported\n");
+	return false;
+#endif
+
+	shiva_callsite_iterator_init(ctx, &callsites);
+
+	while (shiva_callsite_iterator_next(&callsites, &e) == SHIVA_ITER_OK) {
+		if (e.branch_flags & SHIVA_BRANCH_F_PLTCALL)
+			continue;
+		/*
+		 * The callsites were found early on in shiva_analyze.c and
+		 * contain every branch instruction within the target ELF.
+		 */
+
+		/*
+		 * Check the patch object file (Represented by &linker->elfobj) to see
+		 * if it contains the same function name within it as the one originally
+		 * being called. If so then we relink this call instruction to point to
+		 * our new relocated function.
+		 */
+		if (elf_symbol_by_name(&linker->elfobj, e.symbol.name,
+		    &symbol) == true) {
+			if (e.symbol.type != STT_FUNC ||
+			    e.symbol.bind != STB_GLOBAL)
+				continue;
+#if __aarch64__
+			shiva_debug("Installing patch offset on target at %#lx for %s\n",
+			    e.branch_site, e.symbol.name);
+			res = install_aarch64_call26_patch(ctx, linker, &e, e.o_insn);
+#endif
+		}
+	}
 	return true;
 }
 /*
@@ -398,7 +461,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 				if (elf_section_by_name(&linker->elfobj, symbol_section, &tmp_shdr) == false) {
 					fprintf(stderr, "Unable to look up symbol '%s' in module '%s'\n",
 					    symbol.name, elf_pathname(&linker->elfobj));
-			 		return false;
+					return false;
 				}
 				if (tmp_shdr.flags & SHF_ALLOC) {
 					if (!(tmp_shdr.flags & SHF_WRITE)) {
@@ -1316,7 +1379,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	 */
 	if (linker->mode == SHIVA_LINKING_MICROCODE_PATCH) {
 		shiva_debug("Finished relocating patch\n");
-		if (apply_external_patch_links(linker) == false) {
+		if (apply_external_patch_links(ctx, linker) == false) {
 			shiva_debug("Failed to apply patches to target executable: %s\n",
 			    elf_pathname(linker->target_elfobj));
 			return false;
