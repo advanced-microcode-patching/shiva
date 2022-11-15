@@ -164,6 +164,27 @@ struct shiva_branch_site {
 	TAILQ_ENTRY(shiva_branch_site) _linkage;
 };
 
+/*
+ * xref sites: code that references other code or data
+ * within the program. We don't consider a branch/call
+ * and xref, instead those are stored in shiva_branch_site
+ * structs. An xref is a reference to any code or data such
+ * as a memory access.
+ *
+ * In our aarch64 implementation of Shiva we utilize this
+ * xref information to figure out what objects (i.e. a variable
+ * in the .data section) are being referenced, and which of
+ * those xrefs need to be patched to reflect updated object information
+ * from a loaded patch. Often times these xrefs span over several
+ * instructions that need to be patched, i.e.
+ *
+ * adrp x0, #data_segment_offset
+ * add x0, x0, #variable_offset
+ */
+struct shiva_xref_site {
+	size_t insn_count;
+} shiva_xref_site_t;
+
 typedef enum shiva_module_section_map_attr {
 	LP_SECTION_TEXTSEGMENT = 0,
 	LP_SECTION_DATASEGMENT,
@@ -356,6 +377,7 @@ typedef struct shiva_ctx {
 		TAILQ_HEAD(, shiva_trace_thread) thread_tqlist;
 		TAILQ_HEAD(, shiva_mmap_entry) mmap_tqlist;
 		TAILQ_HEAD(, shiva_branch_site) branch_tqlist;
+		TAILQ_HEAD(, shiva_xref_site) xref_tqlist;
 		TAILQ_HEAD(, shiva_trace_handler) trace_handlers_tqlist;
 	} tailq;
 } shiva_ctx_t;

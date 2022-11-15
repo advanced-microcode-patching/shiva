@@ -191,8 +191,33 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			tmp->branch_site = call_site;
 			shiva_debug("Inserting branch for symbol %s\n", symbol.name);
 			TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
-		}
+		} else if (strcmp(ctx->disas.insn->mnemonic, "adrp") == 0) {
+			/*
+			 * We're looking for several combinations that could be
+			 * used to reference/access global data.
+			 * scenario: 1
+			 * adrp x0, #0x1000 (data segment)
+			 * ldr x0, [x0, #0x16 (variable offset)]
+			 * 
+			 * adrp x0, #0x1000
+			 * add x0, x0, #0x16
+			 */
+			struct shiva_branch_site *tmp;
+			uint64_t xref_site, xref_addr;
+			char *p = strchr(ctx->disas.insn->op_str, '#');
 
+                        if (p == NULL) {
+                                fprintf(stderr, "unexpected error parsing: '%s'\n",
+                                    ctx->disas.insn->op_str);
+                                return false;
+                        }
+			adrp_site = section.address + c;
+			adrp_imm = strtoul((p + 1), NULL, 16);
+			target_page = (adrp_site & ~0xfff) + adrp_imm;
+
+
+
+		}
 	}
 #if 0
 	
@@ -210,7 +235,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 		/*
 		 * AARCH64 bl instruction (Branch with link)
 		 */
-
+		
 		if ((insn & 0xff000000) == 0x94) {
 			int64_t imm;
 
