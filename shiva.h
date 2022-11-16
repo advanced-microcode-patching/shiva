@@ -181,8 +181,19 @@ struct shiva_branch_site {
  * adrp x0, #data_segment_offset
  * add x0, x0, #variable_offset
  */
+#define SHIVA_XREF_TYPE_ADRP_LDR 1
+#define SHIVA_XREF_TYPE_ADRP_STR 2
+#define SHIVA_XREF_TYPE_ADRP_ADD 3
+#define SHIVA_XREF_TYPE_UNKNOWN 4
+
 struct shiva_xref_site {
-	size_t insn_count;
+	int type;
+	uint64_t adrp_imm; /* imm value of adrp */
+	uint64_t adrp_site; /* site address of adrp */
+	uint64_t tmp_imm; /* imm value of the add/str/ldr instruction */
+	uint64_t tmp_site; /* site address of the add/str/ldr instruction */
+	struct elf_symbol symbol;
+	TAILQ_ENTRY(shiva_xref_site) _linkage;
 } shiva_xref_site_t;
 
 typedef enum shiva_module_section_map_attr {

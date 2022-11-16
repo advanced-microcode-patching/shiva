@@ -101,10 +101,11 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 		current_address += insn_len;
 	}
 #elif __aarch64__
+	struct shiva_branch_site *tmp;
+	int xref_type;
 	size_t c, i, j;
 	size_t code_len = section.size - 1;
 	uint64_t code_vaddr = section.address; /* Points to .text */
-	struct elf_symbol;
 	uint8_t *code_ptr = ctx->disas.textptr;
 	uint8_t *tmp_ptr = code_ptr;
 	elf_symtab_iterator_t symtab_iter;
@@ -125,7 +126,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 		shiva_debug("(uint32_t)textptr: %#x\n", *(uint32_t *)&code_ptr[c]);
 		if (c >= section.size)
 			break;
-		res = cs_disasm_iter(ctx->disas.handle, &code_ptr, &code_len,
+		res = cs_disasm_iter(ctx->disas.handle, (void *)&code_ptr, &code_len,
 		    &code_vaddr, ctx->disas.insn);
 		for (;;) {
 			if (*(uint32_t *)code_ptr != 0)
@@ -192,6 +193,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			shiva_debug("Inserting branch for symbol %s\n", symbol.name);
 			TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 		} else if (strcmp(ctx->disas.insn->mnemonic, "adrp") == 0) {
+			uint64_t adrp_imm, adrp_site;
 			/*
 			 * We're looking for several combinations that could be
 			 * used to reference/access global data.
@@ -202,21 +204,78 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			 * adrp x0, #0x1000
 			 * add x0, x0, #0x16
 			 */
-			struct shiva_branch_site *tmp;
-			uint64_t xref_site, xref_addr;
+			struct shiva_xref_site *xref;
+			struct elf_symbol symbol;
+			uint64_t xref_site, xref_addr, target_page;
 			char *p = strchr(ctx->disas.insn->op_str, '#');
 
-                        if (p == NULL) {
-                                fprintf(stderr, "unexpected error parsing: '%s'\n",
-                                    ctx->disas.insn->op_str);
-                                return false;
-                        }
+			if (p == NULL) {
+				fprintf(stderr, "unexpected error parsing: '%s'\n",
+				    ctx->disas.insn->op_str);
+				return false;
+			}
 			adrp_site = section.address + c;
 			adrp_imm = strtoul((p + 1), NULL, 16);
 			target_page = (adrp_site & ~0xfff) + adrp_imm;
+			res = cs_disasm_iter(ctx->disas.handle, (void *)&code_ptr, &code_len,
+			    &code_vaddr, ctx->disas.insn);
+			c += ARM_INSN_LEN;
+			if (res == false) {
+				fprintf(stderr, "cs_disasm_iter() failed\n");
+				return false;
+			}
+			xref = calloc(1, sizeof(*xref));
+			if (xref == NULL) {
+				perror("calloc");
+				return false;
+			}
+			/*
+			 * Is the next instruction and ldr?
+			 */
+			if (strcmp(ctx->disas.insn->mnemonic, "ldr") == 0) {
+				xref_type = SHIVA_XREF_TYPE_ADRP_LDR;
+			} else if (strcmp(ctx->disas.insn->mnemonic, "str") == 0) {
+				xref_type = SHIVA_XREF_TYPE_ADRP_STR;
+			} else if (strcmp(ctx->disas.insn->mnemonic, "add") == 0) {
+				xref_type = SHIVA_XREF_TYPE_ADRP_ADD;
+			} else {
+				xref_type = SHIVA_XREF_TYPE_UNKNOWN;
+			}
 
+			if (xref_type == SHIVA_XREF_TYPE_UNKNOWN) {
+				/*
+				 * We don't know this combination of instructions for
+				 * forming an XREF.
+				 */
+				continue;
+			}
+			uint32_t tmp_imm;
 
-
+			p = strchr(ctx->disas.insn->op_str, '#');
+			if (p == NULL) {
+				fprintf(stderr, "unexpected error parsing: '%s'\n",
+				    ctx->disas.insn->op_str);
+				return false;
+			}
+			tmp_imm = strtoul((p + 1), NULL, 16);
+			shiva_debug("Looking up symbol at address %#lx in"
+			    " the target executable\n", target_page + tmp_imm);
+			if (elf_symbol_by_value_lookup(&ctx->elfobj,
+			    target_page + tmp_imm, &symbol) == true) {
+				xref = calloc(1, sizeof(*xref));
+				if (xref == NULL) {
+					perror("calloc");
+					return false;
+				}
+				printf("Inserting xref\n");
+				xref->type = xref_type;
+				xref->adrp_imm = adrp_imm;
+				xref->adrp_site = adrp_site;
+				xref->tmp_imm = tmp_imm;
+				xref->tmp_site = adrp_site + ARM_INSN_LEN;
+				memcpy(&xref->symbol, &symbol, sizeof(symbol));
+				TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref, _linkage);
+			}
 		}
 	}
 #if 0
