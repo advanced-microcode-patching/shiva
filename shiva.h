@@ -111,6 +111,11 @@ typedef struct shiva_maps_iterator {
 	struct shiva_mmap_entry *current;
 } shiva_maps_iterator_t;
 
+typedef struct shiva_xref_iterator {
+	struct shiva_xref_site *current;
+	struct shiva_ctx *ctx;
+} shiva_xref_iterator_t;
+
 typedef struct shiva_callsite_iterator {
 	struct shiva_branch_site *current;
 	struct shiva_ctx *ctx;
@@ -190,8 +195,10 @@ struct shiva_xref_site {
 	int type;
 	uint64_t adrp_imm; /* imm value of adrp */
 	uint64_t adrp_site; /* site address of adrp */
+	uint64_t adrp_o_insn; /* original instruction bytes of adrp */
 	uint64_t tmp_imm; /* imm value of the add/str/ldr instruction */
 	uint64_t tmp_site; /* site address of the add/str/ldr instruction */
+	uint64_t tmp_o_insn; /* original instruction bytes of instruction after adrp */
 	struct elf_symbol symbol;
 	TAILQ_ENTRY(shiva_xref_site) _linkage;
 } shiva_xref_site_t;
@@ -664,5 +671,12 @@ uint64_t shiva_trace_base_addr(struct shiva_ctx *);
  * shiva_trace_thread.c
  */
 bool shiva_trace_thread_insert(shiva_ctx_t *, pid_t, uint64_t *);
+
+/*
+ * shiva_xref.c (Iterator function for xrefs)
+ */
+void shiva_xref_iterator_init(struct shiva_ctx *, struct shiva_xref_iterator *);
+shiva_iterator_res_t shiva_xref_iterator_next(struct shiva_xref_iterator *, struct shiva_xref_site *);
+
 
 #endif

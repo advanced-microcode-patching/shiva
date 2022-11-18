@@ -267,46 +267,22 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 					perror("calloc");
 					return false;
 				}
-				printf("Inserting xref\n");
+				shiva_debug("XREF (Type: %d): site: %#lx target: %s(%#lx)\n",
+				    xref_type, adrp_site, symbol.name, symbol.value);
 				xref->type = xref_type;
 				xref->adrp_imm = adrp_imm;
 				xref->adrp_site = adrp_site;
 				xref->tmp_imm = tmp_imm;
 				xref->tmp_site = adrp_site + ARM_INSN_LEN;
+				xref->adrp_o_insn = *(uint32_t *)code_ptr - ARM_INSN_LEN;
+				xref->tmp_o_insn = *(uint32_t *)code_ptr;
+				printf("ADRP: %x\n", xref->adrp_o_insn);
+				printf("NEXT: %x\n", xref->tmp_o_insn);
 				memcpy(&xref->symbol, &symbol, sizeof(symbol));
 				TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref, _linkage);
 			}
 		}
 	}
-#if 0
-	
-	printf("Address of .text: %#lx\n", section.address);
-	printf("Looping through %d bytes\n", section.size);
-	for (i = 0; i < section.size; i+=4) {
-		uint64_t insn;
-		uint8_t *iptr = &insn;
-
-		if (elf_read_address(&ctx->elfobj,
-		    section.address + i, &insn, ELF_DWORD /*32bit*/) == false) {
-			fprintf(stderr, "elf_read_address() failed\n");
-			return false;
-		}
-		/*
-		 * AARCH64 bl instruction (Branch with link)
-		 */
-		
-		if ((insn & 0xff000000) == 0x94) {
-			int64_t imm;
-
-			imm = insn & BIT_MASK(26 - 1);
-			printf("Imm: %x", insn);
-			printf("Found BL instruction: %x\n", insn);
-
-		}
-		printf(".");
-		printf("i: %d\n", i);
-	}
-#endif
 #endif
 	return true;
 }

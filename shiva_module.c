@@ -101,10 +101,36 @@ install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 }
 
 static bool
+install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
+    struct shiva_xref_site *e, struct elf_symbol *patch_symbol)
+{
+
+	uint32_t adrp_insn;
+	uint32_t adrp_target_offset;
+
+	adrp_target_offset = (e->adrp_site + ctx->ulexec.base_vaddr) -
+	    patch_symbol->value + ctx->ulexec.base_vaddr;
+
+	printf("Caclulating adrp_target_offset = %#lx - %#lx\n",
+	    e->adrp_site + ctx->ulexec.base_vaddr,
+	    patch_symbol->value + linker->data_vaddr);
+
+	switch(e->type) {
+	case SHIVA_XREF_TYPE_UNKNOWN:
+		return false;
+	case SHIVA_XREF_TYPE_ADRP_ADD:
+		break;
+	}
+	return true;
+
+}
+static bool
 apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 {
 	shiva_callsite_iterator_t callsites;
-	struct shiva_branch_site e;
+	struct shiva_branch_site be;
+	shiva_xref_iterator_t xrefs;
+	struct shiva_xref_site xe;
 	shiva_iterator_res_t ires;
 	struct elf_symbol symbol;
 	bool res;
@@ -116,8 +142,8 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 
 	shiva_callsite_iterator_init(ctx, &callsites);
 
-	while (shiva_callsite_iterator_next(&callsites, &e) == SHIVA_ITER_OK) {
-		if (e.branch_flags & SHIVA_BRANCH_F_PLTCALL)
+	while (shiva_callsite_iterator_next(&callsites, &be) == SHIVA_ITER_OK) {
+		if (be.branch_flags & SHIVA_BRANCH_F_PLTCALL)
 			continue;
 		/*
 		 * The callsites were found early on in shiva_analyze.c and
@@ -130,18 +156,53 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 		 * being called. If so then we relink this call instruction to point to
 		 * our new relocated function.
 		 */
-		if (elf_symbol_by_name(&linker->elfobj, e.symbol.name,
+		if (elf_symbol_by_name(&linker->elfobj, be.symbol.name,
 		    &symbol) == true) {
 			if (symbol.type != STT_FUNC ||
 			    symbol.bind != STB_GLOBAL)
 				continue;
 #if __aarch64__
 			shiva_debug("Installing patch offset on target at %#lx for %s\n",
-			    e.branch_site, symbol.name);
-			res = install_aarch64_call26_patch(ctx, linker, &e, &symbol);
+			    be.branch_site, symbol.name);
+			res = install_aarch64_call26_patch(ctx, linker, &be, &symbol);
+			if (res == false) {
+				fprintf(stderr, "external linkage failure: "
+				    "install_aarch64_call26_patch() failed\n");
+				return false;
+			}
 #endif
 		}
 	}
+	shiva_debug("Calling shiva_xref_iterator_init\n");
+	shiva_xref_iterator_init(ctx, &xrefs);
+
+	shiva_debug("iterating over xrefs\n");
+	while (shiva_xref_iterator_next(&xrefs, &xe) == SHIVA_ITER_OK) {
+		switch(xe.type) {
+		case SHIVA_XREF_TYPE_UNKNOWN:
+			fprintf(stderr, "External linkage failure: "
+			    "Discovered unknown XREF insn-sequence at %#lx\n",
+			    xe.adrp_site);
+			return false;
+		case SHIVA_XREF_TYPE_ADRP_LDR:
+		case SHIVA_XREF_TYPE_ADRP_STR:
+		case SHIVA_XREF_TYPE_ADRP_ADD:
+			shiva_debug("Found XREF at %#lx\n", xe.adrp_site);
+			if (elf_symbol_by_name(&linker->elfobj, xe.symbol.name,
+			    &symbol) == true) {
+				if (symbol.type != STT_OBJECT ||
+				    symbol.bind != STB_GLOBAL)
+					continue;
+				shiva_debug("Installing xref patch at %#lx for symbol %s\n",
+				    xe.adrp_site, xe.symbol.name);
+				res = install_aarch64_xref_patch(ctx, linker, &xe, &symbol);
+			}
+			break;
+		default:
+			break;
+		}
+	}
+
 	return true;
 }
 /*

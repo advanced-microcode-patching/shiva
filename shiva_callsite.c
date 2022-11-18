@@ -5,6 +5,7 @@ shiva_callsite_iterator_init(struct shiva_ctx *ctx, struct shiva_callsite_iterat
 {
 
 	iter->current = TAILQ_FIRST(&ctx->tailq.branch_tqlist);
+	iter->ctx = ctx;
 	return;
 }
 
