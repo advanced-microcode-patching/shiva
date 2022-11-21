@@ -190,10 +190,13 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			memcpy(&tmp->symbol, &symbol, sizeof(symbol));
 			tmp->branch_type = SHIVA_BRANCH_CALL;
 			tmp->branch_site = call_site;
-			shiva_debug("Inserting branch for symbol %s\n", symbol.name);
+			shiva_debug("Inserting branch for symbol %s callsite: %#lx\n", symbol.name, call_site);
 			TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 		} else if (strcmp(ctx->disas.insn->mnemonic, "adrp") == 0) {
 			uint64_t adrp_imm, adrp_site;
+			uint32_t adrp_o_bytes = *(uint32_t *)ctx->disas.insn->bytes;
+			uint32_t next_o_bytes;
+
 			/*
 			 * We're looking for several combinations that could be
 			 * used to reference/access global data.
@@ -219,11 +222,12 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			target_page = (adrp_site & ~0xfff) + adrp_imm;
 			res = cs_disasm_iter(ctx->disas.handle, (void *)&code_ptr, &code_len,
 			    &code_vaddr, ctx->disas.insn);
-			c += ARM_INSN_LEN;
 			if (res == false) {
 				fprintf(stderr, "cs_disasm_iter() failed\n");
 				return false;
 			}
+			next_o_bytes = *(uint32_t *)ctx->disas.insn->bytes;
+			c += ARM_INSN_LEN;
 			xref = calloc(1, sizeof(*xref));
 			if (xref == NULL) {
 				perror("calloc");
@@ -272,12 +276,12 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 				xref->type = xref_type;
 				xref->adrp_imm = adrp_imm;
 				xref->adrp_site = adrp_site;
-				xref->tmp_imm = tmp_imm;
-				xref->tmp_site = adrp_site + ARM_INSN_LEN;
-				xref->adrp_o_insn = *(uint32_t *)code_ptr - ARM_INSN_LEN;
-				xref->tmp_o_insn = *(uint32_t *)code_ptr;
-				printf("ADRP: %x\n", xref->adrp_o_insn);
-				printf("NEXT: %x\n", xref->tmp_o_insn);
+				xref->next_imm = tmp_imm;
+				xref->next_site = adrp_site + ARM_INSN_LEN;
+				xref->adrp_o_insn = adrp_o_bytes; //*(uint32_t *)&tmp_ptr[c];
+				xref->next_o_insn = next_o_bytes; //*(uint32_t *)&tmp_ptr[c + ARM_INSN_LEN];
+				printf("ADRP(%#lx): %x\n", adrp_site, xref->adrp_o_insn);
+				printf("NEXT(%#lx): %x\n", xref->next_site, xref->next_o_insn);
 				memcpy(&xref->symbol, &symbol, sizeof(symbol));
 				TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref, _linkage);
 			}

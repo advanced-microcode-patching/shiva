@@ -196,9 +196,9 @@ struct shiva_xref_site {
 	uint64_t adrp_imm; /* imm value of adrp */
 	uint64_t adrp_site; /* site address of adrp */
 	uint64_t adrp_o_insn; /* original instruction bytes of adrp */
-	uint64_t tmp_imm; /* imm value of the add/str/ldr instruction */
-	uint64_t tmp_site; /* site address of the add/str/ldr instruction */
-	uint64_t tmp_o_insn; /* original instruction bytes of instruction after adrp */
+	uint64_t next_imm; /* imm value of the add/str/ldr instruction */
+	uint64_t next_site; /* site address of the add/str/ldr instruction */
+	uint64_t next_o_insn; /* original instruction bytes of instruction after adrp */
 	struct elf_symbol symbol;
 	TAILQ_ENTRY(shiva_xref_site) _linkage;
 } shiva_xref_site_t;

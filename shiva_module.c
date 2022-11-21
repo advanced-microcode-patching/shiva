@@ -74,13 +74,14 @@ install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	shiva_error_t error;
 	bool res;
 
+	shiva_debug("PATCHING BRANCH SITE: %#lx\n", e->branch_site);
 	call_offset = (target_vaddr - ((e->branch_site + ctx->ulexec.base_vaddr))) >> 2;
 
 	shiva_debug("target_vaddr: %#lx branch_site: %#lx\n",
 	    target_vaddr, e->branch_site + ctx->ulexec.base_vaddr);
 	shiva_debug("call_offset: %#lx encoded: %#lx\n", call_offset * 4, call_offset);
 	shiva_debug("old insn_bytes: %#x\n", insn_bytes);
-	
+
 	insn_bytes = (insn_bytes & ~RELOC_MASK(26)) | (call_offset & RELOC_MASK(26));
 	/*
 	 * XXX
@@ -106,14 +107,21 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 {
 
 	uint32_t adrp_insn;
-	uint32_t adrp_target_offset;
+	uint32_t rel_val;
+	uint64_t rel_addr = e->adrp_site + ctx->ulexec.base_vaddr;
+	uint64_t xoffset;
 
-	adrp_target_offset = (e->adrp_site + ctx->ulexec.base_vaddr) -
-	    patch_symbol->value + ctx->ulexec.base_vaddr;
+	xoffset = rel_val = ELF_PAGESTART(patch_symbol->value + linker->data_vaddr) - ELF_PAGESTART(rel_addr);
+	rel_val >>= 12;
 
 	printf("Caclulating adrp_target_offset = %#lx - %#lx\n",
 	    e->adrp_site + ctx->ulexec.base_vaddr,
 	    patch_symbol->value + linker->data_vaddr);
+	printf("Offset to correct page vaddr: %#lx\n", xoffset);
+
+	adrp_insn = e->adrp_o_insn;
+	adrp_insn = (adrp_insn & ~((RELOC_MASK(2) << 29) | (RELOC_MASK(19) << 5)))
+	    | ((rel_val & RELOC_MASK(2)) << 29) | ((rel_val & (RELOC_MASK(19) << 2)) << 3);
 
 	switch(e->type) {
 	case SHIVA_XREF_TYPE_UNKNOWN:
@@ -173,6 +181,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 #endif
 		}
 	}
+	return true;
 	shiva_debug("Calling shiva_xref_iterator_init\n");
 	shiva_xref_iterator_init(ctx, &xrefs);
 
