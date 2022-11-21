@@ -33,6 +33,7 @@ uint8_t plt_stub[8] = "\x11\x00\x00\x58"  /* ldr	x17, got_entry_mem */
 		      "\x20\x02\x1f\xd6"; /* br x17			   */
 #endif
 
+static bool get_section_mapping(struct shiva_module *, char *, struct shiva_module_section_mapping *);
 /*
  * Returns the name of the ELF section that the symbol lives in, within the
  * loaded ET_REL module.
@@ -106,27 +107,79 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
     struct shiva_xref_site *e, struct elf_symbol *patch_symbol)
 {
 
-	uint32_t adrp_insn;
+	uint32_t n_adrp_insn;
+	uint32_t n_add_insn;
+	uint32_t n_ldr_insn;
+	uint32_t n_str_insn;
 	uint32_t rel_val;
 	uint64_t rel_addr = e->adrp_site + ctx->ulexec.base_vaddr;
-	uint64_t xoffset;
+	uint64_t xoffset, var_segment;
+	uint8_t *rel_unit;
+	struct elf_section shdr;
+	struct shiva_module_section_mapping smap;
+	shiva_error_t error;
+	bool res;
 
-	xoffset = rel_val = ELF_PAGESTART(patch_symbol->value + linker->data_vaddr) - ELF_PAGESTART(rel_addr);
+	if (elf_section_by_index(&linker->elfobj, patch_symbol->shndx, &shdr) == false) {
+		fprintf(stderr, "Failed to find section index: %d in module: %s\n",
+		    patch_symbol->shndx, elf_pathname(&linker->elfobj));
+		return false;
+	}
+
+	if (get_section_mapping(linker, shdr.name, &smap) == false) {
+		fprintf(stderr, "Failed to retrieve section data for %s\n", shdr.name);
+		return false;
+	}
+
+	switch(smap.map_attribute) {
+	case LP_SECTION_TEXTSEGMENT:
+		var_segment = linker->text_vaddr;
+		break;
+	case LP_SECTION_DATASEGMENT:
+		var_segment = linker->data_vaddr;
+		break;
+	default:
+		fprintf(stderr, "Unknown section attribute for '%s'\n", shdr.name);
+		return false;
+	}
+
+	shiva_debug("var_segment: %#lx base_vaddr: %#lx\n", var_segment, ctx->ulexec.base_vaddr);
+	printf("rel_addr: %#lx\n", rel_addr);
+	printf("Subtracting %lx - %#lx\n", ELF_PAGESTART(patch_symbol->value + var_segment), ELF_PAGESTART(rel_addr));
+	xoffset = rel_val = ELF_PAGESTART(patch_symbol->value + var_segment) - ELF_PAGESTART(rel_addr);
+	xoffset = rel_val;
 	rel_val >>= 12;
 
-	printf("Caclulating adrp_target_offset = %#lx - %#lx\n",
-	    e->adrp_site + ctx->ulexec.base_vaddr,
-	    patch_symbol->value + linker->data_vaddr);
-	printf("Offset to correct page vaddr: %#lx\n", xoffset);
+	printf("Offset to correct page vaddr: %#x (%d)\n", xoffset, xoffset);
+	printf("RELVAL: %#x\n", rel_val);
 
-	adrp_insn = e->adrp_o_insn;
-	adrp_insn = (adrp_insn & ~((RELOC_MASK(2) << 29) | (RELOC_MASK(19) << 5)))
+	n_adrp_insn = e->adrp_o_insn & 0xffffffff;
+	n_adrp_insn = (n_adrp_insn & ~((RELOC_MASK (2) << 29) | (RELOC_MASK(19) << 5)))
 	    | ((rel_val & RELOC_MASK(2)) << 29) | ((rel_val & (RELOC_MASK(19) << 2)) << 3);
 
 	switch(e->type) {
 	case SHIVA_XREF_TYPE_UNKNOWN:
 		return false;
 	case SHIVA_XREF_TYPE_ADRP_ADD:
+		rel_unit = (uint8_t *)e->adrp_site + ctx->ulexec.base_vaddr; // address of unit we are patching in target ELF executable
+		rel_val = patch_symbol->value;
+		shiva_debug("Installing SHIVA_XREF_TYPE_ADRP_ADD patch at %#lx\n", e->adrp_site + ctx->ulexec.base_vaddr);
+		shiva_debug("Add offset: %#lx\n", rel_val);
+		n_add_insn = e->next_o_insn;
+		n_add_insn = (n_add_insn & ~(RELOC_MASK(12) << 10)) | ((rel_val & RELOC_MASK(12)) << 10);
+		res = shiva_trace_write(ctx, 0, (void *)rel_unit,
+		    (void *)&n_adrp_insn, 4, &error);
+		if (res == false) {
+			fprintf(stderr, "shiva_trace_write failed: %s\n", shiva_error_msg(&error));
+			return false;
+		}
+		rel_unit += sizeof(uint32_t);
+		res = shiva_trace_write(ctx, 0, (void *)rel_unit,
+		    (void *)&n_add_insn, 4, &error);
+		if (res == false) {
+			fprintf(stderr, "shiva_trace_write failed: %s\n", shiva_error_msg(&error));
+			return false;
+		}
 		break;
 	}
 	return true;
@@ -181,7 +234,6 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 #endif
 		}
 	}
-	return true;
 	shiva_debug("Calling shiva_xref_iterator_init\n");
 	shiva_xref_iterator_init(ctx, &xrefs);
 
