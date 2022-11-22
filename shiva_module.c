@@ -111,9 +111,9 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	uint32_t n_add_insn;
 	uint32_t n_ldr_insn;
 	uint32_t n_str_insn;
-	uint32_t rel_val;
+	int32_t rel_val, xoffset;
 	uint64_t rel_addr = e->adrp_site + ctx->ulexec.base_vaddr;
-	uint64_t xoffset, var_segment;
+	uint64_t var_segment;
 	uint8_t *rel_unit;
 	struct elf_section shdr;
 	struct shiva_module_section_mapping smap;
@@ -144,14 +144,10 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	}
 
 	shiva_debug("var_segment: %#lx base_vaddr: %#lx\n", var_segment, ctx->ulexec.base_vaddr);
-	printf("rel_addr: %#lx\n", rel_addr);
-	printf("Subtracting %lx - %#lx\n", ELF_PAGESTART(patch_symbol->value + var_segment), ELF_PAGESTART(rel_addr));
-	xoffset = rel_val = ELF_PAGESTART(patch_symbol->value + var_segment) - ELF_PAGESTART(rel_addr);
-	xoffset = rel_val;
+	xoffset = rel_val = (int32_t)(ELF_PAGESTART(patch_symbol->value + var_segment) - ELF_PAGESTART(rel_addr));
 	rel_val >>= 12;
 
-	printf("Offset to correct page vaddr: %#x (%d)\n", xoffset, xoffset);
-	printf("RELVAL: %#x\n", rel_val);
+	printf("offset to correct page vaddr: %#x (%d)\n", xoffset, xoffset);
 
 	n_adrp_insn = e->adrp_o_insn & 0xffffffff;
 	n_adrp_insn = (n_adrp_insn & ~((RELOC_MASK (2) << 29) | (RELOC_MASK(19) << 5)))
