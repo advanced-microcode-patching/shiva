@@ -280,8 +280,8 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 				xref->next_site = adrp_site + ARM_INSN_LEN;
 				xref->adrp_o_insn = adrp_o_bytes; //*(uint32_t *)&tmp_ptr[c];
 				xref->next_o_insn = next_o_bytes; //*(uint32_t *)&tmp_ptr[c + ARM_INSN_LEN];
-				printf("ADRP(%#lx): %x\n", adrp_site, xref->adrp_o_insn);
-				printf("NEXT(%#lx): %x\n", xref->next_site, xref->next_o_insn);
+				shiva_debug("ADRP(%#lx): %x\n", adrp_site, xref->adrp_o_insn);
+				shiva_debug("NEXT(%#lx): %x\n", xref->next_site, xref->next_o_insn);
 				memcpy(&xref->symbol, &symbol, sizeof(symbol));
 				TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref, _linkage);
 			}

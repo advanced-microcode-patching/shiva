@@ -147,8 +147,6 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	xoffset = rel_val = (int32_t)(ELF_PAGESTART(patch_symbol->value + var_segment) - ELF_PAGESTART(rel_addr));
 	rel_val >>= 12;
 
-	printf("offset to correct page vaddr: %#x (%d)\n", xoffset, xoffset);
-
 	n_adrp_insn = e->adrp_o_insn & 0xffffffff;
 	n_adrp_insn = (n_adrp_insn & ~((RELOC_MASK (2) << 29) | (RELOC_MASK(19) << 5)))
 	    | ((rel_val & RELOC_MASK(2)) << 29) | ((rel_val & (RELOC_MASK(19) << 2)) << 3);
@@ -176,6 +174,9 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 			fprintf(stderr, "shiva_trace_write failed: %s\n", shiva_error_msg(&error));
 			return false;
 		}
+		break;
+	case SHIVA_XREF_TYPE_ADRP_LDR:
+		shiva_debug("SHIVA_XREF_TYPE_ADRP_LDR not yet supported\n");
 		break;
 	}
 	return true;
