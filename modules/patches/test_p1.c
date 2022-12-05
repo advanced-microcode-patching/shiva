@@ -2,20 +2,15 @@
 #include <errno.h>
 #include <string.h>
 
-char bss_buffer[256];
-const int ro_val = 111;
+int data_var = 0x1000;
 
 int foo(void)
 {
+	printf("I'm the original foo(), and here's my data_var: %#lx\n", data_var);
 	return 0;
 }
 
-int main(int argc, char **argv)
+int main(void)
 {
-	strcpy(bss_buffer, "HELLO");
-	if (argc > 1) {
-		if (strcmp(argv[1], "test") == 0)
-			printf("Found test string\n");
-	}
 	foo();
 }

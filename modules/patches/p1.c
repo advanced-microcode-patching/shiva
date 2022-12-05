@@ -1,21 +1,11 @@
-#include <sys/types.h>
-#include <stdint.h>
-#include <string.h>
+#include <stdio.h>
 
-extern char bss_buffer[256];
-const int ro_val = 111;
-int new_var = 0xff;
+int data_var = 0x31337;
 
-int bar(void *p)
+int foo(void)
 {
-	new_var = 0x3;
-	new_var = 1 << 0x3;
-	return 1;
+	printf("I am the new function foo, and the new data_var is :%#x\n", data_var);
+	return 0;
 }
 
-int foo(const char *path, size_t mode)
-{
-	if (strcmp(bss_buffer, "SOME_STRING") == 0)
-		return 1;
-	bar(NULL);
-}
+
