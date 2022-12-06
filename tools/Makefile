@@ -3,6 +3,7 @@ all:
 	gcc -m32 add_elf_interp.c -o add_elf_interp32
 64bit:
 	gcc -ggdb add_elf_interp.c -o add_elf_interp64
+	cp add_elf_interp64 shiva-ld
 
 test:
 	gcc -static-pie test.c -o test

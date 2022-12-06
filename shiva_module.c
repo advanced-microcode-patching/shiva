@@ -43,6 +43,11 @@ module_symbol_shndx_str(struct shiva_module *linker, struct elf_symbol *symbol)
 {
 	struct elf_section *section = shiva_malloc(sizeof(*section));
 	uint16_t shndx = symbol->shndx;
+
+	if (shndx == SHN_COMMON) {
+		shiva_debug("Symbols SHN_COMMON, we will assume .bss data\n");
+		return ".bss";
+	}
 	/*
 	 * What section does our symbol live in?
 	 */
