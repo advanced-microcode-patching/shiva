@@ -1384,7 +1384,7 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 			 * If it's the .bss then we don't need to map anything, it's
 			 * uninitialized.
 			 */
-			if (section.type == SHT_NOBITS) {
+			if (section.type != SHT_NOBITS) {
 				res = elf_section_map(&linker->elfobj, linker->data_mem,
 				    section, &off);
 				if (res == false) {
@@ -1402,7 +1402,7 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 			n->vaddr = (section.type == SHT_NOBITS) ? linker->data_vaddr + linker->bss_off 
 			    : (uint64_t)linker->data_mem + count;
 			n->offset = (section.type == SHT_NOBITS) ? linker->bss_off : count;
-			n->size = linker->bss_size;
+			n->size = (section.type == SHT_NOBITS) ? linker->bss_size : section.size;
 			n->name = section.name;
 			shiva_debug("Inserting section to segment mapping\n");
 			shiva_debug("Address: %#lx\n", n->vaddr);
