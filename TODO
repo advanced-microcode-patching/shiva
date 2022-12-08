@@ -79,7 +79,7 @@ differently. Usually there is just a .plt and a .got.plt, now there
 is: .plt, .plt.sec, .plt.got, and .got.plt
 
 
-8. Use file mappings in the future for mapping in ld-linux and the target
+8. Use file mappings in the future for mapping in ld-linux and the target (COMPLETED)
 
 When we map ld-linux and the target ELF executable into memory we store them
 into anonymous memory mappings. GDB

@@ -124,15 +124,23 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	struct shiva_module_section_mapping smap;
 	shiva_error_t error;
 	bool res;
+	char *shdr_name = NULL;
 
-	if (elf_section_by_index(&linker->elfobj, patch_symbol->shndx, &shdr) == false) {
-		fprintf(stderr, "Failed to find section index: %d in module: %s\n",
-		    patch_symbol->shndx, elf_pathname(&linker->elfobj));
-		return false;
+	if (patch_symbol->shndx == SHN_COMMON) {
+		shiva_debug("shndx == SHN_COMMON for var: %s. Assuming it's a .bss\n",
+		    patch_symbol->name);
+		shdr_name = ".bss";
+	} else {
+		if (elf_section_by_index(&linker->elfobj, patch_symbol->shndx, &shdr) == false) {
+			fprintf(stderr, "Failed to find section index: %d in module: %s\n",
+			    patch_symbol->shndx, elf_pathname(&linker->elfobj));
+			return false;
+		}
+		shdr_name = shdr.name;
 	}
 
-	if (get_section_mapping(linker, shdr.name, &smap) == false) {
-		fprintf(stderr, "Failed to retrieve section data for %s\n", shdr.name);
+	if (get_section_mapping(linker, shdr_name, &smap) == false) {
+		fprintf(stderr, "Failed to retrieve section data for %s\n", shdr_name);
 		return false;
 	}
 
@@ -143,8 +151,11 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	case LP_SECTION_DATASEGMENT:
 		var_segment = linker->data_vaddr;
 		break;
+	case LP_SECTION_BSS_SEGMENT:
+		var_segment = linker->bss_vaddr;
+		break;
 	default:
-		fprintf(stderr, "Unknown section attribute for '%s'\n", shdr.name);
+		fprintf(stderr, "Unknown section attribute for '%s'\n", shdr_name);
 		return false;
 	}
 
@@ -259,6 +270,11 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 				shiva_debug("Installing xref patch at %#lx for symbol %s\n",
 				    xe.adrp_site, xe.symbol.name);
 				res = install_aarch64_xref_patch(ctx, linker, &xe, &symbol);
+				if (res == false) {
+					fprintf(stderr, "install_aarch64_xref_patch() for '%s' failed\n",
+					    symbol.name);
+					return false;
+				}
 			}
 			break;
 		default:
@@ -426,6 +442,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		/*
 		 * NOTE aarch64 version of Shiva is an ET_EXEC always.
 		 */
+		shiva_debug("HELLO: GOT(%p) = %#lx\n", GOT, symbol.value);
 		*(uint64_t *)GOT = symbol.value;
 #endif
 	}
@@ -508,6 +525,7 @@ patch_plt_stubs(struct shiva_module *linker)
 		    | ((rval & RELOC_MASK(2)) << 29) | ((rval & (RELOC_MASK(19) << 2)) << 3);
 		*(uint32_t *)&stub[0] = insn_bytes;
 #endif
+		shiva_debug("got_addr: %#lx\n", gotaddr);
 		uint32_t rval = ((gotaddr - pltaddr) >> 2);
 		uint32_t insn_bytes = *(uint32_t *)&stub[0];
 		insn_bytes = (insn_bytes & ~(RELOC_MASK(19) << 5)) | ((rval & RELOC_MASK(19)) << 5);
@@ -660,7 +678,31 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 					    symbol.name, elf_pathname(&linker->elfobj));
 					return false;
 				}
-				if (tmp_shdr.flags & SHF_ALLOC) {
+				/*
+				 * Create special handling of relocation for .bss scenario.
+				 */
+				if (tmp_shdr.type == SHT_NOBITS && symbol.shndx == SHN_COMMON) {
+					if ((tmp_shdr.flags & SHF_ALLOC|SHF_WRITE) == SHF_ALLOC|SHF_WRITE) {
+						ENTRY e, *ep;
+
+						e.key = (char *)symbol.name;
+						e.data = NULL;
+
+						shiva_debug(".bss variable being allocated\n");
+
+						if (hsearch_r(e, FIND, &ep, &linker->cache.bss) == 0) {
+							fprintf(stderr, "Unable to find symbol '%s' in"
+							    " the the bss cache\n", symbol.name);
+							return false;
+						}
+						printf("[!] BSS scenario. symval = %#lx + %#lx\n",
+						    linker->bss_vaddr, ((struct shiva_module_bss_entry *)(ep->data))->offset);
+						symval = linker->bss_vaddr;
+						symval += ((struct shiva_module_bss_entry *)(ep->data))->offset;
+						rel_unit = &linker->text_mem[smap.offset + rel.offset];
+						rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+					}
+				} else if (tmp_shdr.flags & SHF_ALLOC) {
 					if (!(tmp_shdr.flags & SHF_WRITE)) {
 					/*
 					 * If the symbol lives in a section that's SHF_ALLOC but not
@@ -1049,9 +1091,84 @@ elf_section_map(elfobj_t *elfobj, uint8_t *dst, struct elf_section section,
 	*segment_offset += section.size;
 	return true;
 }
+/*
+ * 1. Calculate .bss size in relocatable object. The sh_size value will be
+ * set to zero in an ET_REL. So we must find every STT_OBJECT symbol who's
+ * shndx value is set to SHN_COMMON. This indicates that the symbol is not
+ * allocated for on disk and is apart of a common block of unallocated memory.
+ * ld(1) stores uninitialized variable symbols as STT_OBJECT/STB_GLOBAL with
+ * an st_value equal to the size of the variable (Instead of an offset). We
+ * will use this data to build our own information about where to store the
+ * variable and at what offsets, internally.
+ *
+ * 2. As we calculate the bss size, we might as well store the .bss variable
+ * symbol information, offset from the end of the data segment in a cache.
+ * This way when we are linking a new variable in with a COMMON shndx we
+ * can check the cache, which already contains the underlying linking data
+ * that is required my Shiva.
+ */
+#define MAX_BSS_COUNT 512 /* XXX This should be configurable/tunable */
+
+bool
+calculate_bss_size(struct shiva_module *linker, size_t *out)
+{
+	elfobj_t *elfobj = &linker->elfobj; //ptr to ELF ET_REL patch
+	struct elf_symbol symbol;
+	elf_symtab_iterator_t symtab_iter;
+	struct shiva_module_bss_entry *bss_entry;
+	ENTRY e, *ep;
+	uint64_t var_offset = 0;
+	size_t bss_size = 0;
+
+	TAILQ_INIT(&linker->tailq.bss_list);
+	(void) hcreate_r(MAX_BSS_COUNT, &linker->cache.bss);
+
+	elf_symtab_iterator_init(elfobj, &symtab_iter);
+	while (elf_symtab_iterator_next(&symtab_iter, &symbol) == ELF_ITER_OK) {
+		if (symbol.shndx == SHN_COMMON) {
+			e.key = (char *)symbol.name;
+			e.data = NULL;
+
+			/*
+			 * If the symbol already exists, then move on.
+			 */
+			if (hsearch_r(e, FIND, &ep, &linker->cache.bss) != 0)
+				continue;
+			bss_entry = shiva_malloc(sizeof(*bss_entry));
+			bss_entry->symname = symbol.name;
+			bss_entry->addr = linker->bss_vaddr + var_offset;
+			bss_entry->offset = var_offset;
+			var_offset += symbol.size;
+
+			e.key = (char *)bss_entry->symname;
+			e.data = bss_entry;
+
+			if (hsearch_r(e, ENTER, &ep, &linker->cache.bss) == 0) {
+				free(bss_entry);
+				fprintf(stderr, "Failed to add .bss entry into cache: '%s'\n",
+				    symbol.name);
+				return false;
+			}
+
+			shiva_debug("Inserting entry '%s' into .bss"
+			    " cache and .bss list\n", symbol.name);
+			TAILQ_INSERT_TAIL(&linker->tailq.bss_list, bss_entry, _linkage);
+			bss_size += symbol.size;
+		}
+	}
+	*out = bss_size;
+	return true;
+}
 
 #define MAX_GOT_COUNT 4096 * 10
 
+/*
+ * Generally our modules data segment looks like this:
+ * 0x6000000				
+ * [.data section, .got section, .bss]
+ * We must calculate the needed size of all global data, got entries,
+ * and the bss.
+ */
 bool
 calculate_data_size(struct shiva_module *linker)
 {
@@ -1062,10 +1179,19 @@ calculate_data_size(struct shiva_module *linker)
 	struct shiva_module_got_entry *got_entry;
 	ENTRY e, *ep;
 	uint64_t offset;
+	size_t bss_len = 0;
 
 	elf_section_iterator_init(&linker->elfobj, &iter);
 	while (elf_section_iterator_next(&iter, &section) == ELF_ITER_OK) {
 		if (section.flags == (SHF_ALLOC|SHF_WRITE)) {
+			/*
+			 * Skip .bss for now, we want to place it after our
+			 * .got area in the data segment.
+			 */
+			if (strcmp(section.name, ".bss") == 0)
+				continue;
+			shiva_debug("Increasing data segment len for section: %s len: %d\n",
+			    section.name, section.size);
 			linker->data_size += section.size;
 		}
 	}
@@ -1076,10 +1202,24 @@ calculate_data_size(struct shiva_module *linker)
 		return false;
 	}
 	/*
+	 * Generally the .bss section will be set to a section
+	 * size of 0. We must calculate the size by finding STB_GLOBAL
+	 * symbols that have a symbol index set to SHN_COMMON.
+	 */
+	bss_len = section.size;
+	if (section.size == 0) {
+		if (calculate_bss_size(linker, &bss_len) == false) {
+			fprintf(stderr, "calculate_bss_len() failed\n");
+			return false;
+		}
+	}
+	linker->bss_size = bss_len;
+	/*
 	 * Make room for the .bss
 	 */
-	linker->data_size += section.size;
-
+	shiva_debug("bss len: %d\n", bss_len);
+	linker->data_size += bss_len;
+	shiva_debug("data_size: %d\n", linker->data_size);
 	/*
 	 * Create cache for GOT entries.
 	 */
@@ -1102,8 +1242,6 @@ calculate_data_size(struct shiva_module *linker)
 			/*
 			 * Create room for the modules pltgot
 			 */
-		//	linker->data_size += sizeof(uint64_t);
-		//	linker->pltgot_size += sizeof(uint64_t);
 			/*
 			 * Cache symbol so we don't create duplicate GOT entries
 			*/
@@ -1142,8 +1280,12 @@ calculate_data_size(struct shiva_module *linker)
 			break;
 		}
 	}
-
-	shiva_debug("LPM data segment size: %zu\n", linker->data_size);
+	/*
+	 * Offset from beginning of data segment.
+	 * The .bss lives right after our modules .got section in memory.
+	 */
+	linker->bss_off = linker->data_size;
+	shiva_debug("Shiva module data segment size: %zu\n", linker->data_size);
 	return true;
 }
 
@@ -1226,25 +1368,41 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 		if (section.flags & SHF_WRITE) {
 			struct shiva_module_section_mapping *n;
 
-			if (section.size == 0)
+			/*
+			 * We don't map sections if their sh_size == 0, however
+			 * we make an exception for the .bss. ET_REL objects don't
+			 * give the size of the .bss section, instead they expect
+			 * the linker to build it based on symbols with an SHN_COMMON
+			 * shndx value, and build your own offsets into the location
+			 * that you choose to store them.
+			 */
+			if (strcmp(section.name, ".bss") != 0 && section.size == 0)
 				continue;
 			shiva_debug("Attempting to map section %s(offset: %zu) into data segment"
 			    " at address %p\n", section.name, off, linker->data_mem + off);
-			res = elf_section_map(&linker->elfobj, linker->data_mem,
-			    section, &off);
-			if (res == false) {
-				shiva_debug("elf_section_map failed\n");
-				return false;
+			/*
+			 * If it's the .bss then we don't need to map anything, it's
+			 * uninitialized.
+			 */
+			if (section.type == SHT_NOBITS) {
+				res = elf_section_map(&linker->elfobj, linker->data_mem,
+				    section, &off);
+				if (res == false) {
+					shiva_debug("elf_section_map failed\n");
+					return false;
+				}
 			}
 			n = malloc(sizeof(*n));
 			if (n == NULL) {
 				shiva_debug("malloc failed\n");
 				return false;
 			}
-			n->map_attribute = LP_SECTION_DATASEGMENT;
-			n->vaddr = (unsigned long)linker->data_mem + count;
-			n->offset = count; // offset within data segment that section lives at
-			n->size = section.size;
+			n->map_attribute = (section.type == SHT_NOBITS) ? LP_SECTION_BSS_SEGMENT :
+			    LP_SECTION_DATASEGMENT;
+			n->vaddr = (section.type == SHT_NOBITS) ? linker->data_vaddr + linker->bss_off 
+			    : (uint64_t)linker->data_mem + count;
+			n->offset = (section.type == SHT_NOBITS) ? linker->bss_off : count;
+			n->size = linker->bss_size;
 			n->name = section.name;
 			shiva_debug("Inserting section to segment mapping\n");
 			shiva_debug("Address: %#lx\n", n->vaddr);
@@ -1255,6 +1413,7 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 			shiva_debug("COUNT: %zu\n", count);
 		}
 	}
+	linker->bss_vaddr = linker->data_vaddr + linker->bss_off;
 	return true;
 }
 

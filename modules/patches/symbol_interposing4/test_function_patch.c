@@ -1,9 +1,10 @@
 #include <stdio.h>
 
-int bss_var = 5;
+int bss_var;
 
 int foo(void)
 {
+	bss_var = 5;
 	printf("I'm the original foo() function!\n");
 	printf("The value of bss_var is %x\n", bss_var);
 	return 0;
