@@ -8,6 +8,33 @@
 #define ARM_INSN_LEN 4
 #endif
 
+static bool
+shiva_analyze_make_xref(struct shiva_ctx *ctx, struct elf_symbol *symbol, int xref_type, uint64_t adrp_site,
+    uint64_t adrp_imm, uint64_t next_imm, uint32_t adrp_o_bytes, uint32_t next_o_bytes)
+{
+	struct shiva_xref_site *xref;
+
+	xref = calloc(1, sizeof(*xref));
+	if (xref == NULL) {
+		perror("calloc");
+		return false;
+	}
+	shiva_debug("XREF (Type: %d): site: %#lx target: %s(%#lx)\n",
+	    xref_type, adrp_site, symbol->name, symbol->value);
+	xref->type = xref_type;
+	xref->adrp_imm = adrp_imm;
+	xref->adrp_site = adrp_site;
+	xref->next_imm = next_imm;
+	xref->next_site = adrp_site + ARM_INSN_LEN;
+	xref->adrp_o_insn = adrp_o_bytes; //*(uint32_t *)&tmp_ptr[c];
+	xref->next_o_insn = next_o_bytes; //*(uint32_t *)&tmp_ptr[c + ARM_INSN_LEN];
+	shiva_debug("ADRP(%#lx): %x\n", adrp_site, xref->adrp_o_insn);
+	shiva_debug("NEXT(%#lx): %x\n", xref->next_site, xref->next_o_insn);
+	memcpy(&xref->symbol, &symbol, sizeof(symbol));
+	TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref, _linkage);
+	return true;
+}
+
 bool
 shiva_analyze_find_calls(struct shiva_ctx *ctx)
 {
@@ -254,6 +281,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 				continue;
 			}
 			uint32_t tmp_imm;
+			uint64_t qword;
 
 			p = strchr(ctx->disas.insn->op_str, '#');
 			if (p == NULL) {
@@ -264,26 +292,42 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			tmp_imm = strtoul((p + 1), NULL, 16);
 			shiva_debug("Looking up symbol at address %#lx in"
 			    " the target executable\n", target_page + tmp_imm);
-			if (elf_symbol_by_value_lookup(&ctx->elfobj,
-			    target_page + tmp_imm, &symbol) == true) {
-				xref = calloc(1, sizeof(*xref));
-				if (xref == NULL) {
-					perror("calloc");
+			/*
+			 * Does target_page + tmp_imm lead to storage of the address
+			 * we are looking for? Or does it calculate directly to the
+			 * address? First let's try to read 8 bytes from the address
+			 * and see if there's an indirect absolute value we are looking
+			 * for: (i.e. a .got[entry] pointing to a .bss variable.
+			 */
+			shiva_debug("Reading from address %#lx\n", target_page + tmp_imm);
+			if (elf_read_address(&ctx->elfobj, target_page + tmp_imm,
+			    &qword, ELF_QWORD) == false) {
+				shiva_debug("Failed to read address %#lx\n", target_page + tmp_imm);
+				continue;
+			}
+			shiva_debug("Looking up value %#lx found at %#lx\n", qword, target_page + tmp_imm);
+			res = elf_symbol_by_value_lookup(&ctx->elfobj,
+			    qword, &symbol);
+			if (res == true) {
+				shiva_debug("XREF (Indirect via GOT) (Type: %d): Site: %#lx target: %s(%#lx)\n",
+				    xref_type, adrp_site, symbol.name, symbol.value);
+				res = shiva_analyze_make_xref(ctx, &symbol, xref_type, adrp_site,
+				    adrp_imm, tmp_imm, adrp_o_bytes, next_o_bytes);
+				if (res == false) {
+					fprintf(stderr, "shiva_analyze_install_xref failed\n");
 					return false;
 				}
-				shiva_debug("XREF (Type: %d): site: %#lx target: %s(%#lx)\n",
-				    xref_type, adrp_site, symbol.name, symbol.value);
-				xref->type = xref_type;
-				xref->adrp_imm = adrp_imm;
-				xref->adrp_site = adrp_site;
-				xref->next_imm = tmp_imm;
-				xref->next_site = adrp_site + ARM_INSN_LEN;
-				xref->adrp_o_insn = adrp_o_bytes; //*(uint32_t *)&tmp_ptr[c];
-				xref->next_o_insn = next_o_bytes; //*(uint32_t *)&tmp_ptr[c + ARM_INSN_LEN];
-				shiva_debug("ADRP(%#lx): %x\n", adrp_site, xref->adrp_o_insn);
-				shiva_debug("NEXT(%#lx): %x\n", xref->next_site, xref->next_o_insn);
-				memcpy(&xref->symbol, &symbol, sizeof(symbol));
-				TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref, _linkage);
+				continue;
+			}
+			if (elf_symbol_by_value_lookup(&ctx->elfobj,
+			    target_page + tmp_imm, &symbol) == true) {
+				res = shiva_analyze_make_xref(ctx, &symbol, xref_type, adrp_site,
+				    adrp_imm, tmp_imm, adrp_o_bytes, next_o_bytes);
+				if (res == false ) {
+					fprintf(stderr, "shiva_analyze_install_xref failed\n");
+					return false;
+				}
+				continue;
 			}
 		}
 	}
