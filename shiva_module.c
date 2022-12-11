@@ -146,12 +146,15 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 
 	switch(smap.map_attribute) {
 	case LP_SECTION_TEXTSEGMENT:
+		shiva_debug("VARSEGMENT(Text): %#lx\n", linker->text_vaddr);
 		var_segment = linker->text_vaddr;
 		break;
 	case LP_SECTION_DATASEGMENT:
+		shiva_debug("VARSEGMENT(Data): %#lx\n", linker->data_vaddr);
 		var_segment = linker->data_vaddr;
 		break;
 	case LP_SECTION_BSS_SEGMENT:
+		shiva_debug("VARSEGMENT(Bss): %#lx\n", linker->bss_vaddr);
 		var_segment = linker->bss_vaddr;
 		break;
 	default:
@@ -159,6 +162,30 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 		return false;
 	}
 
+	/*
+	 * NOTE:
+	 * An SHIVA_XREF_F_INDIRECT indicates we are patching a .got that contains
+	 * the address to the patched version of a symbol, rather than fixing up the
+	 * instruction code itself. It won't always be in the .got though, ARM often
+	 * stores absolute addresses at the end of a function within the .text.
+	 * Therefore we must use the shiva_trace_write() function to modify the area
+	 * since it may need to mprotect() the area to be writable.
+	 */
+	if (e->flags & SHIVA_XREF_F_INDIRECT) {
+		uint64_t val = patch_symbol->value + var_segment;
+
+		e->got = (uint64_t)e->got + ctx->ulexec.base_vaddr;
+
+		shiva_debug("Installing indirect patch '%s' xref. GOT entry(%#lx) = %#lx\n",
+		    patch_symbol->name, e->got, *(e->got));
+
+		res = shiva_trace_write(ctx, 0, (void *)e->got, (void *)&val, 8, &error);
+		if (res == false) {
+			fprintf(stderr, "shiva_trace_write failed: %s\n", shiva_error_msg(&error));
+			return false;
+		}
+		return true;
+	}
 	shiva_debug("var_segment: %#lx base_vaddr: %#lx\n", var_segment, ctx->ulexec.base_vaddr);
 	xoffset = rel_val = (int32_t)(ELF_PAGESTART(patch_symbol->value + var_segment) - ELF_PAGESTART(rel_addr));
 	rel_val >>= 12;
@@ -172,17 +199,18 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 		return false;
 	case SHIVA_XREF_TYPE_ADRP_ADD:
 		rel_unit = (uint8_t *)e->adrp_site + ctx->ulexec.base_vaddr; // address of unit we are patching in target ELF executable
-		rel_val = patch_symbol->value;
 		shiva_debug("Installing SHIVA_XREF_TYPE_ADRP_ADD patch at %#lx\n", e->adrp_site + ctx->ulexec.base_vaddr);
-		shiva_debug("Add offset: %#lx\n", rel_val);
-		n_add_insn = e->next_o_insn;
-		n_add_insn = (n_add_insn & ~(RELOC_MASK(12) << 10)) | ((rel_val & RELOC_MASK(12)) << 10);
 		res = shiva_trace_write(ctx, 0, (void *)rel_unit,
 		    (void *)&n_adrp_insn, 4, &error);
 		if (res == false) {
 			fprintf(stderr, "shiva_trace_write failed: %s\n", shiva_error_msg(&error));
 			return false;
 		}
+		rel_val = patch_symbol->value;
+		shiva_debug("Add offset: %#lx\n", rel_val);
+		n_add_insn = e->next_o_insn;
+		n_add_insn = (n_add_insn & ~(RELOC_MASK(12) << 10)) | ((rel_val & RELOC_MASK(12)) << 10);
+
 		rel_unit += sizeof(uint32_t);
 		res = shiva_trace_write(ctx, 0, (void *)rel_unit,
 		    (void *)&n_add_insn, 4, &error);
@@ -192,6 +220,10 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 		}
 		break;
 	case SHIVA_XREF_TYPE_ADRP_LDR:
+		rel_unit = (uint8_t *)e->adrp_site + ctx->ulexec.base_vaddr;
+		rel_val = patch_symbol->value;
+		shiva_debug("Installing SHIVA_XREF_TYPE_ADRP_LDR patch at %#lx\n",
+		    e->adrp_site + ctx->ulexec.base_vaddr);
 		shiva_debug("SHIVA_XREF_TYPE_ADRP_LDR not yet supported\n");
 		break;
 	}
@@ -261,9 +293,10 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 		case SHIVA_XREF_TYPE_ADRP_LDR:
 		case SHIVA_XREF_TYPE_ADRP_STR:
 		case SHIVA_XREF_TYPE_ADRP_ADD:
-			shiva_debug("Found XREF at %#lx\n", xe.adrp_site);
+			shiva_debug("Found XREF at %#lx for %s\n", xe.adrp_site, xe.symbol.name);
 			if (elf_symbol_by_name(&linker->elfobj, xe.symbol.name,
 			    &symbol) == true) {
+				shiva_debug("Found symbol for %s\n", xe.symbol.name);
 				if (symbol.type != STT_OBJECT ||
 				    symbol.bind != STB_GLOBAL)
 					continue;

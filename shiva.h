@@ -191,8 +191,12 @@ struct shiva_branch_site {
 #define SHIVA_XREF_TYPE_ADRP_ADD 3
 #define SHIVA_XREF_TYPE_UNKNOWN 4
 
+#define SHIVA_XREF_F_INDIRECT	(1UL << 0) /* i.e. got[entry] holds address to .bss variable */
+
 struct shiva_xref_site {
 	int type;
+	uint64_t flags;
+	uint64_t *got; // indirect xrefs use a .got to hold a symbol value.
 	uint64_t adrp_imm; /* imm value of adrp */
 	uint64_t adrp_site; /* site address of adrp */
 	uint64_t adrp_o_insn; /* original instruction bytes of adrp */

@@ -9,10 +9,11 @@
 #endif
 
 static bool
-shiva_analyze_make_xref(struct shiva_ctx *ctx, struct elf_symbol *symbol, int xref_type, uint64_t adrp_site,
-    uint64_t adrp_imm, uint64_t next_imm, uint32_t adrp_o_bytes, uint32_t next_o_bytes)
+shiva_analyze_make_xref(struct shiva_ctx *ctx, struct elf_symbol *symbol, int xref_type, uint64_t xref_flags, 
+    uint64_t adrp_site, uint64_t adrp_imm, uint64_t next_imm, uint32_t adrp_o_bytes, uint32_t next_o_bytes)
 {
 	struct shiva_xref_site *xref;
+	uint64_t gotaddr;
 
 	xref = calloc(1, sizeof(*xref));
 	if (xref == NULL) {
@@ -21,7 +22,12 @@ shiva_analyze_make_xref(struct shiva_ctx *ctx, struct elf_symbol *symbol, int xr
 	}
 	shiva_debug("XREF (Type: %d): site: %#lx target: %s(%#lx)\n",
 	    xref_type, adrp_site, symbol->name, symbol->value);
+	if (xref_flags & SHIVA_XREF_F_INDIRECT) {
+		gotaddr = (adrp_site & ~0xfff) + adrp_imm + next_imm;
+		xref->got = (uint64_t *)gotaddr;
+	}
 	xref->type = xref_type;
+	xref->flags = xref_flags;
 	xref->adrp_imm = adrp_imm;
 	xref->adrp_site = adrp_site;
 	xref->next_imm = next_imm;
@@ -30,7 +36,7 @@ shiva_analyze_make_xref(struct shiva_ctx *ctx, struct elf_symbol *symbol, int xr
 	xref->next_o_insn = next_o_bytes; //*(uint32_t *)&tmp_ptr[c + ARM_INSN_LEN];
 	shiva_debug("ADRP(%#lx): %x\n", adrp_site, xref->adrp_o_insn);
 	shiva_debug("NEXT(%#lx): %x\n", xref->next_site, xref->next_o_insn);
-	memcpy(&xref->symbol, &symbol, sizeof(symbol));
+	memcpy(&xref->symbol, symbol, sizeof(*symbol));
 	TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref, _linkage);
 	return true;
 }
@@ -282,6 +288,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			}
 			uint32_t tmp_imm;
 			uint64_t qword;
+			uint64_t xref_flags = 0;
 
 			p = strchr(ctx->disas.insn->op_str, '#');
 			if (p == NULL) {
@@ -309,9 +316,11 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			res = elf_symbol_by_value_lookup(&ctx->elfobj,
 			    qword, &symbol);
 			if (res == true) {
+				xref_flags |= SHIVA_XREF_F_INDIRECT;
+
 				shiva_debug("XREF (Indirect via GOT) (Type: %d): Site: %#lx target: %s(%#lx)\n",
 				    xref_type, adrp_site, symbol.name, symbol.value);
-				res = shiva_analyze_make_xref(ctx, &symbol, xref_type, adrp_site,
+				res = shiva_analyze_make_xref(ctx, &symbol, xref_type, xref_flags, adrp_site,
 				    adrp_imm, tmp_imm, adrp_o_bytes, next_o_bytes);
 				if (res == false) {
 					fprintf(stderr, "shiva_analyze_install_xref failed\n");
@@ -321,7 +330,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			}
 			if (elf_symbol_by_value_lookup(&ctx->elfobj,
 			    target_page + tmp_imm, &symbol) == true) {
-				res = shiva_analyze_make_xref(ctx, &symbol, xref_type, adrp_site,
+				res = shiva_analyze_make_xref(ctx, &symbol, xref_type, xref_flags, adrp_site,
 				    adrp_imm, tmp_imm, adrp_o_bytes, next_o_bytes);
 				if (res == false ) {
 					fprintf(stderr, "shiva_analyze_install_xref failed\n");
