@@ -172,9 +172,34 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	 * since it may need to mprotect() the area to be writable.
 	 */
 	if (e->flags & SHIVA_XREF_F_INDIRECT) {
+		Elf64_Rela *rela;
+		size_t relasz;
+		uint64_t rela_ptr;
 		uint64_t val = patch_symbol->value + var_segment;
 
 		e->got = (uint64_t)e->got + ctx->ulexec.base_vaddr;
+
+		if (shiva_target_dynamic_get(ctx, DT_RELASZ, &relasz) == false) {
+			fprintf(stderr, "shiva_target_dynamic_get(%p, DT_RELASZ, ...) failed\n",
+			    ctx);
+			return false;
+		}
+		rela = (Elf64_Rela *)shiva_malloc(relasz);
+
+		if (shiva_target_dynamic_get(ctx, DT_RELA, &rela_ptr) == false) {
+			fprintf(stderr, "shiva_target_dynamic_set(%p, DT_RELA, ...) failed\n",
+			    ctx);
+			return false;
+		}
+
+		rela = (void *)rela_ptr;
+		for (i = 0; i < relasz / sizeof(Elf64_Rela); i++) {
+			if (rela[i].r_addend == *(e->got)) {
+				shiva_debug("Found RELATIVE rela.dyn relocation entry for %s\n",
+				    patch_symbol->name);
+				shiva_debug("Transforming into an invalid R_AARCH64_COPY\n");
+			}
+		}
 
 		shiva_debug("Installing indirect patch '%s' xref. GOT entry(%#lx) = %#lx\n",
 		    patch_symbol->name, e->got, *(e->got));

@@ -487,9 +487,8 @@ bool shiva_analyze_run(shiva_ctx_t *);
 /*
  * shiva_target.c
  */
-bool
-shiva_target_dynamic_set(struct shiva_ctx *, uint64_t, uint64_t);
-
+bool shiva_target_dynamic_set(struct shiva_ctx *, uint64_t, uint64_t);
+bool shiva_target_dynamic_get(struct shiva_ctx *, uint64_t, uint64_t *);
 /*
  * shiva_proc.c
  */
