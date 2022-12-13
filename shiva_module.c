@@ -44,6 +44,7 @@ module_symbol_shndx_str(struct shiva_module *linker, struct elf_symbol *symbol)
 	struct elf_section *section = shiva_malloc(sizeof(*section));
 	uint16_t shndx = symbol->shndx;
 
+	shiva_debug("SHNDX: %d\n", shndx);
 	if (shndx == SHN_COMMON) {
 		shiva_debug("Symbols SHN_COMMON, we will assume .bss data\n");
 		return ".bss";
@@ -172,10 +173,11 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	 * since it may need to mprotect() the area to be writable.
 	 */
 	if (e->flags & SHIVA_XREF_F_INDIRECT) {
+		int i;
 		Elf64_Rela *rela;
 		size_t relasz;
 		uint64_t rela_ptr;
-		uint64_t val = patch_symbol->value + var_segment;
+		uint64_t var_addr = patch_symbol->value + var_segment;
 
 		e->got = (uint64_t)e->got + ctx->ulexec.base_vaddr;
 
@@ -184,33 +186,51 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 			    ctx);
 			return false;
 		}
-		rela = (Elf64_Rela *)shiva_malloc(relasz);
 
 		if (shiva_target_dynamic_get(ctx, DT_RELA, &rela_ptr) == false) {
 			fprintf(stderr, "shiva_target_dynamic_set(%p, DT_RELA, ...) failed\n",
 			    ctx);
 			return false;
 		}
-
+		rela_ptr += ctx->ulexec.base_vaddr;
 		rela = (void *)rela_ptr;
 		for (i = 0; i < relasz / sizeof(Elf64_Rela); i++) {
 			if (rela[i].r_addend == *(e->got)) {
+				uint64_t relval = var_addr - ctx->ulexec.base_vaddr - 4;
+
 				shiva_debug("Found RELATIVE rela.dyn relocation entry for %s\n",
 				    patch_symbol->name);
-				shiva_debug("Transforming into an invalid R_AARCH64_COPY\n");
+				shiva_debug("Patching rela[%d].r_addend with %#lx\n", i, relval);
+				res = shiva_trace_write(ctx, 0, (void *)&rela[i].r_addend, (void *)&relval,
+				    8, &error);
+				if (res == false) {
+					fprintf(stderr, "shiva_trace_write failed: %s\n",
+					    shiva_error_msg(&error));
+					return false;
+				}
+				res = shiva_trace_write(ctx, 0, (void *)e->got, (void *)&relval,
+				    8, &error);
+				if (res == false) {
+					fprintf(stderr, "shiva_trace_write failed: %s\n",
+					    shiva_error_msg(&error));
+					return false;
+				}
+				printf("lets ready back the value: %lx\n", rela[i].r_addend);
 			}
 		}
 
-		shiva_debug("Installing indirect patch '%s' xref. GOT entry(%#lx) = %#lx\n",
-		    patch_symbol->name, e->got, *(e->got));
-
+	//	shiva_debug("Installing indirect patch '%s' xref. GOT entry(%#lx) = %#lx\n",
+	//	    patch_symbol->name, e->got, *(e->got));
+#if 0
 		res = shiva_trace_write(ctx, 0, (void *)e->got, (void *)&val, 8, &error);
 		if (res == false) {
 			fprintf(stderr, "shiva_trace_write failed: %s\n", shiva_error_msg(&error));
 			return false;
 		}
+#endif
 		return true;
 	}
+
 	shiva_debug("var_segment: %#lx base_vaddr: %#lx\n", var_segment, ctx->ulexec.base_vaddr);
 	xoffset = rel_val = (int32_t)(ELF_PAGESTART(patch_symbol->value + var_segment) - ELF_PAGESTART(rel_addr));
 	rel_val >>= 12;

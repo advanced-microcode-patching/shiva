@@ -58,7 +58,7 @@ shiva_target_dynamic_get(struct shiva_ctx *ctx, uint64_t tag, uint64_t *out)
 
         for (i = 0; dyn[i].d_tag != DT_NULL; i++) {
                 if (dyn[i].d_tag == tag) {
-                        shiva_debug("Get dynamic tag %d: %#lx\n", dyn[i].d_tag, value);
+                        shiva_debug("Get dynamic tag %d: %#lx\n", dyn[i].d_tag, dyn[i].d_un.d_val);
                         *out = dyn[i].d_un.d_val;
                         return true;
                 }

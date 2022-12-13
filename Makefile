@@ -34,4 +34,5 @@ install:
 	cp build/shiva /lib/shiva
 	ln -s build/shiva shiva
 
-
+clean:
+	rm -f *.o shiva
