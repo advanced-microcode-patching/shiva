@@ -208,6 +208,13 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 					    shiva_error_msg(&error));
 					return false;
 				}
+				/*
+				 * XXX - We do not support ELF32 at the moment, but if we did
+				 * the Elf32_Rel doesn't contain an r_addend field. The rtld
+				 * retrieves it from the relocation unit. We overwrite the
+				 * addend (Pointed to by e->got) with the correct offset to
+				 * the global object (the symbol), i.e. a variable in the .bss.
+				 */
 				res = shiva_trace_write(ctx, 0, (void *)e->got, (void *)&relval,
 				    8, &error);
 				if (res == false) {
