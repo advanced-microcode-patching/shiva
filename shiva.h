@@ -56,6 +56,7 @@
 
 #define SHIVA_MODULE_F_RUNTIME	(1UL << 0)
 #define SHIVA_MODULE_F_INIT	(1UL << 1)
+#define SHIVA_MODULE_F_DUMMY_TEXT	(1UL << 2)
 
 /*
  * Path to real dynamic linker.
@@ -191,8 +192,12 @@ struct shiva_branch_site {
 #define SHIVA_XREF_TYPE_ADRP_ADD 3
 #define SHIVA_XREF_TYPE_UNKNOWN 4
 
+#define SHIVA_XREF_F_INDIRECT	(1UL << 0) /* i.e. got[entry] holds address to .bss variable */
+
 struct shiva_xref_site {
 	int type;
+	uint64_t flags;
+	uint64_t *got; // indirect xrefs use a .got to hold a symbol value.
 	uint64_t adrp_imm; /* imm value of adrp */
 	uint64_t adrp_site; /* site address of adrp */
 	uint64_t adrp_o_insn; /* original instruction bytes of adrp */
@@ -203,9 +208,15 @@ struct shiva_xref_site {
 	TAILQ_ENTRY(shiva_xref_site) _linkage;
 } shiva_xref_site_t;
 
+/*
+ * TODO: Change naming convention, LP_ may be
+ * left over from the original linker I made
+ * for tmp.0ut
+ */
 typedef enum shiva_module_section_map_attr {
 	LP_SECTION_TEXTSEGMENT = 0,
 	LP_SECTION_DATASEGMENT,
+	LP_SECTION_BSS_SEGMENT,
 	LP_SECTION_UNKNOWN
 } shiva_module_section_map_attr_t;
 
@@ -234,6 +245,14 @@ struct shiva_module_got_entry {
 	uint64_t gotaddr; // address of GOT entry
 	uint64_t gotoff; // offset of GOT entry
 	TAILQ_ENTRY(shiva_module_got_entry) _linkage;
+};
+
+struct shiva_module_bss_entry {
+	char *symname;
+	uint64_t addr; // address of bss variable
+	uint64_t size;	   // size of variable
+	uint64_t offset; // offset of variable from bss_addr (end of initialized data).
+	TAILQ_ENTRY(shiva_module_bss_entry) _linkage;
 };
 
 typedef enum shiva_mmap_type {
@@ -272,21 +291,26 @@ struct shiva_module {
 	size_t plt_off;
 	size_t plt_count;
 	size_t pltgot_off;
+	size_t bss_off;
 	size_t text_size;
 	size_t data_size;
+	size_t bss_size;
 	uint64_t text_vaddr;
 	uint64_t data_vaddr;
+	uint64_t bss_vaddr;
 	uint64_t shiva_base; /* base address of shiva executable at runtime */
 	uint64_t target_base;
 	elfobj_t elfobj; /* elfobj to the module */
 	elfobj_t self; /* elfobj to self (Shiva binary) */
 	elfobj_t *target_elfobj; /* elfobj of target executable */
 	struct {
+		TAILQ_HEAD(, shiva_module_bss_entry) bss_list;
 		TAILQ_HEAD(, shiva_module_got_entry) got_list;
 		TAILQ_HEAD(, shiva_module_section_mapping) section_maplist;
 		TAILQ_HEAD(, shiva_module_plt_entry) plt_list;
 	} tailq;
 	struct {
+		struct hsearch_data bss;
 		struct hsearch_data got;
 	} cache;
 	shiva_linking_mode_t mode;
@@ -464,9 +488,8 @@ bool shiva_analyze_run(shiva_ctx_t *);
 /*
  * shiva_target.c
  */
-bool
-shiva_target_dynamic_set(struct shiva_ctx *, uint64_t, uint64_t);
-
+bool shiva_target_dynamic_set(struct shiva_ctx *, uint64_t, uint64_t);
+bool shiva_target_dynamic_get(struct shiva_ctx *, uint64_t, uint64_t *);
 /*
  * shiva_proc.c
  */

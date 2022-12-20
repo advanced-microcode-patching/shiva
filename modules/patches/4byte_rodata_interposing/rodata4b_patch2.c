@@ -1,4 +1,6 @@
-const int rodata_var = 0xdeadbeef;
+#include <stdio.h>
+
+char rodata_var[] = "\xef\xbe\xad\xde";
 
 int foo(void)
 {
@@ -6,10 +8,3 @@ int foo(void)
 	printf("The new value of rodata_var is %d\n", rodata_var);
 	return 0;
 }
-
-/*
-int __empty(void)
-{
-	return;
-}
-*/

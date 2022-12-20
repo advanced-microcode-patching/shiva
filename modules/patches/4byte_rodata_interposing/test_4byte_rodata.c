@@ -12,7 +12,7 @@ int foo(void)
 int bar(void)
 {
 	printf("I am a function that won't be patched\n");
-	printf("I'm accessing rodata_var and its value is %#lx\n", rodata_var);
+	printf("I'm accessing rodata_var and its value is %#x\n", rodata_var);
 	return 0;
 }
 

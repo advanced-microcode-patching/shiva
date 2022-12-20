@@ -1,6 +1,6 @@
 BUILD_DIR = './build'
 INTERP_PATH = $(PWD)/build/shiva
-GCC_OPTS= -fPIC -ggdb -c -DDEBUG
+GCC_OPTS= -fPIC -DDEBUG -ggdb -c
 OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \
     shiva_callsite.o shiva_target.o shiva_xref.o
@@ -34,4 +34,5 @@ install:
 	cp build/shiva /lib/shiva
 	ln -s build/shiva shiva
 
-
+clean:
+	rm -f *.o shiva
