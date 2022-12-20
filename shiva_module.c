@@ -164,13 +164,29 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	}
 
 	/*
-	 * NOTE:
-	 * An SHIVA_XREF_F_INDIRECT indicates we are patching a .got that contains
-	 * the address to the patched version of a symbol, rather than fixing up the
-	 * instruction code itself. It won't always be in the .got though, ARM often
-	 * stores absolute addresses at the end of a function within the .text.
-	 * Therefore we must use the shiva_trace_write() function to modify the area
-	 * since it may need to mprotect() the area to be writable.
+	 * SHIVA_XREF_INDIRECT external linking patch
+	 *
+	 * An indirect XREF is an indirect access to a variable, 
+	 * such as a .bss variable most commonly:
+	 *
+	 * adrp		x0, <segment_offset> ; get page aligned address of text + segment_offset
+	 * ldr		x0, [x0, #pgoff] ; retrieve the address of the .bss variable from the .got
+	 * ldr		w1, [x0] ; load the .bss variable from memory into w1
+	 *
+	 * The absolute address to the variable is computed at runtime via the R_AARCH64_RELATIVE
+	 * relocations: base + addend
+	 *
+	 * Our solution is clean: 
+	 * 1. locate the R_AARCH64_RELATIVE relocation who's r_addend is equal
+	 * to the offset of the original .bss variable.
+	 * 2. Calculate the offset of the new patch .bss variable from the base of the executable:
+	 * 	new_var_addr - executable_base - 4
+	 * 3. Store the offset as the updated r_addend field in the relocation entry
+	 *
+	 * This is a great example of Cross relocation. Shiva is manipulating LDSO meta-data
+	 * to influence the behavior of ld-linux.so. The ld-linux.so rtld will parse the
+	 * R_AARCH64_RELATIVE relocations and apply the new offset for the patched version
+	 * of the .bss variable.
 	 */
 	if (e->flags & SHIVA_XREF_F_INDIRECT) {
 		int i;
@@ -214,6 +230,7 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 				 * retrieves it from the relocation unit. We overwrite the
 				 * addend (Pointed to by e->got) with the correct offset to
 				 * the global object (the symbol), i.e. a variable in the .bss.
+				 * This call to shiva_trace_write() isn't necessary on 64bit.
 				 */
 				res = shiva_trace_write(ctx, 0, (void *)e->got, (void *)&relval,
 				    8, &error);
@@ -222,19 +239,8 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 					    shiva_error_msg(&error));
 					return false;
 				}
-				printf("lets ready back the value: %lx\n", rela[i].r_addend);
 			}
 		}
-
-	//	shiva_debug("Installing indirect patch '%s' xref. GOT entry(%#lx) = %#lx\n",
-	//	    patch_symbol->name, e->got, *(e->got));
-#if 0
-		res = shiva_trace_write(ctx, 0, (void *)e->got, (void *)&val, 8, &error);
-		if (res == false) {
-			fprintf(stderr, "shiva_trace_write failed: %s\n", shiva_error_msg(&error));
-			return false;
-		}
-#endif
 		return true;
 	}
 
@@ -780,7 +786,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 							    " the the bss cache\n", symbol.name);
 							return false;
 						}
-						printf("[!] BSS scenario. symval = %#lx + %#lx\n",
+						shiva_debug("[!] BSS scenario. symval = %#lx + %#lx\n",
 						    linker->bss_vaddr, ((struct shiva_module_bss_entry *)(ep->data))->offset);
 						symval = linker->bss_vaddr;
 						symval += ((struct shiva_module_bss_entry *)(ep->data))->offset;
@@ -1408,6 +1414,10 @@ calculate_text_size(struct shiva_module *linker)
 			linker->text_size += sizeof(plt_stub);
 			linker->plt_count++;
 		}
+	}
+	if (linker->text_size == 0) {
+		linker->flags |= SHIVA_MODULE_F_DUMMY_TEXT;
+		linker->text_size = 4096;
 	}
 	shiva_debug("LPM text segment size: %zu\n", linker->text_size);
 	shiva_debug("PLT Count: %zu\n", linker->plt_count);

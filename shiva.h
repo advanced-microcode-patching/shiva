@@ -56,6 +56,7 @@
 
 #define SHIVA_MODULE_F_RUNTIME	(1UL << 0)
 #define SHIVA_MODULE_F_INIT	(1UL << 1)
+#define SHIVA_MODULE_F_DUMMY_TEXT	(1UL << 2)
 
 /*
  * Path to real dynamic linker.
