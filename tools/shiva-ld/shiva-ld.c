@@ -143,7 +143,6 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 			found_dynamic = true;
 			ctx->new_segment.dyn_size = elf_dtag_count(&ctx->bin.elfobj) * sizeof(ElfW(Dyn));
 			ctx->new_segment.dyn_size += (sizeof(ElfW(Dyn)) * 2);
-			//ctx->new_segment.dyn_size = segment.filesz + sizeof(ElfW(Dyn)) * 2;
 			ctx->new_segment.dyn_offset = 0;
 
 			old_dynamic_size = elf_dtag_count(&ctx->bin.elfobj) * sizeof(ElfW(Dyn));
@@ -167,6 +166,10 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 			ctx->new_segment.filesz += sizeof(ElfW(Dyn)) * 2;
 			ctx->new_segment.filesz += strlen(ctx->input_patch) + 1;
 			ctx->new_segment.filesz += strlen(ctx->search_path) + 1;
+			/*
+			 * Mark the index of this segment so that we can modify it
+			 * to match the new dynamic segment location once we know it.
+			 */
 			dynamic_index = phdr_iter.index - 1;
 		} else if (segment.type == PT_NOTE) {
 			if (found_dynamic == false) {
@@ -196,7 +199,6 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 			 */
 			struct elf_segment dyn_segment;
 
-			printf("s.offset: %#lx\n", n_segment.offset);
 			ctx->new_segment.vaddr = n_segment.vaddr;
 			ctx->new_segment.offset = n_segment.offset;
 			ctx->new_segment.filesz = n_segment.filesz;
@@ -253,7 +255,7 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 			break;
 		}
 	}
-			/*
+	/*
 	 * Write out
 	 * 1. New dynamic segment (With additional SHIVA_DT_ entries)
 	 * 2. Strings for search path and module.
@@ -305,13 +307,11 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 	 */
 	dyn[0].d_tag = SHIVA_DT_SEARCH;
 	dyn[0].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size;
-
 	dyn[1].d_tag = SHIVA_DT_NEEDED;
 	dyn[1].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + strlen(ctx->search_path) + 1;
-
 	dyn[2].d_tag = DT_NULL;
+	dyn[2].d_un.d_ptr = 0x0;
 
-	printf("Writing custom DT_ entries, three of them totally %d bytes\n", sizeof(dyn));
 	if (write(fd, &dyn[0], sizeof(dyn)) < 0) {
 		perror("write 4.");
 		return false;
@@ -446,7 +446,7 @@ usage:
 	 */
 	printf("Opening: %s\n", ctx.input_exec);
 	if (elf_open_object(ctx.input_exec, &ctx.bin.elfobj,
-		ELF_LOAD_F_STRICT|ELF_LOAD_F_MODIFY, &error) == false) {
+		ELF_LOAD_F_STRICT|ELF_LOAD_F_MODIFY|ELF_LOAD_F_PRIV_MAP, &error) == false) {
 		fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n",
 		    ctx.input_exec, elf_error_msg(&error));
 		exit(EXIT_FAILURE);
