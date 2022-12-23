@@ -138,6 +138,7 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 			found_dynamic = true;
 			ctx->new_segment.dyn_size = segment.filesz + sizeof(ElfW(Dyn)) * 2;
 			ctx->new_segment.dyn_offset = 0;
+
 			old_dynamic_size = segment.filesz;
 			old_dynamic_segment = calloc(1, segment.filesz + sizeof(ElfW(Dyn)) * 2);
 			if (old_dynamic_segment == NULL) {
