@@ -99,10 +99,6 @@ elf_segment_copy(elfobj_t *elfobj, uint8_t *dst, struct elf_segment segment)
 	return true;
 }
 
-void test_mark(void)
-{
-	int i = &test_mark;
-}
 bool
 create_load_segment(struct shiva_prelink_ctx *ctx)
 {
@@ -351,6 +347,16 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 	}
 	free(target_path);
 	*(uint32_t *)&ctx->bin.elfobj.mem[EI_PAD] = SHIVA_SIGNATURE;
+
+	/*
+	 * XXX This is incorrect and lazy use of libelfmaster. We should be
+	 * using elf_write_address.
+	 */
+	char *path = elf_interpreter_path(&ctx->bin.elfobj);
+	/*
+	 * XXX fix buffer overflow
+	 */
+	strcpy(path, ctx->interp_path);
 	return true;
 }
 
@@ -444,7 +450,6 @@ usage:
 	/*
 	 * Open the target executable, with modification privileges.
 	 */
-	printf("Opening: %s\n", ctx.input_exec);
 	if (elf_open_object(ctx.input_exec, &ctx.bin.elfobj,
 		ELF_LOAD_F_STRICT|ELF_LOAD_F_MODIFY|ELF_LOAD_F_PRIV_MAP, &error) == false) {
 		fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n",
