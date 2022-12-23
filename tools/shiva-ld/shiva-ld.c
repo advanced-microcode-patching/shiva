@@ -98,11 +98,16 @@ elf_segment_copy(elfobj_t *elfobj, uint8_t *dst, struct elf_segment segment)
 	}
 	return true;
 }
+
+void test_mark(void)
+{
+	int i = &test_mark;
+}
 bool
 create_load_segment(struct shiva_prelink_ctx *ctx)
 {
 	int fd;
-	struct elf_segment segment, s;
+	struct elf_segment segment, n_segment;
 	elf_segment_iterator_t phdr_iter;
 	elf_error_t error;
 	uint64_t last_load_vaddr, last_load_offset, last_load_size;
@@ -133,14 +138,16 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 			last_load_vaddr = segment.vaddr;
 			last_load_offset = segment.offset;
 			last_load_size = segment.memsz;
-			last_load_align = segment.align;
+			last_load_align = 4096; //segment.align;
 		} else if (segment.type == PT_DYNAMIC) {
 			found_dynamic = true;
-			ctx->new_segment.dyn_size = segment.filesz + sizeof(ElfW(Dyn)) * 2;
+			ctx->new_segment.dyn_size = elf_dtag_count(&ctx->bin.elfobj) * sizeof(ElfW(Dyn));
+			ctx->new_segment.dyn_size += (sizeof(ElfW(Dyn)) * 2);
+			//ctx->new_segment.dyn_size = segment.filesz + sizeof(ElfW(Dyn)) * 2;
 			ctx->new_segment.dyn_offset = 0;
 
-			old_dynamic_size = segment.filesz;
-			old_dynamic_segment = calloc(1, segment.filesz + sizeof(ElfW(Dyn)) * 2);
+			old_dynamic_size = elf_dtag_count(&ctx->bin.elfobj) * sizeof(ElfW(Dyn));
+			old_dynamic_segment = calloc(1, segment.filesz);
 			if (old_dynamic_segment == NULL) {
 				perror("calloc");
 				return false;
@@ -158,28 +165,26 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 			 * Make room for the two new additional dynamic entries
 			 */
 			ctx->new_segment.filesz += sizeof(ElfW(Dyn)) * 2;
-			ctx->new_segment.filesz += strlen(ctx->input_patch);
-			ctx->new_segment.filesz += strlen(ctx->search_path);
+			ctx->new_segment.filesz += strlen(ctx->input_patch) + 1;
+			ctx->new_segment.filesz += strlen(ctx->search_path) + 1;
 			dynamic_index = phdr_iter.index - 1;
 		} else if (segment.type == PT_NOTE) {
-			struct elf_segment s;
-
 			if (found_dynamic == false) {
 				fprintf(stderr, "Failed to find PT_DYNAMIC before PT_NOTE\n");
 				return false;
 			}
-			s.type = PT_LOAD;
-			s.offset =
+			n_segment.type = PT_LOAD;
+			n_segment.offset =
 			    ELF_PAGEALIGN(ctx->bin.elfobj.size, last_load_align);
-			s.filesz = ctx->new_segment.filesz;
-			s.memsz = ctx->new_segment.filesz;
-			s.vaddr = ELF_PAGEALIGN(last_load_vaddr +
+			n_segment.filesz = ctx->new_segment.filesz;
+			n_segment.memsz = ctx->new_segment.filesz;
+			n_segment.vaddr = ELF_PAGEALIGN(last_load_vaddr +
 			    last_load_size, last_load_align);
-			s.paddr = s.vaddr;
-			s.align = last_load_align;
-			s.flags = (PF_R|PF_X|PF_W);
+			n_segment.paddr = n_segment.vaddr;
+			n_segment.align = last_load_align;
+			n_segment.flags = (PF_R|PF_X|PF_W);
 			res = elf_segment_modify(&ctx->bin.elfobj,
-			    phdr_iter.index - 1, &s, &error);
+			    phdr_iter.index - 1, &n_segment, &error);
 			if (res == false) {
 				fprintf(stderr, "[!] elf_segment_modify "
 				    "failed: %s\n", elf_error_msg(&error));
@@ -191,11 +196,11 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 			 */
 			struct elf_segment dyn_segment;
 
-			printf("s.offset: %#lx\n", s.offset);
-			ctx->new_segment.vaddr = s.vaddr;
-			ctx->new_segment.offset = s.offset;
-			ctx->new_segment.filesz = s.filesz;
-			ctx->new_segment.memsz = s.memsz;
+			printf("s.offset: %#lx\n", n_segment.offset);
+			ctx->new_segment.vaddr = n_segment.vaddr;
+			ctx->new_segment.offset = n_segment.offset;
+			ctx->new_segment.filesz = n_segment.filesz;
+			ctx->new_segment.memsz = n_segment.memsz;
 
 			dyn_segment.type = PT_DYNAMIC;
 			dyn_segment.flags = PF_R|PF_W;
@@ -238,7 +243,6 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 			tmp.address = ctx->new_segment.vaddr;
 			tmp.size = ctx->new_segment.dyn_size;
 
-			printf("MODIFYING DYNAMIC SECTION! index: %d\n", shdr_iter.index - 1);
 			res = elf_section_modify(&ctx->bin.elfobj, shdr_iter.index - 1,
 			    &tmp, &error);
 			if (res == false) {
@@ -273,11 +277,11 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 		return false;
 	}
 
-	shiva_pl_debug("s.offset: %#lx ctx->bin.elfobj.size: %#lx\n", s.offset, ctx->bin.elfobj.size);
+	shiva_pl_debug("s.offset: %#lx ctx->bin.elfobj.size: %#lx\n", n_segment.offset, ctx->bin.elfobj.size);
 	shiva_pl_debug("Writing extended sement of %zu bytes\n",
-	    s.offset - ctx->bin.elfobj.size);
+	    n_segment.offset - ctx->bin.elfobj.size);
 
-	if (write(fd, &null, s.offset - ctx->bin.elfobj.size) < 0) {
+	if (write(fd, &null, n_segment.offset - ctx->bin.elfobj.size) < 0) {
 		perror("write 2.");
 		return false;
 	}
@@ -286,6 +290,7 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 	 * Write out entire old dynamic segment, except for the last entry
 	 * which will be DT_NULL
 	 */
+	printf("Writing %d bytes of old dynamic segment into place\n", old_dynamic_size - sizeof(ElfW(Dyn)));
 	if (write(fd, old_dynamic_segment,
 	    old_dynamic_size - sizeof(ElfW(Dyn))) < 0) {
 		perror("write 3.");
@@ -302,15 +307,15 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 	dyn[0].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size;
 
 	dyn[1].d_tag = SHIVA_DT_NEEDED;
-	dyn[1].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + strlen(ctx->search_path);
+	dyn[1].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + strlen(ctx->search_path) + 1;
 
 	dyn[2].d_tag = DT_NULL;
 
+	printf("Writing custom DT_ entries, three of them totally %d bytes\n", sizeof(dyn));
 	if (write(fd, &dyn[0], sizeof(dyn)) < 0) {
 		perror("write 4.");
 		return false;
 	}
-
 	if (write(fd, ctx->search_path, strlen(ctx->search_path) + 1) < 0) {
 		perror("write 5.");
 		return false;
