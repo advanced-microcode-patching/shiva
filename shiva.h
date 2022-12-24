@@ -27,6 +27,8 @@
 #include "/opt/elfmaster/include/libelfmaster.h"
 #include "shiva_debug.h"
 
+#define SHIVA_SIGNATURE 0x31f64
+
 #ifndef PAGE_SIZE
 #define PAGE_SIZE 4096
 #endif
@@ -57,6 +59,11 @@
 #define SHIVA_MODULE_F_RUNTIME	(1UL << 0)
 #define SHIVA_MODULE_F_INIT	(1UL << 1)
 #define SHIVA_MODULE_F_DUMMY_TEXT	(1UL << 2)
+
+#define SHIVA_DT_NEEDED	(DT_LOOS + 10)
+#define SHIVA_DT_SEARCH (DT_LOOS + 11)
+
+#define SHIVA_DEFAULT_MODULE_PATH "/opt/shiva/modules/shakti.o"
 
 /*
  * Path to real dynamic linker.
@@ -346,6 +353,7 @@ typedef struct shiva_trace_regset_x86_64 shiva_trace_jumpbuf_t;
 
 typedef struct shiva_ctx {
 	char *path; // path to target executable
+	char module_path[PATH_MAX]; // TODO in the future add linked list of modules.
 	int argc;
 	char **args;
 	char **argv;
@@ -490,6 +498,10 @@ bool shiva_analyze_run(shiva_ctx_t *);
  */
 bool shiva_target_dynamic_set(struct shiva_ctx *, uint64_t, uint64_t);
 bool shiva_target_dynamic_get(struct shiva_ctx *, uint64_t, uint64_t *);
+bool shiva_target_copy_string(struct shiva_ctx *, char *, const char *, size_t *);
+bool shiva_target_get_module_path(struct shiva_ctx *, char *);
+bool shiva_target_has_prelinking(struct shiva_ctx *);
+
 /*
  * shiva_proc.c
  */

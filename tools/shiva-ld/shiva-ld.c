@@ -312,11 +312,14 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 		perror("write 4.");
 		return false;
 	}
+	printf("Writing %d len bytes of search_path\n", strlen(ctx->search_path));
+	printf("%s\n", ctx->search_path);
 	if (write(fd, ctx->search_path, strlen(ctx->search_path) + 1) < 0) {
 		perror("write 5.");
 		return false;
 	}
-
+	printf("Writing %d len bytes of input patch\n", strlen(ctx->input_patch));
+	printf("%s\n", ctx->input_patch);
 	if (write(fd, ctx->input_patch, strlen(ctx->input_patch) + 1) < 0) {
 		perror("write 6.");
 		return false;
@@ -337,7 +340,6 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 	elf_close_object(&ctx->bin.elfobj);
 	rename(tmpfile, ctx->output_exec);
 
-	printf("Opening: %s\n", ctx->output_exec);
 	if (elf_open_object(ctx->output_exec, &ctx->bin.elfobj,
 	    ELF_LOAD_F_MODIFY|ELF_LOAD_F_STRICT, &error) == false) {
 		fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n",
@@ -409,19 +411,11 @@ usage:
 				perror("strdup");
 				exit(EXIT_FAILURE);
 			}
-			if (access(ctx.input_exec, F_OK) != 0) {
-				perror("access");
-				exit(EXIT_FAILURE);
-			}
 			break;
 		case 'i':
 			ctx.interp_path = strdup(optarg);
 			if (ctx.interp_path == NULL) {
 				perror("strdup");
-				exit(EXIT_FAILURE);
-			}
-			if (access(ctx.interp_path, F_OK) != 0) {
-				perror("access");
 				exit(EXIT_FAILURE);
 			}
 			break;
@@ -460,12 +454,18 @@ usage:
 	/*
 	 * Open the patch object
 	 */
+#if 0
 	if (elf_open_object(ctx.input_patch, &ctx.patch.elfobj,
 		ELF_LOAD_F_STRICT, &error) == false) {
 		fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n",
 		    ctx.input_patch, elf_error_msg(&error));
 		exit(EXIT_FAILURE);
 	}
+#endif
+	printf("[+] Input executable: %s\n", ctx.input_exec);
+	printf("[+] Input search path for patch: %s\n", ctx.search_path);
+	printf("[+] Basename of patch: %s\n", ctx.input_patch);
+	printf("[+] Output executable: %s\n", ctx.output_exec);
 
 	if (create_load_segment(&ctx) == false) {
 		fprintf(stderr, "Failed to setup new LOAD segment with new DYNAMIC\n");
