@@ -44,15 +44,14 @@ shiva_target_copy_string(struct shiva_ctx *ctx, char *dst, const char *src, size
 }
 
 /*
- * TODO: This function can cause an overflow on the second
- * shiva_target_copy_string() call. 
+ * Copies no more than PATH_MAX bytes into buf.
  */
 bool
 shiva_target_get_module_path(struct shiva_ctx *ctx, char *buf)
 {
 	uint64_t search_addr, basename_addr;
 	char tmp[PATH_MAX];
-	size_t len;
+	size_t len, o_len;
 	bool res;
 
 	if (shiva_target_dynamic_get(ctx, SHIVA_DT_SEARCH, &search_addr) == false) {
@@ -70,6 +69,7 @@ shiva_target_get_module_path(struct shiva_ctx *ctx, char *buf)
                 fprintf(stderr, "shiva_target_copy_string() failed at %#lx\n", (uint64_t)search_addr);
                 return false;
         }
+	o_len = len;
 	if (tmp[len] != '/' && len < 4095) {
 		tmp[len + 1] = '/';
 		len += 1;
@@ -79,6 +79,10 @@ shiva_target_get_module_path(struct shiva_ctx *ctx, char *buf)
                 fprintf(stderr, "shiva_target_copy_string() failed at %#lx\n", (uint64_t)basename_addr);
                 return false;
         }
+	if (len + o_len >= PATH_MAX - 1) {
+		fprintf(stderr, "path len (%zu) exceeds PATH_MAX - 1\n", len + o_len);
+		return false;
+	}
 	strcpy(buf, tmp);
 	return true;
 }

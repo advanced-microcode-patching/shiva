@@ -39,9 +39,9 @@ install:
 	ln -s build/shiva shiva
 	rm shiva-ld
 	ln -s tools/shiva-ld/shiva-ld shiva-ld
-	sudo cp build/shiva /usr/bin
-	sudo cp tools/shiva-ld/shiva-ld /usr/bin
-	sudo mkdir -p /opt/shiva/modules
-	sudo cp modules/patches/*interposing*/*.o /opt/shiva/modules
+	cp build/shiva /usr/bin
+	cp tools/shiva-ld/shiva-ld /usr/bin
+	mkdir -p /opt/shiva/modules
+	cp modules/aarch64_patches/*interposing*/*.o /opt/shiva/modules
 clean:
 	rm -f *.o shiva
