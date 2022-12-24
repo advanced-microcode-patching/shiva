@@ -1,3 +1,8 @@
+/*
+ * Ryan O'Neill 2022
+ * ryan@bitlackeys.org
+ */
+
 #define _GNU_SOURCE
 
 #include <stdarg.h>
@@ -288,7 +293,7 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 	 * Write out entire old dynamic segment, except for the last entry
 	 * which will be DT_NULL
 	 */
-	printf("Writing %d bytes of old dynamic segment into place\n", old_dynamic_size - sizeof(ElfW(Dyn)));
+	printf("Writing %lu bytes of old dynamic segment into place\n", old_dynamic_size - sizeof(ElfW(Dyn)));
 	if (write(fd, old_dynamic_segment,
 	    old_dynamic_size - sizeof(ElfW(Dyn))) < 0) {
 		perror("write 3.");
@@ -312,13 +317,13 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 		perror("write 4.");
 		return false;
 	}
-	printf("Writing %d len bytes of search_path\n", strlen(ctx->search_path));
+	printf("Writing %lu len bytes of search_path\n", strlen(ctx->search_path));
 	printf("%s\n", ctx->search_path);
 	if (write(fd, ctx->search_path, strlen(ctx->search_path) + 1) < 0) {
 		perror("write 5.");
 		return false;
 	}
-	printf("Writing %d len bytes of input patch\n", strlen(ctx->input_patch));
+	printf("Writing %lu len bytes of input patch\n", strlen(ctx->input_patch));
 	printf("%s\n", ctx->input_patch);
 	if (write(fd, ctx->input_patch, strlen(ctx->input_patch) + 1) < 0) {
 		perror("write 6.");
@@ -471,4 +476,6 @@ usage:
 		fprintf(stderr, "Failed to setup new LOAD segment with new DYNAMIC\n");
 		exit(EXIT_FAILURE);
 	}
+	printf("Finished.\n");
+	exit(EXIT_SUCCESS);
 }
