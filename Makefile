@@ -29,10 +29,19 @@ interp:
 test_aarch64:
 	gcc -g test.c -o test
 	gcc -g -Wl,--dynamic-linker=$(INTERP_PATH) test.c -o test2
+shiva-ld:
+	make -C tools/shiva-ld
+
 .PHONY: install
 install:
 	cp build/shiva /lib/shiva
+	rm shiva
 	ln -s build/shiva shiva
-
+	rm shiva-ld
+	ln -s tools/shiva-ld/shiva-ld shiva-ld
+	sudo cp build/shiva /usr/bin
+	sudo cp tools/shiva-ld/shiva-ld /usr/bin
+	sudo mkdir -p /opt/shiva/modules
+	sudo cp modules/patches/*interposing*/*.o /opt/shiva/modules
 clean:
 	rm -f *.o shiva
