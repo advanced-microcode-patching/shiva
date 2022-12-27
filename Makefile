@@ -8,7 +8,7 @@ STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a libcapstone.a
 CC=gcc
 MUSL=musl-gcc
 
-all: interp test_aarch64
+all: interp
 interp:
 	[ -d $(BUILD_DIR) ] || mkdir -p $(BUILD_DIR)
 	$(CC) $(GCC_OPTS) shiva.c -o		shiva.o
@@ -35,8 +35,7 @@ patches:
 .PHONY: install
 install:
 	cp build/shiva /lib/shiva
-	rm shiva
-	ln -s build/shiva shiva
+	ln -sf build/shiva shiva
 	rm shiva-ld
 	ln -s tools/shiva-ld/shiva-ld shiva-ld
 	cp build/shiva /usr/bin

@@ -5,4 +5,5 @@ subdirs:
 		done
 clean:
 	for dir in $(SUBDIRS); do \
-		$(MAKE) -C $$dir clean
+		$(MAKE) -C $$dir clean;
+
