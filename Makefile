@@ -1,6 +1,6 @@
 BUILD_DIR = './build'
 INTERP_PATH = $(PWD)/build/shiva
-GCC_OPTS= -fPIC -DDEBUG -ggdb -c
+GCC_OPTS= -fPIC -ggdb -c
 OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \
     shiva_callsite.o shiva_target.o shiva_xref.o
@@ -26,13 +26,23 @@ interp:
 	$(CC) $(GCC_OPTS) shiva_target.c -o	shiva_target.o
 	$(CC) $(GCC_OPTS) shiva_xref.c -o		shiva_xref.o
 	$(MUSL) -static -Wl,-undefined=system -Wl,-undefined=prctl -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o $(BUILD_DIR)/shiva
-test_aarch64:
-	gcc -g test.c -o test
-	gcc -g -Wl,--dynamic-linker=$(INTERP_PATH) test.c -o test2
+
+shiva-ld:
+	make -C tools/shiva-ld
+patches:
+	make -C modules/aarch64_patches
+
 .PHONY: install
 install:
 	cp build/shiva /lib/shiva
+	rm shiva
 	ln -s build/shiva shiva
-
+	rm shiva-ld
+	ln -s tools/shiva-ld/shiva-ld shiva-ld
+	cp build/shiva /usr/bin
+	cp tools/shiva-ld/shiva-ld /usr/bin
+	mkdir -p /opt/shiva/modules
+	cp modules/aarch64_patches/*interposing*/*.o /opt/shiva/modules
+	cat shiva.ansi
 clean:
 	rm -f *.o shiva

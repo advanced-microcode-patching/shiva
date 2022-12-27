@@ -4,6 +4,90 @@
  */
 #include "shiva.h"
 
+bool
+shiva_target_has_prelinking(struct shiva_ctx *ctx)
+{
+	uint32_t magic = *(uint32_t *)&ctx->elfobj.mem[EI_PAD];
+
+	if (magic == (uint32_t)SHIVA_SIGNATURE)
+		return true;
+	return false;
+}
+
+/*
+ * Will copy a string from src address of binary.
+ * Copies up to 4095 bytes of a string, leaving 1 byte for NULL terminator.
+ */
+bool
+shiva_target_copy_string(struct shiva_ctx *ctx, char *dst, const char *src, size_t *len_out)
+{
+	elfobj_t *elfobj = &ctx->elfobj;
+	int i;
+	uint64_t byte;
+	bool res;
+	char *d = dst;
+
+	for (i = 0 ;; i++) {
+		res = elf_read_address(elfobj, (uint64_t)src + i, &byte, ELF_BYTE);
+		if (res == false) {
+			fprintf(stderr, "elf_read_address() failed at %lx\n", (uint64_t)src + i);
+			return false;
+		}
+		*(d++) = byte;
+		if (i >= PATH_MAX - 1)
+			break;
+		if (byte == 0)
+			break;
+	}
+	*len_out = i - 1;
+	return true;
+}
+
+/*
+ * Copies no more than PATH_MAX bytes into buf.
+ */
+bool
+shiva_target_get_module_path(struct shiva_ctx *ctx, char *buf)
+{
+	uint64_t search_addr, basename_addr;
+	char tmp[PATH_MAX];
+	size_t len, o_len;
+	bool res;
+
+	if (shiva_target_dynamic_get(ctx, SHIVA_DT_SEARCH, &search_addr) == false) {
+                fprintf(stderr, "shiva_target_dynamic_get(%p, SHIVA_DT_SEARCH, ...) failed\n",
+                    ctx);
+                return false;
+        }
+        if (shiva_target_dynamic_get(ctx, SHIVA_DT_NEEDED, &basename_addr) == false) {
+                fprintf(stderr, "shiva_target_dynamic_get(%p, SHIVA_DT_NEEDED, ...) failed\n",
+                    ctx);
+                return false;
+        }
+	res = shiva_target_copy_string(ctx, tmp, (const char *)search_addr, &len);
+        if (res == false) {
+                fprintf(stderr, "shiva_target_copy_string() failed at %#lx\n", (uint64_t)search_addr);
+                return false;
+        }
+	o_len = len;
+	if (tmp[len] != '/' && len < 4095) {
+		tmp[len + 1] = '/';
+		len += 1;
+	}
+        res = shiva_target_copy_string(ctx, &tmp[len + 1], (const char *)basename_addr, &len);
+        if (res == false) {
+                fprintf(stderr, "shiva_target_copy_string() failed at %#lx\n", (uint64_t)basename_addr);
+                return false;
+        }
+	if (len + o_len >= PATH_MAX - 1) {
+		fprintf(stderr, "path len (%zu) exceeds PATH_MAX - 1\n", len + o_len);
+		return false;
+	}
+	strcpy(buf, tmp);
+	return true;
+}
+
+
 /*
  * This function modifies the "live" dynamic segment in memory. It will modify
  * the first dynamic tag found of type 'tag' and change it to 'value'.

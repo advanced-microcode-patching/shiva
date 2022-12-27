@@ -98,6 +98,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	uint8_t *o_stack, *n_stack;
 	uint64_t o_stack_addr, o_stack_end;
 	size_t copy_len;
+
 	ctx_global = ctx;
 	shiva_init_lists(ctx);
 
@@ -141,12 +142,17 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		return false;
 	}
 	shiva_debug("Setting target base: %#lx\n", ctx->ulexec.base_vaddr);
-	/*
-	 * Loads the runtime module, and then passes control to
-	 * shakti_main() (Within the module) before passing control
-	 * to LDSO.
-	 */
-	if (shiva_module_loader(ctx, "./modules/shakti_runtime.o",
+
+	if (shiva_target_has_prelinking(ctx) == true) {
+		if (shiva_target_get_module_path(ctx, ctx->module_path) == false) {
+			fprintf(stderr, "shiva_target_get_module_path() failed\n");
+			return false;
+		}
+	} else {
+		strcpy(ctx->module_path, SHIVA_DEFAULT_MODULE_PATH);
+	}
+
+	if (shiva_module_loader(ctx, ctx->module_path,
 	    &ctx->module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");
 		return false;
@@ -419,7 +425,16 @@ int main(int argc, char **argv, char **envp)
 	if (ctx.flags & SHIVA_OPTS_F_ULEXEC_ONLY)
 		goto transfer_control;
 
-	if (shiva_module_loader(&ctx, "./modules/shakti_runtime.o",
+	if (shiva_target_has_prelinking(&ctx) == true) {
+                if (shiva_target_get_module_path(&ctx, ctx.module_path) == false) {
+                        fprintf(stderr, "shiva_target_get_module_path() failed\n");
+                        return false;
+                }
+        } else {
+                strcpy(ctx.module_path, SHIVA_DEFAULT_MODULE_PATH);
+        }
+
+	if (shiva_module_loader(&ctx, ctx.module_path,
 	    &ctx.module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");
 		exit(EXIT_FAILURE);
