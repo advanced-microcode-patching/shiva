@@ -1,6 +1,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
 
 void OS_printf(const char *string, ...)
 {
