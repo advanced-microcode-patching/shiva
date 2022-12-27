@@ -1,5 +1,24 @@
 /*
- * Ryan O'Neill 2022
+ * Shiva Prelinker v1. AMP (Advanced microcode patching)
+ *
+ * The Shiva Prelinker "/bin/shiva-ld" applies patch meta-data to the executable that
+ * is being patched. The actual microcode patching doesn't take place until runtime.
+ * Features:
+ * 1. Modifies PT_INTERP on ELF executable and replaces the path to Shiva interpreter "/lib/shiva" (Or other specified path).
+ * 2. Creates a new PT_LOAD segment by overwriting PT_NOTE.
+ * 3. Creates a new PT_DYNAMIC segment within the new PT_LOAD segment. It has two additional entries:
+ *	3.1. SHIVA_DT_NEEDED holds the address of the string to the patch basename, i.e. "amp_patch1.o"
+ *	3.2. SHIVA_DT_SEARCH holds the address of the string to the patch search path, i.e. "/opt/shiva/modules"
+ *
+ * The Shiva linker parses these custom dynamic segment values to locate the patch object at runtime.
+ * In the future shiva-ld will be able to generate ELF relocation data for the external linking process
+ * at runtime. This meta-data will be stored in the executable and parsed at runtime, giving Shiva
+ * a rich source of patching information. Currently Shiva has to perform runtime analysis to determine
+ * where external linking patches go, and this can be slow for some programs.
+ *
+ * See https://github.com/advanced-microcode-patching/shiva/issues/4
+ *
+ * Author: ElfMaster
  * ryan@bitlackeys.org
  */
 
@@ -105,9 +124,9 @@ elf_segment_copy(elfobj_t *elfobj, uint8_t *dst, struct elf_segment segment)
 }
 
 bool
-create_load_segment(struct shiva_prelink_ctx *ctx)
+shiva_prelink(struct shiva_prelink_ctx *ctx)
 {
-	int fd;
+	int fd, tmp_fd;
 	struct elf_segment segment, n_segment;
 	elf_segment_iterator_t phdr_iter;
 	elf_error_t error;
@@ -117,7 +136,7 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 	bool found_note = false, found_dynamic = false;
 	uint8_t *mem;
 	char *target_path;
-	const char *tmpfile = "/tmp/elf.tmp"; // XXX use mkstemp
+	char template[] = "/tmp/elf.XXXXXX";
 	char null = 0;
 	struct stat st;
 	uint8_t *old_dynamic_segment;
@@ -266,9 +285,10 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 		perror("stat");
 		return false;
 	}
-	fd = open(tmpfile, O_RDWR|O_TRUNC|O_CREAT, st.st_mode);
+
+	fd = mkstemp(template);
 	if (fd < 0) {
-		perror("open");
+		perror("mkstemp");
 		return false;
 	}
 
@@ -293,7 +313,6 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 	 * Write out entire old dynamic segment, except for the last entry
 	 * which will be DT_NULL
 	 */
-	printf("Writing %lu bytes of old dynamic segment into place\n", old_dynamic_size - sizeof(ElfW(Dyn)));
 	if (write(fd, old_dynamic_segment,
 	    old_dynamic_size - sizeof(ElfW(Dyn))) < 0) {
 		perror("write 3.");
@@ -317,14 +336,10 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 		perror("write 4.");
 		return false;
 	}
-	printf("Writing %lu len bytes of search_path\n", strlen(ctx->search_path));
-	printf("%s\n", ctx->search_path);
 	if (write(fd, ctx->search_path, strlen(ctx->search_path) + 1) < 0) {
 		perror("write 5.");
 		return false;
 	}
-	printf("Writing %lu len bytes of input patch\n", strlen(ctx->input_patch));
-	printf("%s\n", ctx->input_patch);
 	if (write(fd, ctx->input_patch, strlen(ctx->input_patch) + 1) < 0) {
 		perror("write 6.");
 		return false;
@@ -332,6 +347,10 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 
 	if (fchown(fd, st.st_uid, st.st_gid) < 0) {
 		perror("fchown");
+		return false;
+	}
+	if (fchmod(fd, st.st_mode) < 0) {
+		perror("fchmod");
 		return false;
 	}
 	close(fd);
@@ -343,7 +362,7 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 	}
 
 	elf_close_object(&ctx->bin.elfobj);
-	rename(tmpfile, ctx->output_exec);
+	rename(template, ctx->output_exec);
 
 	if (elf_open_object(ctx->output_exec, &ctx->bin.elfobj,
 	    ELF_LOAD_F_MODIFY|ELF_LOAD_F_STRICT, &error) == false) {
@@ -360,9 +379,11 @@ create_load_segment(struct shiva_prelink_ctx *ctx)
 	 * using elf_write_address.
 	 */
 	char *path = elf_interpreter_path(&ctx->bin.elfobj);
-	/*
-	 * XXX fix buffer overflow
-	 */
+	if (strlen(ctx->interp_path) > strlen(path)) {
+		fprintf(stderr, "PT_INTERP is only %zu bytes and cannot house the string %s\n",
+		    (size_t)strlen(path), ctx->interp_path);
+		return false;
+	}
 	strcpy(path, ctx->interp_path);
 	return true;
 }
@@ -472,7 +493,7 @@ usage:
 	printf("[+] Basename of patch: %s\n", ctx.input_patch);
 	printf("[+] Output executable: %s\n", ctx.output_exec);
 
-	if (create_load_segment(&ctx) == false) {
+	if (shiva_prelink(&ctx) == false) {
 		fprintf(stderr, "Failed to setup new LOAD segment with new DYNAMIC\n");
 		exit(EXIT_FAILURE);
 	}

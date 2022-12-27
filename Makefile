@@ -26,11 +26,11 @@ interp:
 	$(CC) $(GCC_OPTS) shiva_target.c -o	shiva_target.o
 	$(CC) $(GCC_OPTS) shiva_xref.c -o		shiva_xref.o
 	$(MUSL) -static -Wl,-undefined=system -Wl,-undefined=prctl -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o $(BUILD_DIR)/shiva
-test_aarch64:
-	gcc -g test.c -o test
-	gcc -g -Wl,--dynamic-linker=$(INTERP_PATH) test.c -o test2
+
 shiva-ld:
 	make -C tools/shiva-ld
+patches:
+	make -C modules/aarch64_patches
 
 .PHONY: install
 install:
