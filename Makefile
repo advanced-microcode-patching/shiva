@@ -43,5 +43,6 @@ install:
 	cp tools/shiva-ld/shiva-ld /usr/bin
 	mkdir -p /opt/shiva/modules
 	cp modules/aarch64_patches/*interposing*/*.o /opt/shiva/modules
+	cat shiva.ansi
 clean:
 	rm -f *.o shiva
