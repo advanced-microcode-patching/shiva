@@ -36,8 +36,6 @@ patches:
 install:
 	cp build/shiva /lib/shiva
 	ln -sf build/shiva shiva
-	rm shiva-ld
-	ln -s tools/shiva-ld/shiva-ld shiva-ld
 	cp build/shiva /usr/bin
 	cp tools/shiva-ld/shiva-ld /usr/bin
 	mkdir -p /opt/shiva/modules
