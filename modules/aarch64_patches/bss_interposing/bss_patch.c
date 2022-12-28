@@ -9,10 +9,3 @@ int foo(void)
 	printf("The new value of bss_var is %x\n", bss_var);
 	return 0;
 }
-
-/*
-int __empty(void)
-{
-	return;
-}
-*/
