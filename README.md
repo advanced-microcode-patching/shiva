@@ -85,7 +85,19 @@ program interpreter `"/lib/shiva"`, and the path to the patch module (i.e.
 
 ## Patch testing
 
-The patches are stored in `"modules/aarch64_patches/` and are as follows:
+We have already compiled and prelinked the patches. Shiva prelinking
+refers specifically to the Shiva prelinking applied by the shiva-ld tool.
+
+Take a look at the Makefile for each patch, and you will see how shiva-ld is
+used to apply the pre-patch meta-data.
+
+```
+shiva-ld -e core-cpu1 -p cfs_patch1.o -i /lib/shiva -s /opt/shiva/modules -o core-cpu1.patched
+```
+
+The Shiva make install script installs all of the patch modules into `/opt/shiva/modules`
+
+The patch build environments are stored in `modules/aarch64_patches/` and are as follows:
 
 #### cfs_patch1
 
@@ -146,10 +158,21 @@ elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/cfs_patch1$ reade
 Two custom dynamic segment entries were also added to the binary:
 
 `SHIVA_DT_SEARCH` denotes a dynamic entry containing the address of the module search path,
-usually set to `"/opt/shiva/modules/".
+usually set to `"/opt/shiva/modules/"`.
 
 `SHIVA_DT_NEEDED` denotes a dynamic entry containing the address of the module basename,
 i.e. `"cfs_patch1.o"`.
+
+```
+elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/cfs_patch1$ readelf -d core-cpu1.patched  | tail -n 3
+ 0x0000000060000018 (Operating System specific: 60000018)                0x1ab200
+ 0x0000000060000017 (Operating System specific: 60000017)                0x1ab213
+ 0x0000000000000000 (NULL)               0x0
+```
+
+#### Running core-cpu1.patched
+
+
 
 
 
