@@ -199,12 +199,67 @@ CFE_PSP: Using MMAP simulated EEPROM implementation
 [PATCHED :)]: CFE_PSP: EEPROM Range (2) created: Start Address = FFFF84032000, Size = 00080000 Status = 0
 ```
 
+#### ro_data_interposing patch
+
+This patch demonstrates how Shiva is able to link new read-only data into place over
+existing read-only data symbols. For example
 
 
+The contents of the `rodata_interposing` directory
 
+```
+elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/rodata_interposing$ ls
+Makefile  ro_patch.c  ro_patch.o  test_rodata  test_rodata.c  test_rodata.patched
+```
 
+The original program has a read-only string `const char rodata_string[] = "Arcana Technologies"`
 
+```
+elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/rodata_interposing$ readelf -s test_rodata | grep rodata_string
+    73: 0000000000000800    20 OBJECT  GLOBAL DEFAULT   15 rodata_string
+```
 
+This constant string data is stored within the `.rodata section`.
 
+```
+objdump -D test_rodata | less
+
+...
+
+0000000000000800 <rodata_string>:
+ 800:   61637241        .word   0x61637241
+ 804:   5420616e        .word   0x5420616e
+ 808:   6e686365        .word   0x6e686365
+ 80c:   676f6c6f        .word   0x676f6c6f
+ 810:   00736569        .word   0x00736569
+```
+
+Our patch aims to change the string from `"Arcana Technologies"` to `"The Great Arcanum"`.
+
+```
+elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/rodata_interposing$ cat ro_patch.c
+
+const char rodata_string[] = "The Great Arcanum";
+
+```
+
+The compiled patch is `ro_patch.o`
+
+And we can see that the Makefile uses shiva-ld to apply this information to the output binary
+test_rodata.patched
+
+#### Running the unpatched and patched test_rodata binary
+
+```
+elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/rodata_interposing$ ./test_rodata
+rodata_string: Arcana Technologies
+val: 5
+elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/rodata_interposing$ ./test_rodata.patched
+rodata_string: The Great Arcanum
+val: 5
+elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/rodata_interposing$ 
+```
+
+### A work in progress...
 
 
