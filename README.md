@@ -18,6 +18,8 @@ The original Shiva project can be found at https://github.com/elfmaster/shiva
 
 This README will only cover Shiva as it relates to the AMP project.
 
+Please see ./documentation/shiva_preliminary_design.pdf for a technical description
+of Shiva.
 
 ## Support
 
@@ -83,9 +85,71 @@ program interpreter `"/lib/shiva"`, and the path to the patch module (i.e.
 
 ## Patch testing
 
-The patches are stored in `modules/aarch64_patches/`
+The patches are stored in `"modules/aarch64_patches/` and are as follows:
+
+#### cfs_patch1
+
+This is just a simple patch that uses symbol interposition to replace the
+STB_GLOBAL/STT_FUNC `OS_printf` that lives within the `core-cpu1` executable.
+The patch `cfs_patch1.c` simply rewrites its own version of the function.
+
+The contents of the `./modules/aarch64_patches/cfs_patch1`
+
+```
+elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/cfs_patch1$ ls
+cfs_patch1.c  cfs_patch1.o  core-cpu1  core-cpu1.patched  EEPROM.DAT  Makefile
+```
+
+The program that we are patching is `core-cpu1` and specifically the symbol `OS_printf`
+
+```
+elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/cfs_patch1$ readelf -s core-cpu1 | grep OS_printf
+   241: 0000000000047d88   456 FUNC    GLOBAL DEFAULT   13 OS_printf
+```
+
+Our patch contains it's own version of the function `OS_printf` and at runtime Shiva will load
+the `/opt/shiva/modules/cfs_patch1.o` handle all of it's own relocations, and then it will externally
+re-link `core-cpu1` so that any calls to the old `OS_printf` are patched to call the new `OS_printf`
+that lives within the modules runtime environment setup by Shiva.
 
 
+```
+elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/cfs_patch1$ cat cfs_patch1.c
+#include <stdarg.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
+
+void OS_printf(const char *string, ...)
+{
+	char msg_buffer[4096];
+	va_list va;
+	int sz;
+
+	va_start(va, string);
+	sz = vsnprintf(msg_buffer, sizeof(msg_buffer), string, va);
+	va_end(va);
+	msg_buffer[sz] = '\0';
+	printf("[PATCHED :)]: %s\n", msg_buffer); /* NOTICE THIS LINE */
+}
+
+```
+
+A quick look at the `PT_INTERP` segment will reveal that core-cpu1.patched has `"/lib/shiva"`
+set as the program interpreter.
+
+```
+elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/cfs_patch1$ readelf -l core-cpu1.patched | grep interpreter
+      [Requesting program interpreter: /lib/shiva]
+```
+
+Two custom dynamic segment entries were also added to the binary:
+
+`SHIVA_DT_SEARCH` denotes a dynamic entry containing the address of the module search path,
+usually set to `"/opt/shiva/modules/".
+
+`SHIVA_DT_NEEDED` denotes a dynamic entry containing the address of the module basename,
+i.e. `"cfs_patch1.o"`.
 
 
 
