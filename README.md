@@ -61,8 +61,9 @@ The header file to libelfmaster
 
 #### musl-libc
 
+```
 sudo apt-get install musl musl-dev musl-tools
-
+```
 
 ## Building Shiva
 
@@ -99,7 +100,7 @@ The Shiva make install script installs all of the patch modules into `/opt/shiva
 
 The patch build environments are stored in `modules/aarch64_patches/` and are as follows:
 
-#### cfs_patch1
+### CFS Binary patch: cfs_patch1
 
 This is just a simple patch that uses symbol interposition to replace the
 STB_GLOBAL/STT_FUNC `OS_printf` that lives within the `core-cpu1` executable.
@@ -147,7 +148,7 @@ void OS_printf(const char *string, ...)
 
 ```
 
-A quick look at the `PT_INTERP` segment will reveal that core-cpu1.patched has `"/lib/shiva"`
+A quick look at the `PT_INTERP` segment will reveal that `core-cpu1.patched` has `"/lib/shiva"`
 set as the program interpreter.
 
 ```
@@ -199,7 +200,9 @@ CFE_PSP: Using MMAP simulated EEPROM implementation
 [PATCHED :)]: CFE_PSP: EEPROM Range (2) created: Start Address = FFFF84032000, Size = 00080000 Status = 0
 ```
 
-#### ro_data_interposing patch
+#### Patching .rodata symbols with Shiva: rodata_interposing patch.
+
+`modules/aarch64_patches/rodata_interposing`
 
 This patch demonstrates how Shiva is able to link new read-only data into place over
 existing read-only data symbols. For example
@@ -245,8 +248,10 @@ const char rodata_string[] = "The Great Arcanum";
 
 The compiled patch is `ro_patch.o`
 
-And we can see that the Makefile uses shiva-ld to apply this information to the output binary
-test_rodata.patched
+At runtime Shiva will load and link the patch with the executable in memory, and all references
+to the old `rodata_string[]` will be replaced with the correct offset to the patches version of
+`rodata_string[]`. The original string is not being over-written, but is no longer referenced.
+
 
 #### Running the unpatched and patched test_rodata binary
 
