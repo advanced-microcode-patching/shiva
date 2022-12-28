@@ -170,8 +170,34 @@ elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/cfs_patch1$ reade
  0x0000000000000000 (NULL)               0x0
 ```
 
+NOTE: The new dynamic segment lives within a newly created PT_LOAD segment. The new PT_LOAD segment
+is the result of a PT_NOTE to PT_LOAD transition.
+
 #### Running core-cpu1.patched
 
+
+When running the `./core-cpu.patched` we see in the last stdout line our patched
+`OS_printf` executes. Notice it prefaces each line of output with the string `"[PATCHED :)]"`
+
+```
+elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/cfs_patch1$ ./core-cpu1.patched 
+OS_BSP_Initialize():Maximum user msg queue depth = 10
+CFE_PSP: Default Reset SubType = 1
+CFE_PSP: Default CPU ID = 1
+CFE_PSP: Default Spacecraft ID = 66
+CFE_PSP: Default CPU Name: cpu1
+OS_Posix_GetSchedulerParams():186:Policy 1: available, min-max: 1-99
+OS_Posix_GetSchedulerParams():186:Policy 2: available, min-max: 1-99
+OS_Posix_TaskAPI_Impl_Init():372:Selected policy 2 for RT tasks, root task = 99
+OS_Posix_TaskAPI_Impl_Init():388:Could not setschedparam in main thread: Operation not permitted (1)
+CFE_PSP: initializing module 'soft_timebase' with ID 0110ff00
+CFE_PSP: Instantiated software timebase 'cFS-Master' running at 10000 usec
+CFE_PSP: initializing module 'timebase_posix_clock' with ID 0110ff01
+CFE_PSP: Using POSIX monotonic clock as CFE timebase
+CFE_PSP: initializing module 'eeprom_mmap_file' with ID 0110ff02
+CFE_PSP: Using MMAP simulated EEPROM implementation
+[PATCHED :)]: CFE_PSP: EEPROM Range (2) created: Start Address = FFFF84032000, Size = 00080000 Status = 0
+```
 
 
 
