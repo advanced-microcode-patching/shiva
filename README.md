@@ -27,12 +27,8 @@ ELF AArch64 ET_DYN binaries, so currently we are meeting the requirements.
 
 ## Build
 
-This has been tested on aarch64 ubuntu 18.04 and 22. Shiva uses the code from
-the https://github.com/elfmaster/libelfmaster project, specifically a custom
-aarch64 branch.
-
-Shiva also relies on musl-libc to avoid a problem with glibc's initialization code
-which is not compatible with Shiva running as an interpreter. (See custom_interp_notes.txt)
+This has been tested on aarch64 ubuntu 18.04 and 22.
+Shiva relies on libelfmaster and musl-libc.
 
 ## Dependencies
 
@@ -54,8 +50,11 @@ cd src
 sudo make.sh
 ```
 
-The static libary will be written to /opt/elfmaster/lib/libelfmaster.a
-The header file will be /opt/elfmaster/include/elfmaster.h
+The static library to libelfmaster
+```/opt/elfmaster/lib/libelfmaster.a```
+
+The header file to libelfmaster
+```/opt/elfmaster/include/elfmaster.h```
 
 
 #### musl-libc
@@ -75,10 +74,21 @@ make patches
 sudo make install
 ```
 
-Shiva is copied to "/lib/shiva" and can be executed directly, but more commonly
+Shiva is copied to `"/lib/shiva"` and can be executed directly, but more commonly
 indirectly as an interpreter.
 
-## Testing the patches
+The shiva-ld utility is used to modify binaries with the path to the new
+program interpreter `"/lib/shiva"`, and the path to the patch module (i.e.
+`"/opt/modules/shiva/patch1.o"`).
+
+## Patch testing
+
+The patches are stored in `modules/aarch64_patches/`
+
+
+
+
+
 
 
 
