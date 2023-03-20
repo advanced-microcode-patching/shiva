@@ -185,6 +185,7 @@ shiva_maps_prot_by_addr(struct shiva_ctx *ctx, uint64_t addr, int *prot)
 
 	shiva_maps_iterator_init(ctx, &mmap_iter);
 	while (shiva_maps_iterator_next(&mmap_iter, &mmap_entry) == SHIVA_ITER_OK) {
+		shiva_debug("mmap_entry.base: %#lx mmap_entry.len: %lx\n", mmap_entry.base, mmap_entry.len);
 		if (addr >= mmap_entry.base && addr < mmap_entry.base + mmap_entry.len) {
 			*prot = mmap_entry.prot;
 			return true;

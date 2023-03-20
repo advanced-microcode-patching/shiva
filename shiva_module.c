@@ -1,5 +1,6 @@
 #include "shiva.h"
 #include "shiva_debug.h"
+#include "modules/include/shiva_module.h"
 #include <sys/mman.h>
 
 #define RELOC_MASK(n)	((1U << n) - 1)
@@ -33,6 +34,7 @@ uint8_t plt_stub[8] = "\x11\x00\x00\x58"  /* ldr	x17, got_entry_mem */
 		      "\x20\x02\x1f\xd6"; /* br x17			   */
 #endif
 
+static bool module_has_transforms(struct shiva_module *);
 static bool get_section_mapping(struct shiva_module *, char *, struct shiva_module_section_mapping *);
 /*
  * Returns the name of the ELF section that the symbol lives in, within the
@@ -68,7 +70,8 @@ transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
 
 static bool
 install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
-    struct shiva_branch_site *e, struct elf_symbol *patch_symbol)
+    struct shiva_branch_site *e, struct elf_symbol *patch_symbol,
+    struct shiva_transform *transform)
 {
 	/*
 	 * The patch_symbol->value will be a symbol value found within the patch
@@ -80,6 +83,27 @@ install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	uint32_t call_offset;
 	shiva_error_t error;
 	bool res;
+
+	shiva_debug("patch_symbol->value: %#lx\n", patch_symbol->value);
+	shiva_debug("transform: %p\n", transform);
+	/*
+	 * In the event of a transform, we are re-linking the executable to a function
+	 * that has been transformed with a splice, which requires that we don't use
+	 * the patch_symbol.value (Since it will have been moved), instead we use the
+	 * transform->segment_offset.
+	 */
+	target_vaddr = (transform == NULL) ? patch_symbol->value + linker->text_vaddr :
+	    linker->text_vaddr + transform->segment_offset;
+
+	shiva_debug("target_vaddr is %#lx\n", target_vaddr);
+	if (transform == NULL) {
+		if (module_has_transforms(linker) == true) {
+			shiva_debug("Increasing target vaddr by %zu bytes\n", linker->tf_text_offset);
+			target_vaddr += linker->tf_text_offset;
+		} else {
+			shiva_debug("Module has no transforms\n");
+		}
+	}
 
 	shiva_debug("PATCHING BRANCH SITE: %#lx\n", e->branch_site);
 	call_offset = (target_vaddr - ((e->branch_site + ctx->ulexec.base_vaddr))) >> 2;
@@ -108,6 +132,11 @@ install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	return true;
 }
 
+/*
+ * XXX does not properly handle xrefs from target executable
+ * to fully transformed function.
+ * TODO
+ */
 static bool
 install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
     struct shiva_xref_site *e, struct elf_symbol *patch_symbol)
@@ -180,7 +209,7 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	 * 1. locate the R_AARCH64_RELATIVE relocation who's r_addend is equal
 	 * to the offset of the original .bss variable.
 	 * 2. Calculate the offset of the new patch .bss variable from the base of the executable:
-	 * 	new_var_addr - executable_base - 4
+	 *	new_var_addr - executable_base - 4
 	 * 3. Store the offset as the updated r_addend field in the relocation entry
 	 *
 	 * This is a great example of Cross relocation. Shiva is manipulating LDSO meta-data
@@ -195,7 +224,7 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 		uint64_t rela_ptr;
 		uint64_t var_addr = patch_symbol->value + var_segment;
 
-		e->got = (uint64_t)e->got + ctx->ulexec.base_vaddr;
+		e->got = (uint64_t *)((uint64_t)e->got + ctx->ulexec.base_vaddr);
 
 		if (shiva_target_dynamic_get(ctx, DT_RELASZ, &relasz) == false) {
 			fprintf(stderr, "shiva_target_dynamic_get(%p, DT_RELASZ, ...) failed\n",
@@ -283,6 +312,7 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 		shiva_debug("Installing SHIVA_XREF_TYPE_ADRP_LDR patch at %#lx\n",
 		    e->adrp_site + ctx->ulexec.base_vaddr);
 		shiva_debug("SHIVA_XREF_TYPE_ADRP_LDR not yet supported\n");
+		assert(true);
 		break;
 	}
 	return true;
@@ -291,13 +321,16 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 static bool
 apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 {
+	struct shiva_transform *transform = NULL;
+	struct shiva_transform *tfptr = NULL;
 	shiva_callsite_iterator_t callsites;
-	struct shiva_branch_site be;
+	struct shiva_branch_site be, *branch;
 	shiva_xref_iterator_t xrefs;
 	struct shiva_xref_site xe;
 	shiva_iterator_res_t ires;
 	struct elf_symbol symbol;
 	bool res;
+	char *symname = NULL;
 
 #if __x86_64__
 	fprintf(stderr, "Cannot apply external patch links on x86_64. Unsupported\n");
@@ -305,9 +338,8 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 #endif
 
 	shiva_callsite_iterator_init(ctx, &callsites);
-
 	while (shiva_callsite_iterator_next(&callsites, &be) == SHIVA_ITER_OK) {
-		if (be.branch_flags & SHIVA_BRANCH_F_PLTCALL)
+		if (be.branch_flags & SHIVA_BRANCH_F_PLTCALL) // TODO handle this scenario instead which
 			continue;
 		/*
 		 * The callsites were found early on in shiva_analyze.c and
@@ -319,16 +351,44 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 		 * if it contains the same function name within it as the one originally
 		 * being called. If so then we relink this call instruction to point to
 		 * our new relocated function.
+		 *
+		 * If transformations are involved, then any calls from say main() to
+		 * foo(), are relinked to a newly created version of foo with spliced in
+		 * patch code. This source transform function will be called:
+		 * __shiva_splice_fn_name_foo() in the patch object. So we must search
+		 * for it by the correct name.
 		 */
-		if (elf_symbol_by_name(&linker->elfobj, be.symbol.name,
+		shiva_debug("tfptr: %p\n", tfptr);
+		shiva_debug("Callsite %#lx branches to %#lx\n", be.branch_site, be.target_vaddr);
+		symname = be.symbol.name;
+		if (module_has_transforms(linker) == true) {
+			TAILQ_FOREACH(transform, &linker->tailq.transform_list, _linkage) {
+				switch(transform->type) {
+				case SHIVA_TRANSFORM_SPLICE_FUNCTION:
+					shiva_debug("Comparing %s and %s\n",
+					    transform->source_symbol.name +
+					    strlen(SHIVA_T_SPLICE_FUNC_ID), be.symbol.name);
+					if (strcmp(transform->source_symbol.name +
+					    strlen(SHIVA_T_SPLICE_FUNC_ID), be.symbol.name) == 0) {
+						symname = transform->source_symbol.name;
+						shiva_debug("Transform source found: %s\n", symname);
+						tfptr = transform;
+					}
+					break;
+				default:
+					break;
+				}
+			}
+		}
+		if (elf_symbol_by_name(&linker->elfobj, symname,
 		    &symbol) == true) {
 			if (symbol.type != STT_FUNC ||
 			    symbol.bind != STB_GLOBAL)
 				continue;
 #if __aarch64__
-			shiva_debug("Installing patch offset on target at %#lx for %s\n",
-			    be.branch_site, symbol.name);
-			res = install_aarch64_call26_patch(ctx, linker, &be, &symbol);
+			shiva_debug("Installing patch offset on target at %#lx for %s. Transform: %p\n",
+			    be.branch_site, symbol.name, tfptr);
+			res = install_aarch64_call26_patch(ctx, linker, &be, &symbol, tfptr);
 			if (res == false) {
 				fprintf(stderr, "external linkage failure: "
 				    "install_aarch64_call26_patch() failed\n");
@@ -336,7 +396,9 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 			}
 #endif
 		}
+		tfptr = NULL;
 	}
+
 	shiva_debug("Calling shiva_xref_iterator_init\n");
 	shiva_xref_iterator_init(ctx, &xrefs);
 
@@ -351,8 +413,10 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 		case SHIVA_XREF_TYPE_ADRP_LDR:
 		case SHIVA_XREF_TYPE_ADRP_STR:
 		case SHIVA_XREF_TYPE_ADRP_ADD:
-			shiva_debug("Found XREF at %#lx for %s\n", xe.adrp_site, xe.symbol.name);
-			if (elf_symbol_by_name(&linker->elfobj, xe.symbol.name,
+			shiva_debug("Found %s XREF at %#lx for %s\n",
+			   (xe.flags & SHIVA_XREF_F_INDIRECT) ? "indirect" : "", xe.adrp_site, xe.symbol.name);
+			if (elf_symbol_by_name(&linker->elfobj,
+			    (xe.flags & SHIVA_XREF_F_INDIRECT) ? xe.deref_symbol.name : xe.symbol.name,
 			    &symbol) == true) {
 				shiva_debug("Found symbol for %s\n", xe.symbol.name);
 				if (symbol.type != STT_OBJECT ||
@@ -382,15 +446,9 @@ static bool
 module_entrypoint(struct shiva_module *linker, uint64_t *entry)
 {
 	struct elf_symbol symbol;
-	char *entry_symbol;
 
-	if (linker->flags & SHIVA_MODULE_F_RUNTIME) {
-		entry_symbol = "shakti_main";
-	} else if (linker->flags & SHIVA_MODULE_F_INIT) {
-		entry_symbol = "shakti_module_init";
-	}
-	if (elf_symbol_by_name(&linker->elfobj, entry_symbol, &symbol) == false) {
-		shiva_debug("elf_symbol_by_name failed to find '%s'\n", entry_symbol);
+	if (elf_symbol_by_name(&linker->elfobj, "shakti_main", &symbol) == false) {
+		shiva_debug("elf_symbol_by_name failed to find 'shakti_main'\n");
 		return false;
 	}
 	shiva_debug("Module text: %#lx\n", linker->text_vaddr);
@@ -433,7 +491,6 @@ resolve_pltgot_entries(struct shiva_module *linker)
 	struct shiva_module_got_entry *current = NULL;
 
 	gotaddr = linker->data_vaddr + linker->pltgot_off;
-
 	TAILQ_FOREACH(current, &linker->tailq.got_list, _linkage) {
 		struct elf_symbol symbol;
 
@@ -448,9 +505,15 @@ resolve_pltgot_entries(struct shiva_module *linker)
 			 */
 			if (symbol.type == STT_FUNC || symbol.type == STT_OBJECT) {
 				shiva_debug("Setting [%#lx] GOT entry '%s' to %#lx\n",
-				    linker->data_vaddr + linker->pltgot_off + current->gotoff, current->symname, symbol.value + linker->text_vaddr);
-				GOT = (uint64_t *)linker->data_vaddr + linker->pltgot_off + current->gotoff;
-				*GOT = symbol.value + linker->text_vaddr;
+				    linker->data_vaddr + linker->pltgot_off +
+				    current->gotoff, current->symname, symbol.value + linker->text_vaddr +
+				    (module_has_transforms(linker) == true ? linker->tf_text_offset : 0));
+
+				GOT = (uint64_t *)
+				    ((uint64_t)(linker->data_vaddr + linker->pltgot_off + current->gotoff));
+				*GOT = symbol.value + linker->text_vaddr +
+				    (module_has_transforms(linker) == true ? linker->tf_text_offset : 0);
+				shiva_debug("*GOT = %#lx\n", *GOT);
 				continue;
 			}
 		}
@@ -537,48 +600,6 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		*(uint64_t *)GOT = symbol.value;
 #endif
 	}
-#if 0
-	/*
-	 * Here we are using the relocation iterator to retrieve the PLT32
-	 * relocations from the loaded module, and then resolve the symbols
-	 * associated with them from our own binary "shiva_interp" which has
-	 * musl-libc code statically linked within it. NOTE: gcc may also
-	 * create PLT relocations for function calls that are local to the
-	 * module itself, so first try to resolve symbols in the module before we
-	 * check within shiva_interp itself. 
-	 */
-	elf_relocation_iterator_init(&linker->elfobj, &rel_iter);
-	while (elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK) {
-		if (rel.type != R_X86_64_PLT32 && rel.type != R_X86_64_GOT64)
-			continue;
-		if ((elf_symbol_by_name(&linker->elfobj, rel.symname, &symbol) == true) &&
-		    symbol.type == STT_FUNC) {
-			shiva_debug("Setting [%#lx] GOT entry '%s' to %#lx\n", gotaddr,
-			    rel.symname, symbol.value + linker->text_vaddr);
-			GOT = (uint64_t *)gotaddr;
-			*GOT = symbol.value + linker->text_vaddr;
-			gotaddr += sizeof(uint64_t);
-			continue;
-		}
-		/*
-		 * If the symbol doesn't exist within the module itself, let's see
-		 * if we can find it within the debugger itself which is statically
-		 * linked to musl-libc.
-		 */
-		if (elf_symbol_by_name(&linker->self, rel.symname, &symbol) == false) {
-		    shiva_debug("Could not resolve symbol '%s'."
-		    " runtime-linkage failure\n", rel.symname);
-			return false;
-		}
-		printf("Found symbol in shiva, symbol value: %#lx shiva base: %#lx\n",
-		    symbol.value, linker->shiva_base);
-		printf("Setting [%#lx] GOT entry '%s' to %#lx\n", gotaddr, rel.symname,
-		    symbol.value + linker->shiva_base);
-		GOT = (uint64_t *)gotaddr;
-		*GOT = symbol.value + linker->shiva_base;
-		gotaddr += sizeof(uint64_t);
-	}
-#endif
 	return true;
 }
 
@@ -644,22 +665,102 @@ get_section_mapping(struct shiva_module *linker, char *shdrname, struct shiva_mo
 }
 
 /*
- * Looks for a symbol within the /opt/bin/shiva executable process address space
+ * Looks for a symbol within the /opt/bin/shiva executable process address space,
+ * or within the target executable, depending.
  */
+#define RESOLVER_TARGET_SHIVA_SELF 0
+#define RESOLVER_TARGET_EXECUTABLE 1
+
 static bool
-internal_symresolve(struct shiva_module *linker, char *symname, struct elf_symbol *symbol)
+internal_symresolve(struct shiva_module *linker, char *symname,
+    struct elf_symbol *symbol, uint64_t *e_type, uint64_t *type)
 {
 	struct elf_symbol tmp;
 	struct elfobj *elfobj = linker->mode == SHIVA_LINKING_MODULE ?
 	    &linker->self : linker->target_elfobj;
+	bool res;
 
-	if (elf_symbol_by_name(elfobj, symname, &tmp) == false)
-		return false;
-	memcpy(symbol, &tmp, sizeof(*symbol));
-	return true;
+	shiva_debug("Looking up symbol %s in %s\n", symname, linker->mode ==
+	    SHIVA_LINKING_MODULE ? "the Shiva Interpreter" : "target ELF executable");
+
+	res = elf_symbol_by_name(elfobj, symname, &tmp);
+	*e_type = elf_type(elfobj);
+	if (res == true) {
+		switch(tmp.type) {
+		case STT_NOTYPE:
+			shiva_debug("Found symbol '%s' in target, but it's NOTYPE\n", symname);
+			switch (linker->mode) {
+			case SHIVA_LINKING_MICROCODE_PATCH:
+				*e_type = elf_type(&linker->self);
+				*type = RESOLVER_TARGET_SHIVA_SELF;
+				res = elf_symbol_by_name(&linker->self, symname, &tmp);
+				if (res == true) {
+					memcpy(symbol, &tmp, sizeof(*symbol));
+					return true;
+				}
+				break;
+			case SHIVA_LINKING_MODULE:
+			default:
+				shiva_debug("Found no symbol '%s' in shiva binary\n", symname);
+				return false;
+			}
+		case STT_FUNC:
+		case STT_OBJECT:
+			shiva_debug("Found symbol '%s' in %s\n", symname, linker->mode == SHIVA_LINKING_MODULE ?
+			    "shiva binary" : "target binary");
+			if (linker->mode == SHIVA_LINKING_MODULE) {
+				*type = RESOLVER_TARGET_SHIVA_SELF;
+			} else {
+				*type = RESOLVER_TARGET_EXECUTABLE;
+			}
+			memcpy(symbol, &tmp, sizeof(*symbol));
+			return true;
+		default:
+			return false;
+		}
+	} else if (res == false && linker->mode == SHIVA_LINKING_MICROCODE_PATCH) {
+		res = elf_symbol_by_name(&linker->self, symname, &tmp);
+		if (res == true) {
+			*type = RESOLVER_TARGET_SHIVA_SELF;
+			*e_type = elf_type(&linker->self);
+			shiva_debug("Found symbol '%s' within the Shiva binary: %#lx\n", symname, tmp.value);
+			memcpy(symbol, &tmp, sizeof(*symbol));
+			return true;
+		} else {
+			shiva_debug("Failed to find symbol '%s'\n", symname);
+			return false;
+		}
+	}
+	return false;
 }
+
 bool
-apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
+is_text_encoding_reloc(struct shiva_module *linker, uint64_t r_offset)
+{
+	struct elf_section shdr;
+	elf_symtab_iterator_t sym_iter;
+	struct elf_symbol symbol;
+	bool found_sym = false;
+
+	shiva_debug("r_offset: %#lx\n", r_offset);
+
+	assert(elf_section_by_name(&linker->elfobj, ".text", &shdr) == true);
+	if (r_offset < shdr.offset || r_offset > shdr.offset + shdr.size)
+		return false;
+	elf_symtab_iterator_init(&linker->elfobj, &sym_iter);
+	while (elf_symtab_iterator_next(&sym_iter, &symbol) == ELF_ITER_OK) {
+		if (symbol.type != STT_FUNC)
+			continue;
+		if (r_offset >= symbol.value && r_offset < symbol.value + symbol.size) {
+			found_sym = true;
+		}
+	}
+	return !found_sym;
+}
+
+bool
+apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
+    struct shiva_transform *transform)
 {
 	struct shiva_module_plt_entry *current = NULL;
 	struct shiva_module_section_mapping *smap_current;
@@ -689,7 +790,73 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 	shiva_debug("linker->text_vaddr: %#lx\n", linker->text_vaddr);
 	shiva_debug("linker->data_vaddr: %#lx\n", linker->data_vaddr);
 	shiva_debug("smap.offset: %#lx\n", smap.offset);
-#if defined(__aarch64__)
+
+#if defined (__aarch64__)
+	if (module_has_transforms(linker) == true &&
+	    strcmp(shdrname, ".text") == 0) {
+		if (transform != NULL) {
+			bool text_on_text_reloc = false;
+			bool text_encoding = false;
+			/*
+			 * We are relocating code that has been spliced into a target
+			 * function, via transformation.
+			 * Relocation offset equals offset of function we are transforming (segment_offset)
+			 * plus the splice offset (transform->offset) plus the original relocation offset.
+			 */
+			shiva_debug("Transform splice relocation: segment_offset %#lx transform_offset %#lx\n",
+			    transform->segment_offset, transform->offset);
+			shiva_debug("Rel type: %d\n", rel.type);
+			if (rel.type == R_AARCH64_ADR_PREL_PG_HI21 ||
+			    rel.type == R_AARCH64_ADD_ABS_LO12_NC) {
+				shiva_debug("Testing rel.symname: %s with .text\n",
+				    rel.symname);
+				if (strcmp(rel.symname, ".text") == 0) {
+					shiva_debug("Found text on text relocation\n");
+					shiva_debug("Increasing r_addend by %zu bytes\n",
+					    transform->splice.copy_len3 +
+					    transform->segment_offset + transform->offset);
+					rel.addend += transform->segment_offset + transform->offset;
+					rel.addend += transform->splice.copy_len3;
+				}
+			}
+			/*
+			 * XXX In the future maybe just check to see if this is
+			 * an R_AARCH64_ABS64 relocation.
+			 */
+			if (is_text_encoding_reloc(linker, rel.offset) == true) {
+				shiva_debug("Text encoding is true! Increasing r_offset by %zu\n",
+				    transform->splice.copy_len3);
+				/*
+				 * See transformation specification on handling
+				 * relocations that apply to .text encoded data.
+				 */
+				shiva_debug("Increasing r_offset(%#lx) to %#lx\n", rel.offset,
+				    rel.offset + transform->splice.copy_len3);
+				rel.offset += transform->splice.copy_len3;
+				text_encoding = true;
+			}
+			/*
+			 * In the event of relocating a spliced function we must always increase
+			 * the rel.offset to match the new location.
+			 */
+			rel.offset = transform->segment_offset + transform->offset + rel.offset;
+		} else {
+			shiva_debug("Transforms exist. rel_offset = rel.offset(%#lx)"
+			    " + linker->tf_text_offset(%#lx) = %#lx\n", rel.offset,
+			    linker->tf_text_offset, rel.offset + linker->tf_text_offset);
+
+			/*
+			 * We are relocating code that exists after all splices in our modules
+			 * process image.
+			 * We update rel.offset with the updated .text offset
+			 * based on transformations.
+			 */
+			rel.offset = linker->tf_text_offset + rel.offset;
+			if (strcmp(rel.symname, ".text") == 0) {
+				rel.addend += linker->tf_text_offset;
+			}
+		}
+	}
 	switch(rel.type) {
 		/* R_AARCH64_ABS64: computation S + A */
 		/* This relocation can reference both a symbol and a section
@@ -706,6 +873,9 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 				continue;
 			symval = smap_current->vaddr;
 			rel_unit = &linker->text_mem[smap.offset + rel.offset];
+			shiva_debug("symval: %#lx symval, rel_addr: %#lx addend: %#lx\n", symval,
+			    linker->text_vaddr + smap.offset + rel.offset, rel.addend);
+			shiva_debug("rel_val: %#lx\n", symval + rel.addend);
 			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 			rel_val = symval + rel.addend;
 			*(uint64_t *)&rel_unit[0] = rel_val;
@@ -726,11 +896,17 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 			 *
 			 * internal_symresolve will look for the symbol within the Shiva
 			 * binary if linking mode is set to SHIVA_LINKING_MODULE, otherwise
-			 * internal_symresolve will check the target ELF executable.
+			 * internal_symresolve will check the target ELF executable first,
+			 * and then Shiva (XXX: In the future we will resolve external
+			 * symbols from shared libraries... Shiva having musl-libc baked
+			 * in is a convenient work-around for libc symbol resolutions).
 			 */
+
 			if (symbol.type == STT_NOTYPE) {
+				uint64_t e_type, target_type;
+
 				res = internal_symresolve(linker, rel.symname,
-				    &symbol);
+				    &symbol, &e_type, &target_type);
 				if (res == true) {
 #ifdef __x86_64__
 #ifdef SHIVA_STANDALONE
@@ -739,8 +915,15 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 					symval = symbol.value + linker->shiva_base;
 #endif
 #elif __aarch64__
-					symval = symbol.value + linker->target_base;
+					if (target_type == RESOLVER_TARGET_SHIVA_SELF) {
+						symval = e_type == ET_EXEC ? symbol.value :
+						    symbol.value + linker->shiva_base;
+					} else if (target_type == RESOLVER_TARGET_EXECUTABLE) {
+						symval = e_type == ET_EXEC ? symbol.value :
+						    symbol.value + linker->target_base;
+					}
 #endif
+					shiva_debug("Symval: %#lx\n", symval);
 					rel_unit = &linker->text_mem[smap.offset + rel.offset];
 					rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 					rel_val = symval + rel.addend;
@@ -750,7 +933,8 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 					*(uint64_t *)&rel_unit[0] = rel_val;
 					return true;
 				} else {
-					fprintf(stderr, "Failed to find relocation symbol: %s in Shiva ELF image\n", rel.symname);
+					fprintf(stderr, "Failed to find relocation "
+					    "symbol: %s\n", rel.symname);
 					return false;
 				}
 			} else {
@@ -891,6 +1075,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel)
 			insn_bytes = (insn_bytes & ~((RELOC_MASK (2) << 29) | (RELOC_MASK(19) << 5)))
 			    | ((rel_val & RELOC_MASK(2)) << 29) | ((rel_val & (RELOC_MASK(19) << 2)) << 3);
 			*(uint32_t *)&rel_unit[0] = insn_bytes;
+			shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
 			return true;
 		}
 		/*
@@ -1098,9 +1283,12 @@ relocate_module(struct shiva_module *linker)
 	struct elf_relocation rel;
 	bool res;
 	char *shdrname;
+	struct shiva_transform *transform;
+	struct shiva_transform *tf_ptr = NULL;
 
 	elf_relocation_iterator_init(&linker->elfobj, &rel_iter);
 	while (elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK) {
+		tf_ptr = NULL;
 		shdrname = strrchr(rel.shdrname, '.');
 		if (shdrname == NULL) {
 			shiva_debug("strrchr parse error");
@@ -1113,7 +1301,36 @@ relocate_module(struct shiva_module *linker)
 			 */
 			continue;
 		}
-		res = apply_relocation(linker, rel);
+		shiva_debug("Relocation in %s (offset: %#lx) for symbol %s\n", shdrname,
+		    rel.offset, rel.symname);
+		/*
+		 * Check transformation records and see if the current relocation
+		 * record is fixing up code within one of our transform source
+		 * functions.
+		 */
+		TAILQ_FOREACH(transform, &linker->tailq.transform_list, _linkage) {
+			shiva_debug("Is rel.offset(%#lx) within the range of %#lx-%#lx\n", rel.offset,		
+			    transform->source_symbol.value,
+			    transform->source_symbol.value + transform->source_symbol.size +
+			    transform->ext_len);
+
+			/*
+			 * Does rel.offset fit within the range of a function that is to be spliced?
+			 * We actually check to see if it fits within the range of the transformed
+			 * function + the padding between it and the next function. This padding is
+			 * used in ELF .text relocations in AARCH64
+			 */
+			if (rel.offset >= transform->source_symbol.value &&
+			    rel.offset < transform->source_symbol.value +
+			    transform->source_symbol.size + transform->ext_len) {
+				shiva_debug("This .text relocation applies to transform code in: %s\n",
+				    transform->source_symbol.name);
+				tf_ptr = transform;
+				break;
+			}
+		}
+		shiva_debug("Relocation symbol name: %s\n", rel.symname);
+		res = apply_relocation(linker, rel, tf_ptr);
 		if (res == false) {
 			shiva_debug("Failed to apply %s relocation at offset %#lx\n",
 			    rel.shdrname, rel.offset);
@@ -1122,6 +1339,15 @@ relocate_module(struct shiva_module *linker)
 	}
 	return true;
 }
+
+static bool
+module_has_transforms(struct shiva_module *linker)
+{
+	if (linker->flags & SHIVA_MODULE_F_TRANSFORM)
+		return true;
+	return false;
+}
+
 /*
  * This function copies the code/data from a given section into it's
  * respective memory mapped segment (i.e. the text segment).
@@ -1136,14 +1362,26 @@ relocate_module(struct shiva_module *linker)
  * based on a power of 2.
  */
 bool
-elf_section_map(elfobj_t *elfobj, uint8_t *dst, struct elf_section section,
-    uint64_t *segment_offset)
+elf_section_map(struct shiva_module *linker, elfobj_t *elfobj, uint8_t *dst, 
+    struct elf_section section, uint64_t *segment_offset)
 {
 	size_t rem = section.size % sizeof(uint64_t);
 	uint64_t qword;
 	bool res;
 	size_t i = 0;
 
+	if (strcmp(section.name, ".text") == 0 &&
+	    module_has_transforms(linker)  == true) {
+		/*
+		 * Handle any transformations for the .text section, such
+		 * as function splicing.
+		 */
+		res = shiva_tf_process_transforms(linker, dst, section, segment_offset);
+		if (res == false) {
+			fprintf(stderr, "shiva_tf_process_transforms() failed\n");
+			return false;
+		}
+	}
 	shiva_debug("Reading from offset %#lx - %#lx\n", section.offset,
 	    section.offset + section.size);
 	for (i = 0; i < section.size; i += sizeof(uint64_t)) {
@@ -1387,8 +1625,35 @@ calculate_text_size(struct shiva_module *linker)
 	elf_section_iterator_t iter;
 	struct elf_relocation rel;
 	elf_relocation_iterator_t rel_iter;
+	struct shiva_transform *transform;
+	size_t total_tf_len = 0; /* total transform length */
+	/*
+	 * Look for Transformation records that help us to determine
+	 * what size the modules .text area is.
+	 */
+	TAILQ_FOREACH(transform, &linker->tailq.transform_list, _linkage) {
+		switch(transform->type) {
+		case SHIVA_TRANSFORM_SPLICE_FUNCTION:
+			shiva_debug("Calculate room for function splicing on %s\n",
+			    transform->target_symbol.name);
+			total_tf_len += transform->target_symbol.size;
+			total_tf_len += (transform->new_len > transform->old_len) ?
+			    transform->new_len - transform->old_len : 0;
+			break;
+		default:
+			break;
+		}
+	}
+	shiva_debug("Transform records require a total of %zu bytes\n",
+	    total_tf_len);
 
+	linker->text_size += total_tf_len;
 	elf_section_iterator_init(&linker->elfobj, &iter);
+	/*
+	 * When using some transforms such as function splicing then text_size
+	 * += section.size will be somewhat to completely redundant, thus
+	 * giving our image some extra padding.
+	 */
 	while (elf_section_iterator_next(&iter, &section) == ELF_ITER_OK) {
 		if (section.flags & SHF_ALLOC) {
 			if (section.flags & SHF_WRITE)
@@ -1434,11 +1699,16 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	size_t off = 0;
 	size_t count = 0;
 
+#if 0
+	/*
+	 * I commented this out, because even though the data_size may be
+	 * 0, we need a data segment area to house the .bss. 
+	 */
 	if (linker->data_size == 0) {
 		shiva_debug("No data segment is needed\n");
 		return true; // we need no data segment
 	}
-
+#endif
 	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
 	    MAP_PRIVATE|MAP_ANONYMOUS;
 	uint64_t mmap_base = 0;
@@ -1449,7 +1719,14 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 		mmap_base = ELF_PAGEALIGN(linker->text_vaddr + linker->text_size, PAGE_SIZE);
 		mmap_flags |= MAP_32BIT;
 	}
-	data_size_aligned = ELF_PAGEALIGN(linker->data_size, PAGE_SIZE);
+	/*
+	 * TODO In the event that there is no data segment (i.e. data_size == 0)
+	 * then we still allocate PAGE_SIZE bytes for any .bss data.
+	 * In the future we need to assume that the .bss could be larger
+	 * than PAGE_SIZE and fix this.
+	 */
+	data_size_aligned = linker->data_size == 0 ? PAGE_SIZE :
+	    ELF_PAGEALIGN(linker->data_size, PAGE_SIZE);
 	shiva_debug("ELF data segment len: %zu\n", data_size_aligned);
 	linker->data_mem = mmap((void *)mmap_base, data_size_aligned, PROT_READ|PROT_WRITE,
 	    mmap_flags, -1, 0);
@@ -1480,7 +1757,7 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 			 * uninitialized.
 			 */
 			if (section.type != SHT_NOBITS) {
-				res = elf_section_map(&linker->elfobj, linker->data_mem,
+				res = elf_section_map(linker, &linker->elfobj, linker->data_mem,
 				    section, &off);
 				if (res == false) {
 					shiva_debug("elf_section_map failed\n");
@@ -1524,6 +1801,8 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	size_t off = 0;
 	size_t count = 0;
 	int i;
+	struct shiva_transform *transform;
+	size_t total_transforms_len = 0;
 
 	/*
 	 * NOTE: We map the module to segments within a 32bit address range.
@@ -1581,6 +1860,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	}
 	shiva_debug("Module text segment: %p\n", linker->text_mem);
 	linker->text_vaddr = (uint64_t)linker->text_mem;
+
 	elf_section_iterator_init(&linker->elfobj, &shdr_iter);
 	while (elf_section_iterator_next(&shdr_iter, &section) == ELF_ITER_OK) {
 		if (section.flags & SHF_ALLOC) {
@@ -1604,7 +1884,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 			}
 			shiva_debug("Attempting to map section %s(offset: %zu) into text segment"
 			    " at address %p\n", section.name, off, linker->text_mem + off);
-			res = elf_section_map(&linker->elfobj, linker->text_mem,
+			res = elf_section_map(linker, &linker->elfobj, linker->text_mem,
 			    section, &off);
 			if (res == false) {
 				shiva_debug("elf_section_map failed\n");
@@ -1629,8 +1909,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 			shiva_debug("Offset: %#lx\n", n->offset);
 			shiva_debug("Size: %#lx\n", n->size);
 			TAILQ_INSERT_TAIL(&linker->tailq.section_maplist, n, _linkage);
-			count += section.size;
-			shiva_debug("COUNT: %zu\n", count);
+			count = (module_has_transforms(linker) == true) ? off :  count + section.size;
 		}
 	}
 	shiva_debug("count: %zu off: %zu\n", count, off);
@@ -1707,12 +1986,449 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	return true;
 }
 
+static bool
+get_tf_function_refs(struct shiva_ctx *ctx, struct shiva_module *linker,
+    struct shiva_transform *transform)
+{
+	struct shiva_xref_site xref;
+	struct shiva_branch_site *branch;
+	shiva_xref_iterator_t xrefs;
+
+	TAILQ_INIT(&transform->xref_list);
+	TAILQ_INIT(&transform->branch_list);
+
+	shiva_debug("get_tf_function_refs:\n");
+
+	shiva_xref_iterator_init(ctx, &xrefs);
+	while (shiva_xref_iterator_next(&xrefs, &xref) == SHIVA_ITER_OK) {
+		if ((xref.flags & SHIVA_XREF_F_SRC_SYMINFO) == 0)
+			continue;
+		shiva_debug("Comparing %s and %s\n", xref.current_function.name, transform->target_symbol.name);
+		if (strcmp(xref.current_function.name, transform->target_symbol.name) == 0) {
+			shiva_debug("XREF site in transform target '%s'\n",
+			    transform->target_symbol.name);
+			struct shiva_xref_site *xp = shiva_malloc(sizeof(*xp));
+
+			memcpy(xp, &xref, sizeof(*xp));
+			TAILQ_INSERT_TAIL(&transform->xref_list, xp, _linkage);
+		}
+	}
+	TAILQ_FOREACH(branch, &ctx->tailq.branch_tqlist, _linkage) {
+		if ((branch->branch_flags & SHIVA_BRANCH_F_SRC_SYMINFO) == 0)
+			continue;
+		if (strcmp(branch->current_function.name, transform->target_symbol.name) == 0) {
+			struct shiva_branch_site *tmp = shiva_malloc(sizeof(struct shiva_branch_site));
+
+			memcpy(tmp, branch, sizeof(*branch));
+			shiva_debug("BRANCH site in transform target '%s': %s\n",
+			    transform->target_symbol.name, branch->insn_string);
+			TAILQ_INSERT_TAIL(&transform->branch_list, tmp, _linkage);
+		}
+	}
+	return true;
+}
+
+/*
+ * TODO: Replace this ugly function. We just need to have a list of functions
+ * sorted by address, created during the loading of the ELF ET_REL object.
+ */
+bool
+next_function_by_address(elfobj_t *elfobj, uint64_t current_func, struct elf_symbol *out)
+{
+	elf_symtab_iterator_t sym_iter;
+	struct elf_symbol symbol, orig, lo = {0};
+	uint64_t lo_vaddr = current_func;
+	size_t c = 0;
+	bool found_lo_vaddr = false;
+
+	elf_symtab_iterator_init(elfobj, &sym_iter);
+	while (elf_symtab_iterator_next(&sym_iter, &symbol) == ELF_ITER_OK) {
+		if (symbol.value >= current_func && symbol.type == STT_FUNC) {
+			if (symbol.value == current_func) {
+				memcpy(&orig, &symbol, sizeof(symbol));
+				continue;
+			}
+			if (c++ == 0) {
+				shiva_debug("c++ == 0\n");
+				shiva_debug("lo_vaddr = %#lx(%s)\n", symbol.value, symbol.name);
+				if (lo_vaddr != symbol.value)
+					found_lo_vaddr = true;
+				lo_vaddr = symbol.value;
+				memcpy(&lo, &symbol, sizeof(symbol));
+			} else {
+				shiva_debug("if lo_vaddr: %#lx is > %#lx(%s)\n", lo_vaddr,
+				    symbol.value, symbol.name);
+				if (lo_vaddr > symbol.value) {
+					found_lo_vaddr = true;
+					lo_vaddr = symbol.value;
+					shiva_debug("lo_vaddr now set to %#lx\n", symbol.value);
+					memcpy(&lo, &symbol, sizeof(symbol));
+				}
+			}
+		}
+	}
+
+	shiva_debug("Next STT_FUNC symbol is %#lx\n", lo_vaddr);
+	if (found_lo_vaddr == true) {
+		shiva_debug("Copying lo.value: %#lx to out\n", lo.value);
+		memcpy(out, &lo, sizeof(*out));
+	} else {
+		shiva_debug("Copying orig symbol to out\n");
+		memcpy(out, &orig, sizeof(*out));
+	}
+	return true;
+}
+/*
+ * Transformations (formerly known as PTD)
+ * If there are any transformations, make internal transformation
+ * records.
+ */
+static bool
+validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
+{
+	struct shiva_branch_site *branch;
+	struct elf_section shdr;
+	elf_section_iterator_t shdr_iter;
+	/*
+	 * tf_sym holds symbol data for the transform symbol found in the module,
+	 * i.e. "__shiva_splice_insert_<func_name>" is a transformation directive
+	 * stored as a symbol. The target_sym will hold the symbol data for the
+	 * target function name in the target ELF binary.
+	 */
+	struct elf_symbol tf_sym, target_sym;
+	elf_symtab_iterator_t sym_iter;
+	struct shiva_transform *transform, *next_tf;
+	uint64_t insert_vaddr, extend_vaddr, tf_val;
+	char *dst_symname;
+	char tmp[PATH_MAX];
+
+	shiva_debug("Transform validator\n");
+	/*
+	 * PHASE-1 of transform validation:
+	 * Scan the Shiva module for any symbol names that indicate
+	 * transformation mnemonics, i.e. __shiva_splice_fn_name_<function_name>
+	 * indicates that the user wants to splice code into <function_name> --
+	 * We therefore create a transform entry for this splice request and
+	 * we store the entry in a tailq-linked-list.
+	 *
+	 * Sanity checks on the transform data (symbol data) is performed.
+	 */
+	elf_symtab_iterator_init(&linker->elfobj, &sym_iter);
+	while (elf_symtab_iterator_next(&sym_iter, &tf_sym) == ELF_ITER_OK) {
+		shiva_debug("transform symbol '%s'\n", tf_sym.name);
+		if (tf_sym.type == STT_FUNC) {
+			if (strncmp(tf_sym.name, SHIVA_T_SPLICE_FUNC_ID,
+			    strlen(SHIVA_T_SPLICE_FUNC_ID)) == 0) {
+				shiva_debug("transform op: %s\n", SHIVA_T_SPLICE_FUNC_ID);
+				dst_symname = strstr(tf_sym.name, "_fn_name_");
+				if (dst_symname == NULL) {
+					fprintf(stderr, "Invalid format to SHIVA_T_SPLICE_FUNCTION: %s\n",
+					    tf_sym.name);
+					return false;
+				}
+				dst_symname += strlen("_fn_name_");
+				shiva_debug("Function %s\n", dst_symname);
+				if (elf_symbol_by_name(linker->target_elfobj,
+				    dst_symname, &target_sym) == false) {
+					fprintf(stderr, "Transform target symbol doesn't exist: %s not found\n",
+					    dst_symname);
+					return false;
+				}
+				shiva_debug("Found symbol information in target executable, for %s\n",
+				    dst_symname);
+				transform = shiva_malloc(sizeof(*transform));
+				transform->type = SHIVA_TRANSFORM_SPLICE_FUNCTION;
+				memcpy(&transform->target_symbol, &target_sym,
+				    sizeof(struct elf_symbol));
+				memcpy(&transform->source_symbol, &tf_sym,
+				    sizeof(struct elf_symbol));
+				transform->name = target_sym.name;
+				transform->ptr = NULL;
+				shiva_debug("Source symbol '%s' value: %zu size: %zu\n",
+				    transform->source_symbol.name, transform->source_symbol.value, transform->source_symbol.size);
+
+				shiva_debug("Inserting transform entry: %s\n", transform->name);
+				TAILQ_INSERT_TAIL(&linker->tailq.transform_list, transform, _linkage);
+			}
+		}
+	}
+
+	/*
+	 * PHASE-2 of transform validation.
+	 * We now pass over our linked list of transforms, and fill out the
+	 * rest of each transform entry.
+	 *
+	 * For every transform entry of type: SHIVA_TRANFORM_SPLICE_FUNCTION, we
+	 * must locate the corresponding transform inputs, which are two symbols:
+	 * 1. __shiva_splice_insert_<func_name>
+	 * 2. __shiva_splice_extend_<func_name>
+	 * And read their stored values, from within the .shiva.transform section
+	 * of the module. The values are stored as: transform->insert_vaddr, and
+	 * transform->extend_vaddr respectively.
+	 * Lastly we must build the tailq lists for branches and xrefs within the
+	 * transform entry of the function we are splicing. All of these will need
+	 * to be relinked at transformation time. All of this branch/xref data was
+	 * collected by shiva_analyze_find_calls():shiva_analyze.c initially and
+	 * get_tf_function_refs() will store the relevant entries for each transform.
+	 */
+	if (TAILQ_EMPTY(&linker->tailq.transform_list))
+		shiva_debug("List is empty?\n");
+	TAILQ_FOREACH(transform, &linker->tailq.transform_list, _linkage) {
+		shiva_debug("Checking type: %d\n", transform->type);
+		switch(transform->type) {
+		case SHIVA_TRANSFORM_SPLICE_FUNCTION:
+			shiva_debug("case SHIVA_TRANFORM_SPLICE_FUNCTION:\n");
+			if (get_tf_function_refs(ctx, linker, transform) == false) {
+				fprintf(stderr, "Failed to gather xref and branch data from %s\n",
+				    transform->name);
+				return false;
+			}
+			strcpy(tmp, SHIVA_T_SPLICE_INSERT_ID);
+			strncat(tmp, transform->name,
+			    PATH_MAX - strlen(SHIVA_T_SPLICE_INSERT_ID));
+			tmp[sizeof(tmp) - 1] = '\0';
+			shiva_debug("Checking '%s' symbol cache for %s\n",
+			    elf_pathname(&linker->elfobj), tmp);
+			if (elf_symbol_by_name(&linker->elfobj,
+			   tmp, &tf_sym) == false) {
+				fprintf(stderr, "Failed to find transform input '%s'\n",
+				    tmp);
+				goto fail;
+			}
+			shiva_debug("Looking for section at index %d\n", tf_sym.shndx);
+			if (elf_section_by_index(&linker->elfobj, tf_sym.shndx,
+			    &shdr) == false) {
+				fprintf(stderr, "Failed to find section index %d\n",
+				    tf_sym.shndx);
+				goto fail;
+			}
+			if (strcmp(shdr.name, ".shiva.transform") != 0) {
+				fprintf(stderr, "Symbol '%s' corresponds to wrong section: '%s'"
+				    " and not '.shiva.transform'\n", tf_sym.name, shdr.name);
+				goto fail;
+			}
+			assert(tf_sym.size == sizeof(Elf64_Addr) ||
+			    tf_sym.size == sizeof(Elf32_Addr));
+			typewidth_t tpw = tf_sym.size == 8 ? ELF_QWORD : ELF_DWORD;
+			/*
+			 * TO CLARIFY: We are reading from the .shiva.transform
+			 * section + (symbol offset of __shiva_splice_insert_<func_name>)
+			 * which holds the value of the patches insertion address.
+			 */
+			if (elf_read_offset(&linker->elfobj, shdr.offset + tf_sym.value,
+			    &tf_val, tpw) == false) {
+				fprintf(stderr, "Failed to read transform input '%s' value"
+				    " at %#lx in %s\n", tf_sym.name, shdr.offset + tf_sym.value,
+				    elf_pathname(&linker->elfobj));
+				goto fail;
+			}
+			insert_vaddr = tf_val;
+			shiva_debug("%s: (deferenced at offset %#lx): %#lx\n", tf_sym.name,
+			    shdr.offset + tf_sym.value, tf_val);
+
+			memset(tmp, 0, sizeof(tmp));
+			strcpy(tmp, SHIVA_T_SPLICE_EXTEND_ID);
+			strncat(tmp, transform->name,
+			    PATH_MAX - strlen(SHIVA_T_SPLICE_EXTEND_ID));
+			tmp[sizeof(tmp) - 1] = '\0';
+			shiva_debug("Checking symbol cache for %s\n", tmp);
+			if (elf_symbol_by_name(&linker->elfobj,
+			    tmp, &tf_sym) == false) {
+				fprintf(stderr, "Failed to find transform input '%s'\n",
+				    tmp);
+				goto fail;
+			}
+			shiva_debug("Looking for section at index %d\n", tf_sym.shndx);
+			if (elf_section_by_index(&linker->elfobj, tf_sym.shndx,
+			    &shdr) == false) {
+				fprintf(stderr, "Failed to find section index %d\n",
+				    tf_sym.shndx);
+				goto fail;
+			}
+			if (strcmp(shdr.name, ".shiva.transform") != 0) {
+				fprintf(stderr, "Symbol '%s' corresponds to wrong section: '%s'"
+				    " and not '.shiva.transform'\n", tf_sym.name, shdr.name);
+				goto fail;
+			}
+			assert(tf_sym.size == sizeof(Elf64_Addr) ||
+			    tf_sym.size == sizeof(Elf32_Addr));
+			tpw = tf_sym.size == 8 ? ELF_QWORD : ELF_DWORD;
+			/*
+			 * We are reading from variable __shiva_splice_extend_<fnname>
+			 */
+			if (elf_read_offset(&linker->elfobj, shdr.offset + tf_sym.value,
+			    &tf_val, tpw) == false) {
+				fprintf(stderr, "Failed to read transform input '%s' value"
+				    " at %#lx in %s\n", tf_sym.name, shdr.offset + tf_sym.value,
+				    elf_pathname(&linker->elfobj));
+				goto fail;
+			}
+			extend_vaddr = tf_val;
+			shiva_debug("%s: (deferenced at offset %#lx): %#lx\n", tf_sym.name,
+			    shdr.offset + tf_sym.value, tf_val)
+			/*
+			 * If we've made it here, then we know that the transform
+			 * arguments for SHIVA_T_SPLICE have been properly included
+			 * in the Shiva module. Lets finish filling out the transform
+			 * entry.
+			 */
+
+			/* Function offset where splice insertion happens
+			 * TODO: Sanity checks on insert_vaddr, extend_vaddr
+			 */
+			shiva_debug("transform->offset = %#lx - %#lx\n", insert_vaddr,
+			    target_sym.value);
+			transform->offset = insert_vaddr - target_sym.value;
+			transform->old_len = extend_vaddr - insert_vaddr;
+			transform->new_len = transform->source_symbol.size;
+			shiva_debug("transform->new_len: %#lx\n", transform->new_len);
+			/*
+			 * In ARM64 .text relocations are often used that access
+			 * read-only data stored right in the .text at the end of
+			 * a given function. We must make room for this read-only
+			 * data at the end of a function, so that the code which
+			 * accesses the data after it's relocated, works properly.
+			 */
+			struct elf_symbol next_func;
+			struct elf_section text_shdr;
+			bool res;
+
+			shiva_debug("Calling next_function_by_address."
+			    " source_symbol.value: %#lx and size %#lx\n",
+			    transform->source_symbol.value, transform->source_symbol.size);
+			res = next_function_by_address(&linker->elfobj,
+			    transform->source_symbol.value, &next_func);
+			if (res == false) {
+				fprintf(stderr, "next_function_by_address() failed\n");
+				return false;
+			}
+			/*
+			 * If there is no next function beyond the current function
+			 * ... Then write out N bytes. Where N is section_size - 
+			 * function.offset + function.size
+			 */
+			shiva_debug("next_func.value: %#lx\n", next_func.value);
+			shiva_debug("source_symbol.value: %#lx\n",
+			    transform->source_symbol.value);
+			if (elf_section_by_name(&linker->elfobj, ".text", &text_shdr) == false) {
+				fprintf(stderr,
+				    "elf_section_by_name(%p, \".text\", ...) failed\n");
+				return false;
+			}
+			if (next_func.value == transform->source_symbol.value) {
+				/*
+				 * There is no function that lives after
+				 * transform->source_symbol.value
+				 */
+				size_t padlen;
+
+				memcpy(&transform->next_func, &transform->source_symbol,
+				    sizeof(struct elf_symbol));
+				shiva_debug("shdr.size: %d source_symbol.value + size: %d\n",
+				    text_shdr.size, transform->source_symbol.value + transform->source_symbol.size);
+				padlen = text_shdr.size - (transform->source_symbol.value +
+				    transform->source_symbol.size);
+				shiva_debug("padlen = %d - %d + %d\n", 
+				    text_shdr.size, transform->source_symbol.value, transform->source_symbol.size);
+				transform->ext_len = padlen;
+				shiva_debug("ext_len is %d bytes\n", transform->ext_len);
+#if 0
+				shiva_debug("Increasing new_len(%zu) by %zu bytes\n",
+				    transform->new_len, padlen);
+				transform->new_len += padlen;
+#endif
+			} else {
+				/*
+				 * A function does exist after transform->source_symbol.value
+				 */
+				size_t padlen;
+
+				memcpy(&transform->next_func, &next_func, sizeof(next_func));
+				shiva_debug("new_len is currently %d\n", transform->new_len);
+				shiva_debug("%lx - %lx + %lx\n",
+				    next_func.value, transform->source_symbol.value,
+				    transform->source_symbol.size);
+				shiva_debug("ext_len is %d bytes\n",
+				    next_func.value -
+				    (transform->source_symbol.value + transform->source_symbol.size));
+				padlen = next_func.value -
+				    (transform->source_symbol.value + transform->source_symbol.size);
+				transform->ext_len = padlen;
+			}
+			shiva_debug("new_len is now: %d\n", transform->new_len);
+			/*
+			 * How does the splice behave?
+			 * REPLACE: we are replacing B bytes of code with B bytes code.
+			 * NOP_PAD: the patch code is smaller than the target, so pad it with nops.
+			 * EXTEND: the patch code is larger than the target, so extend the function size.
+			 * INJECT: Can be set alongside extend and nop_pad, and is probably superlfuous.
+			 * XXX We may remove INJECT flag, let me see if it comes in handy.
+			 */
+			if (transform->new_len == transform->old_len) {
+				transform->flags |= SHIVA_TRANSFORM_F_REPLACE;
+			} else if (transform->new_len < transform->old_len) {
+				transform->flags |=
+				    (SHIVA_TRANSFORM_F_NOP_PAD|SHIVA_TRANSFORM_F_INJECT);
+			} else if (transform->new_len > transform->old_len) {
+				transform->flags |=
+				    (SHIVA_TRANSFORM_F_EXTEND|SHIVA_TRANSFORM_F_INJECT);
+			}
+			memset(tmp, 0, sizeof(tmp));
+			strcpy(tmp, SHIVA_T_SPLICE_FUNC_ID);
+			strncat(tmp, transform->name,
+			    PATH_MAX - strlen(SHIVA_T_SPLICE_EXTEND_ID));
+			tmp[sizeof(tmp) - 1] = '\0';
+
+			if (elf_symbol_by_name(&linker->elfobj, tmp,
+			    &tf_sym) == false) {
+				fprintf(stderr, "elf_symbol_by_name failed '%s'\n", tmp);
+				goto fail;
+			}
+			if (elf_section_by_index(&linker->elfobj, tf_sym.shndx,
+			    &shdr) == false) {
+				fprintf(stderr, "elf_section_by_index failed, invalid index %d\n",
+				    tf_sym.shndx);
+				goto fail;
+			}
+			assert((transform->ptr = elf_offset_pointer(&linker->elfobj,
+			    shdr.offset + tf_sym.value)) != NULL);
+			/*
+			 * transform->ptr should now point to something like
+			 * __shiva_splice_fn_name_<func_name>();
+			 * Which is a function in the module who's code is
+			 * meant to be spliced into the target ELF function
+			 * transform->name.
+			 */
+			shiva_debug("Finalized transform record '%s'\n", transform->name);
+			shiva_debug("offset:\t%#lx\n", transform->offset);
+			shiva_debug("old_len:\t%#lx\n", transform->old_len);
+			shiva_debug("new_len:\t%#lx\n", transform->new_len);
+			shiva_debug("flags:\t%#lx\n", transform->flags);
+			shiva_debug("transform symbol: %s\n", transform->source_symbol.name);
+			shiva_debug("target symbol: %s\n", transform->target_symbol.name);
+		}
+	}
+	if (TAILQ_EMPTY(&linker->tailq.transform_list) == 0) {
+		/*
+		 * We have a transform entry in the list, so
+		 * set the appropriate module/linker flag.
+		 */
+		shiva_debug("Setting transform flag for linker\n");
+		linker->flags |= SHIVA_MODULE_F_TRANSFORM;
+	}
+
+	return true;
+
+fail:
+	free(transform);
+	return false;
+}
 /*
  * Our linker has two modes:
  * 1. Link Shiva modules, who's init function is always STT_FUNC:shakti_main()
  * 2. Link a microcode patch driven by targetted symbol interposition.
  */
-void
+static void
 set_linker_mode(struct shiva_module *linker)
 {
 	struct elf_symbol symbol;
@@ -1751,7 +2467,8 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	linker->shiva_base = ctx->shiva.base;
 	linker->target_base = ctx->ulexec.base_vaddr;
 	*linkerptr = linker;
-	
+
+	TAILQ_INIT(&linker->tailq.transform_list);
 	TAILQ_INIT(&linker->tailq.section_maplist);
 	TAILQ_INIT(&linker->tailq.plt_list);
 
@@ -1790,6 +2507,10 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		break;
 	case SHIVA_LINKING_UNKNOWN:
 		shiva_debug("Unknown linking mode, quitting\n");
+		return false;
+	}
+	if (validate_transformations(ctx, linker) == false) {
+		fprintf(stderr, "Failed to validate transformations\n");
 		return false;
 	}
 	if (calculate_text_size(linker) == false) {

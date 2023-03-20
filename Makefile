@@ -1,9 +1,10 @@
 BUILD_DIR = './build'
 INTERP_PATH = $(PWD)/build/shiva
+PATCH_PATH = "modules/aarch64_patches"
 GCC_OPTS= -fPIC -ggdb -c
 OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \
-    shiva_callsite.o shiva_target.o shiva_xref.o
+    shiva_callsite.o shiva_target.o shiva_xref.o shiva_transform.o
 STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a libcapstone.a
 CC=gcc
 MUSL=musl-gcc
@@ -25,6 +26,7 @@ interp:
 	$(CC) $(GCC_OPTS) shiva_callsite.c -o	shiva_callsite.o
 	$(CC) $(GCC_OPTS) shiva_target.c -o	shiva_target.o
 	$(CC) $(GCC_OPTS) shiva_xref.c -o		shiva_xref.o
+	$(CC) $(GCC_OPTS) shiva_transform.c -o	shiva_transform.o
 	$(MUSL) -static -Wl,-undefined=system -Wl,-undefined=prctl -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o $(BUILD_DIR)/shiva
 
 shiva-ld:
@@ -36,11 +38,13 @@ patches:
 install:
 	cp build/shiva /lib/shiva
 	ln -sf build/shiva shiva
+	ln -sf /lib/shiva /usr/bin/shiva
 	cp build/shiva /usr/bin
 	cp tools/shiva-ld/shiva-ld /usr/bin
 	mkdir -p /opt/shiva/modules
-	cp modules/aarch64_patches/*interposing*/*.o /opt/shiva/modules
-	cp modules/aarch64_patches/cfs_patch1/*.o /opt/shiva/modules
+	cp $(PATCH_PATH)/*interposing*/*.o /opt/shiva/modules
+	cp $(PATCH_PATH)/cfs_patch1/*.o /opt/shiva/modules
+	cp $(PATCH_PATH)/amp_challenge10/*.o /opt/shiva/modules
 	cat shiva.ansi
 clean:
 	rm -f *.o shiva

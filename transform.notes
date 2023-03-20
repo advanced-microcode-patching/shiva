@@ -1,0 +1,16 @@
+0x40000: [foo_v2_first_half]
+0x400c0: [patch_code:shiva_tf_fn_name_foo] <- it's r_offset will be inaccurate without adding the transform offsets.
+0x400d8: [foo_v2_second_half]
+
+--
+
+A transform function defined in the patch such as '__shiva_tf_splice_fn_foo'
+(Notice it ends in 'foo'). With another function called 'foo' in the same
+patch will cause a resolution conflict in the external linking process and
+give ambiguous behavior. We need to have a shiva-gcc wrapper for the modules
+ideally.
+
+
+
+
+

@@ -1,0 +1,37 @@
+
+## Shiva modules
+
+The microcode patching process of building an additional runtime image
+for the Shiva module is explained in this document along with the details
+on symbol resolution, relocations, transformations, and external re-linking.
+
+Shiva modules are ELF relocatable objects that define patch code and data.
+At runtime, Shiva parses the ELF object, and builds a process image by mapping
+all of the modules code and data into corresponding ELF sections in memory.
+For example, the .text and .rodata sections are allocatable readonly sections
+and are therefore copied into the modules text segment. Shiva creates an internal
+entry that represents where each section lives within memory.
+
+- From shiva.h
+```
+typedef enum shiva_module_section_map_attr {
+        LP_SECTION_TEXTSEGMENT = 0,
+        LP_SECTION_DATASEGMENT,
+        LP_SECTION_BSS_SEGMENT,
+        LP_SECTION_UNKNOWN
+} shiva_module_section_map_attr_t;
+
+struct shiva_module_section_mapping {
+        struct elf_section section;
+        shiva_module_section_map_attr_t map_attribute;
+        uint64_t vaddr; /* Which memory address the section contents is placed in */
+        uint64_t offset;
+        uint64_t size;
+        char *name;
+        TAILQ_ENTRY(shiva_module_section_mapping) _linkage;
+};
+```
+
+## Symbol resolution, interposition, ordering
+
+

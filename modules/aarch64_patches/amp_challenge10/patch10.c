@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
+#include "shiva_module.h"
 
 /*
  * These are external .bss variables.
@@ -8,13 +9,11 @@ extern uint16_t size;
 extern uint8_t num_packets;
 
 /*
- * In the future a gcc plugin will offer 
- * __attribute__((shiva_patch(start_vaddr, len))
+ * Example of using a "Shiva Transformation". The
+ * Splice transformation allows us to splice C code
+ * into an existing function.
  */
-uint64_t shiva_insert_patch1_start_0x9b74 = 0;
-uint64_t shiva_insert_patch1_end_0x9b8c = 0;
-
-void * __attribute__((naked)) shiva_insert_patch1(void)
+SHIVA_T_SPLICE_FUNCTION(transport_handler, 0x9b6c, 0x9b94)
 {
 	if ((num_packets * 7) != size) {
 		printf("RTS mismatch detected\n");

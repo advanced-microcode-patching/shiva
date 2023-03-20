@@ -26,6 +26,7 @@
 #include "./udis86-1.7.2/udis86.h"
 #include "/opt/elfmaster/include/libelfmaster.h"
 #include "shiva_debug.h"
+#include "shiva_misc.h"
 
 #define SHIVA_SIGNATURE 0x31f64
 
@@ -56,9 +57,14 @@
 #define SHIVA_TARGET_BASE	0x8000000
 #endif
 
-#define SHIVA_MODULE_F_RUNTIME	(1UL << 0)
-#define SHIVA_MODULE_F_INIT	(1UL << 1)
-#define SHIVA_MODULE_F_DUMMY_TEXT	(1UL << 2)
+/*
+ * These flags are set to indicate various attributes of the loaded
+ * shiva module.
+ */
+#define SHIVA_MODULE_F_RUNTIME	(1UL << 0) /* deprecated, meaningless */
+#define SHIVA_MODULE_F_INIT	(1UL << 1) /* deprecated, meaningless */
+#define SHIVA_MODULE_F_DUMMY_TEXT	(1UL << 2) /* Module has empty text region */
+#define SHIVA_MODULE_F_TRANSFORM	(1UL << 3) /* Module has transform records */
 
 #define SHIVA_DT_NEEDED	(DT_LOOS + 10)
 #define SHIVA_DT_SEARCH (DT_LOOS + 11)
@@ -154,15 +160,20 @@ typedef enum shiva_branch_type {
 	SHIVA_BRANCH_RET
 } shiva_branch_type_t;
 
-#define SHIVA_BRANCH_F_PLTCALL  (1UL << 0)
+#define SHIVA_BRANCH_F_PLTCALL  	(1UL << 0)
+#define SHIVA_BRANCH_F_SRC_SYMINFO	(1UL << 1) /* symbol info of the source function is present */
+#define SHIVA_BRANCH_F_DST_SYMINFO	(1UL << 2) /* symbol info of the dest function is present  */
+#define SHIVA_BRANCH_F_INDIRECT		(1UL << 3) /* Indirect jmp or call (i.e. func pointer) */
 
 struct shiva_branch_site {
+	/* Original instruction */
 #if __x86_64__
 	uint8_t o_insn[15];
 #elif __aarch64__
 	uint32_t o_insn;
 #endif
-	struct elf_symbol symbol; // symbol being called
+	struct elf_symbol current_function; // source function of the branch
+	struct elf_symbol symbol; // symbol/func that is being called
 	shiva_branch_type_t branch_type;
 	uint64_t branch_flags;
 	uint64_t target_vaddr;
@@ -174,6 +185,7 @@ struct shiva_branch_site {
 			   * retaddr is not used in any other branch
 			   * site type.
 			   */
+	char *insn_string; /* mnemonic string + op string */
 	TAILQ_ENTRY(shiva_branch_site) _linkage;
 };
 
@@ -200,6 +212,10 @@ struct shiva_branch_site {
 #define SHIVA_XREF_TYPE_UNKNOWN 4
 
 #define SHIVA_XREF_F_INDIRECT	(1UL << 0) /* i.e. got[entry] holds address to .bss variable */
+#define SHIVA_XREF_F_SRC_SYMINFO	(1UL << 1) /* we have src func symbol of xref */
+#define SHIVA_XREF_F_DST_SYMINFO	(1UL << 2) /* we have dst symbol info */
+#define SHIVA_XREF_F_DEREF_SYMINFO	(1UL << 3)
+#define SHIVA_XREF_F_TO_SECTION		(1UL << 4) /* xref to a section (i.e. .rodata) with no syminfo */
 
 struct shiva_xref_site {
 	int type;
@@ -211,10 +227,12 @@ struct shiva_xref_site {
 	uint64_t next_imm; /* imm value of the add/str/ldr instruction */
 	uint64_t next_site; /* site address of the add/str/ldr instruction */
 	uint64_t next_o_insn; /* original instruction bytes of instruction after adrp */
-	struct elf_symbol symbol;
+	uint64_t target_vaddr; /* addr that is being xref'd. add to base_vaddr at runtime */
+	struct elf_symbol deref_symbol; /* Indirect symbol value pointed to by symbol.value */
+	struct elf_symbol symbol; /* symbol info for the symbol the xref goes to */
+	struct elf_symbol current_function; /* syminfo for src function if syminfo flag is set */
 	TAILQ_ENTRY(shiva_xref_site) _linkage;
 } shiva_xref_site_t;
-
 /*
  * TODO: Change naming convention, LP_ may be
  * left over from the original linker I made
@@ -286,6 +304,40 @@ typedef enum shiva_linking_mode {
 	SHIVA_LINKING_UNKNOWN
 } shiva_linking_mode_t;
 
+typedef enum shiva_transform_type {
+	SHIVA_TRANSFORM_SPLICE_FUNCTION = 0,
+	SHIVA_TRANSFORM_EMIT_BYTECODE = 1,
+	SHIVA_TRANSFORM_UNKNOWN
+} shiva_transform_type_t;
+
+typedef struct shiva_transform {
+	shiva_transform_type_t type;
+	struct elf_symbol target_symbol;
+	struct elf_symbol source_symbol;
+	struct elf_symbol next_func; /* symbol of next function after the one being spliced */
+	uint64_t offset; /* offset initial transformation */
+	uint64_t old_len; /* length of old code/data being inserted */
+	uint64_t new_len; /* length of new code/data being inserted */
+	uint64_t ext_len; /* Extra length of function to make room for .text rdonly relocs */
+	uint64_t ext_off; /* Offset of where extra .text area begins */
+#define SHIVA_TRANSFORM_F_REPLACE		(1UL << 0)
+#define SHIVA_TRANSFORM_F_INJECT		(1UL << 1)
+#define SHIVA_TRANSFORM_F_NOP_PAD		(1UL << 2)
+#define SHIVA_TRANSFORM_F_EXTEND		(1UL << 3)
+	uint64_t flags; /* flags describe behavior, such as ovewrite, extend, etc. */
+	uint8_t *ptr; /* points to the new code or data that is apart of the transform */
+	char *name; /* simply points to target_symbol.name */
+	size_t segment_offset;
+	struct {
+		size_t copy_len1;
+		size_t copy_len2;
+		size_t copy_len3;
+	} splice;
+	TAILQ_HEAD(, shiva_branch_site) branch_list;
+	TAILQ_HEAD(, shiva_xref_site) xref_list;
+	TAILQ_ENTRY(shiva_transform) _linkage;
+} shiva_transform_t;
+
 struct shiva_module {
 	int fd;
 	uint64_t flags;
@@ -306,7 +358,8 @@ struct shiva_module {
 	uint64_t data_vaddr;
 	uint64_t bss_vaddr;
 	uint64_t shiva_base; /* base address of shiva executable at runtime */
-	uint64_t target_base;
+	uint64_t target_base; /* base address of target executable at runtime */
+	size_t tf_text_offset; /* Offset of .text in module runtime image after transforms */
 	elfobj_t elfobj; /* elfobj to the module */
 	elfobj_t self; /* elfobj to self (Shiva binary) */
 	elfobj_t *target_elfobj; /* elfobj of target executable */
@@ -315,6 +368,7 @@ struct shiva_module {
 		TAILQ_HEAD(, shiva_module_got_entry) got_list;
 		TAILQ_HEAD(, shiva_module_section_mapping) section_maplist;
 		TAILQ_HEAD(, shiva_module_plt_entry) plt_list;
+		TAILQ_HEAD(, shiva_transform) transform_list;
 	} tailq;
 	struct {
 		struct hsearch_data bss;
@@ -713,5 +767,9 @@ bool shiva_trace_thread_insert(shiva_ctx_t *, pid_t, uint64_t *);
 void shiva_xref_iterator_init(struct shiva_ctx *, struct shiva_xref_iterator *);
 shiva_iterator_res_t shiva_xref_iterator_next(struct shiva_xref_iterator *, struct shiva_xref_site *);
 
-
+/*
+ * shiva_transform.c
+ */
+bool shiva_tf_process_transforms(struct shiva_module *, uint8_t *,
+    struct elf_section section, uint64_t *segment_offset);
 #endif

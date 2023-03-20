@@ -8,9 +8,14 @@
 #define ARM_INSN_LEN 4
 #endif
 
-static bool
-shiva_analyze_make_xref(struct shiva_ctx *ctx, struct elf_symbol *symbol, int xref_type, uint64_t xref_flags, 
-    uint64_t adrp_site, uint64_t adrp_imm, uint64_t next_imm, uint32_t adrp_o_bytes, uint32_t next_o_bytes)
+/*
+ * Way to many args, turn this into a macro.
+ */
+static inline bool
+shiva_analyze_make_xref(struct shiva_ctx *ctx, struct elf_symbol *symbol, struct elf_symbol *deref_symbol,
+    struct elf_symbol *src_func, int xref_type, uint64_t xref_flags, uint64_t adrp_site,
+    uint64_t adrp_imm, uint64_t next_imm,
+    uint32_t adrp_o_bytes, uint32_t next_o_bytes)
 {
 	struct shiva_xref_site *xref;
 	uint64_t gotaddr;
@@ -23,6 +28,7 @@ shiva_analyze_make_xref(struct shiva_ctx *ctx, struct elf_symbol *symbol, int xr
 	shiva_debug("XREF (Type: %d): site: %#lx target: %s(%#lx)\n",
 	    xref_type, adrp_site, symbol->name, symbol->value);
 	if (xref_flags & SHIVA_XREF_F_INDIRECT) {
+		memcpy(&xref->deref_symbol, deref_symbol, sizeof(struct elf_symbol));
 		gotaddr = (adrp_site & ~0xfff) + adrp_imm + next_imm;
 		xref->got = (uint64_t *)gotaddr;
 	}
@@ -34,10 +40,49 @@ shiva_analyze_make_xref(struct shiva_ctx *ctx, struct elf_symbol *symbol, int xr
 	xref->next_site = adrp_site + ARM_INSN_LEN;
 	xref->adrp_o_insn = adrp_o_bytes; //*(uint32_t *)&tmp_ptr[c];
 	xref->next_o_insn = next_o_bytes; //*(uint32_t *)&tmp_ptr[c + ARM_INSN_LEN];
+	xref->target_vaddr = (adrp_site & ~0xfff) + adrp_imm + next_imm;
 	shiva_debug("ADRP(%#lx): %x\n", adrp_site, xref->adrp_o_insn);
 	shiva_debug("NEXT(%#lx): %x\n", xref->next_site, xref->next_o_insn);
 	memcpy(&xref->symbol, symbol, sizeof(*symbol));
+	if (src_func != NULL)
+		memcpy(&xref->current_function, src_func, sizeof(*src_func));
 	TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref, _linkage);
+	return true;
+}
+
+static bool
+shiva_analyze_build_aarch64_jmp(struct shiva_ctx *ctx, uint64_t pc_vaddr)
+{
+	struct shiva_branch_site *tmp;
+	struct elf_symbol tmp_sym;
+	char *p = strchr(ctx->disas.insn->op_str, '#');
+
+	if (p == NULL) {
+		fprintf(stderr,
+		    "Unforseen parsing error in shiva_analyze_build_aarch64_jmp\n");
+		return false;
+	}
+	tmp = calloc(1, sizeof(*tmp));
+	if (tmp == NULL) {
+		perror("calloc");
+		return false;
+	}
+	tmp->target_vaddr = strtoul((p + 1), NULL, 16);
+	tmp->branch_site = pc_vaddr;
+	tmp->branch_type = SHIVA_BRANCH_JMP;
+	tmp->insn_string = shiva_xfmtstrdup("%s %s",
+	    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
+	if (elf_symbol_by_range(&ctx->elfobj, pc_vaddr,
+	    &tmp_sym) == true) {
+		tmp->branch_flags |= SHIVA_BRANCH_F_SRC_SYMINFO;
+		memcpy(&tmp->current_function, &tmp_sym, sizeof(tmp_sym));
+		shiva_debug("Source function found: %s\n", tmp_sym.name);
+	}
+	/*
+	 * Unconditional branch at a PC-relative offset
+	 */
+	shiva_debug("Found branch: %#lx:%s\n", pc_vaddr, tmp->insn_string);
+	TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 	return true;
 }
 
@@ -156,28 +201,83 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 		bool res;
 
 		shiva_debug("Address: %#lx\n", section.address + c);
-		shiva_debug("(uint32_t)textptr: %#x\n", *(uint32_t *)&code_ptr[c]);
+		shiva_debug("(uint32_t)textptr: %#x\n", *(uint32_t *)code_ptr);
 		if (c >= section.size)
 			break;
+		shiva_debug("code_ptr: %p\n", code_ptr);
 		res = cs_disasm_iter(ctx->disas.handle, (void *)&code_ptr, &code_len,
 		    &code_vaddr, ctx->disas.insn);
-		for (;;) {
-			if (*(uint32_t *)code_ptr != 0)
-				break;
+		if (res == false) {
+			shiva_debug("code_ptr after fail: %p\n", code_ptr);
+			shiva_debug("code_vaddr after fail: %lx\n", code_vaddr);
+			code_vaddr += ARM_INSN_LEN;
 			code_ptr += ARM_INSN_LEN;
+			continue;
+		}
+#if 0
+		for (;;) {
+			if (*(uint32_t *)code_ptr[c + 4] != 0)
+				break;
 			code_vaddr += ARM_INSN_LEN;
 			c += ARM_INSN_LEN;
 		}
+#endif
 		shiva_debug("0x%"PRIx64":\t%s\t\t%s\n", ctx->disas.insn->address,
 		    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
-		if (strcmp(ctx->disas.insn->mnemonic, "bl") == 0) {
+		if (strcmp(ctx->disas.insn->mnemonic, "b") == 0) {
+			if (shiva_analyze_build_aarch64_jmp(ctx, section.address + c)
+			    == false) {
+				fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
+				    ctx, section.address + c);
+				return false;
+			}
+		}
+		if (strncmp(ctx->disas.insn->mnemonic, "b.", 2) == 0) {
+			/*
+			 * Branch instructions:
+			 * b.eq, b.ne, b.gt, b.ge, b.lt, b.le, b.ls, b.hi,
+			 * b.cc, b.cs, b.cond
+			 */
+			if (shiva_analyze_build_aarch64_jmp(ctx, section.address + c)
+			    == false) {
+				fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
+				    ctx, section.address + c);
+				return false;
+			}
+		} else if (strncmp(ctx->disas.insn->mnemonic, "cb", 2) == 0) {
+			/*
+			 * Compare and branch
+			 * cbnz, cbz
+			 */
+			if (shiva_analyze_build_aarch64_jmp(ctx, section.address + c)
+			    == false) {
+				fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
+				    ctx, section.address + c);
+				return false;
+			}
+
+		} else if (strncmp(ctx->disas.insn->mnemonic, "tb", 2) == 0) {
+			/*
+			 * Test bit and branch
+			 * tbz, tbnz
+			 */
+			if (shiva_analyze_build_aarch64_jmp(ctx, section.address + c)
+			    == false) {
+				fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
+				    ctx, section.address + c);
+				return false;
+			}
+
+		} else if (strcmp(ctx->disas.insn->mnemonic, "bl") == 0) {
 			struct shiva_branch_site *tmp;
 			uint64_t addr;
+			struct elf_symbol tmp_sym;
 			char *p = strchr(ctx->disas.insn->op_str, '#');
 
 			if (p == NULL) {
-				fprintf(stderr, "unexpected error parsing: '%s'\n",
-				    ctx->disas.insn->op_str);
+				continue;
+				fprintf(stderr, "unexpected error parsing: '%s %s'\n",
+				    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
 				return false;
 			}
 			call_site = section.address + c;
@@ -194,6 +294,8 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			    &symbol) == false) {
 				struct elf_plt plt_entry;
 				elf_plt_iterator_t plt_iter;
+
+				symbol.name = NULL;
 
 				elf_plt_iterator_init(&ctx->elfobj, &plt_iter);
 				while (elf_plt_iterator_next(&plt_iter, &plt_entry) == ELF_ITER_OK) {
@@ -223,8 +325,19 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			memcpy(&tmp->symbol, &symbol, sizeof(symbol));
 			tmp->branch_type = SHIVA_BRANCH_CALL;
 			tmp->branch_site = call_site;
-			shiva_debug("Inserting branch for symbol %s callsite: %#lx\n", symbol.name, call_site);
+			tmp->branch_flags |= SHIVA_BRANCH_F_DST_SYMINFO;
+			tmp->insn_string = shiva_xfmtstrdup("%s %s",
+			    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
+
+			if (elf_symbol_by_range(&ctx->elfobj, code_vaddr - 4,
+			    &tmp_sym) == true) {
+				tmp->branch_flags |= SHIVA_BRANCH_F_SRC_SYMINFO;
+				memcpy(&tmp->current_function, &tmp_sym, sizeof(tmp_sym));
+				shiva_debug("Source symbol included: %s\n", tmp_sym.name);
+			}
+			shiva_debug("Inserting branch for symbol %s callsite: %#lx\n", tmp->symbol.name, tmp->branch_site);
 			TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
+			shiva_debug("Done inserting it\n");
 		} else if (strcmp(ctx->disas.insn->mnemonic, "adrp") == 0) {
 			uint64_t adrp_imm, adrp_site;
 			uint32_t adrp_o_bytes = *(uint32_t *)ctx->disas.insn->bytes;
@@ -246,8 +359,9 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			char *p = strchr(ctx->disas.insn->op_str, '#');
 
 			if (p == NULL) {
-				fprintf(stderr, "unexpected error parsing: '%s'\n",
-				    ctx->disas.insn->op_str);
+				continue;
+				fprintf(stderr, "unexpected error parsing: '%s %s'\n",
+				    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
 				return false;
 			}
 			adrp_site = section.address + c;
@@ -289,16 +403,26 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			uint32_t tmp_imm;
 			uint64_t qword;
 			uint64_t xref_flags = 0;
+			bool found_symbol = false;
 
 			p = strchr(ctx->disas.insn->op_str, '#');
 			if (p == NULL) {
-				fprintf(stderr, "unexpected error parsing: '%s'\n",
-				    ctx->disas.insn->op_str);
+				continue;
+				fprintf(stderr, "unexpected error parsing: '%s %s'\n",
+				    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
 				return false;
 			}
 			tmp_imm = strtoul((p + 1), NULL, 16);
 			shiva_debug("Looking up symbol at address %#lx in"
 			    " the target executable\n", target_page + tmp_imm);
+			/*
+			 * Look up the symbol that this xref points to.
+			 */
+			if (elf_symbol_by_value_lookup(&ctx->elfobj, target_page + tmp_imm,
+			    &symbol) == true) {
+				shiva_debug("Target xref symbol '%s'\n", symbol.name);
+				found_symbol = true;
+			}
 			/*
 			 * Does target_page + tmp_imm lead to storage of the address
 			 * we are looking for? Or does it calculate directly to the
@@ -312,32 +436,68 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 				shiva_debug("Failed to read address %#lx\n", target_page + tmp_imm);
 				continue;
 			}
+			/*
+			 * Create a symbol to represent the location represented by adrp.
+			 * We have not found one, so we create one because it will be used
+			 * to install external re-linking patches for adrp sequences.
+			 */
+			if (found_symbol == false) {
+				struct elf_section shdr;
+
+				res = elf_section_by_address(&ctx->elfobj, target_page + tmp_imm,
+				    &shdr);
+				if (res == false) {
+					fprintf(stderr, "Unable to find section associated with addr: %#lx\n",
+					    target_page + tmp_imm);
+					return false;
+				}
+				shiva_debug("%#lx - section.address:%#lx = %#lx\n", target_page + tmp_imm, shdr.address,
+				    target_page + tmp_imm - shdr.address);
+				symbol.name = shiva_xfmtstrdup("%s+%lx", shdr.name,
+				    target_page + tmp_imm - shdr.address);
+				symbol.value = target_page + tmp_imm;
+				symbol.size = sizeof(uint64_t);
+				symbol.bind = STB_GLOBAL;
+				symbol.type = STT_OBJECT;
+				symbol.visibility = STV_PROTECTED;
+				if (elf_section_index_by_name(&ctx->elfobj, shdr.name, &symbol.shndx)
+				    == false) {
+					fprintf(stderr, "Failed to find section index for %s in %s\n",
+					    shdr.name, elf_pathname(&ctx->elfobj));
+					return true;
+				}
+			}
+			/*
+			 * We must get the name of the function that the
+			 * xref code is within. This is necessary later on
+			 * if transformations happen.
+			 */
+			struct elf_symbol tmp_sym, deref_symbol;
+			struct elf_symbol *src_func = NULL;
+
+			if (elf_symbol_by_range(&ctx->elfobj, code_vaddr - 4,
+			    &tmp_sym) == true) {
+				xref_flags |= SHIVA_XREF_F_SRC_SYMINFO;
+				src_func = shiva_malloc(sizeof(*src_func));
+				memcpy(src_func, &tmp_sym, sizeof(*src_func));
+				shiva_debug("Source symbol included: %s\n", tmp_sym.name);
+			}
 			shiva_debug("Looking up value %#lx found at %#lx\n", qword, target_page + tmp_imm);
 			res = elf_symbol_by_value_lookup(&ctx->elfobj,
-			    qword, &symbol);
+			    qword, &deref_symbol);
 			if (res == true) {
 				xref_flags |= SHIVA_XREF_F_INDIRECT;
-
-				shiva_debug("XREF (Indirect via GOT) (Type: %d): Site: %#lx target: %s(%#lx)\n",
-				    xref_type, adrp_site, symbol.name, symbol.value);
-				res = shiva_analyze_make_xref(ctx, &symbol, xref_type, xref_flags, adrp_site,
-				    adrp_imm, tmp_imm, adrp_o_bytes, next_o_bytes);
-				if (res == false) {
-					fprintf(stderr, "shiva_analyze_install_xref failed\n");
-					return false;
-				}
-				continue;
+				shiva_debug("XREF (Indirect via GOT) (Type: %d): Site: %#lx target: %s (Deref)-> %s(%#lx)\n",
+				    xref_type, adrp_site, symbol.name ? symbol.name : "<unknown>",
+				    deref_symbol.name, deref_symbol.value);
 			}
-			if (elf_symbol_by_value_lookup(&ctx->elfobj,
-			    target_page + tmp_imm, &symbol) == true) {
-				res = shiva_analyze_make_xref(ctx, &symbol, xref_type, xref_flags, adrp_site,
-				    adrp_imm, tmp_imm, adrp_o_bytes, next_o_bytes);
-				if (res == false ) {
-					fprintf(stderr, "shiva_analyze_install_xref failed\n");
-					return false;
-				}
-				continue;
+			res = shiva_analyze_make_xref(ctx, &symbol, &deref_symbol, src_func, xref_type, xref_flags, adrp_site,
+			    adrp_imm, tmp_imm, adrp_o_bytes, next_o_bytes);
+			if (res == false ) {
+				fprintf(stderr, "shiva_analyze_install_xref failed\n");
+				return false;
 			}
+			continue;
 		}
 	}
 #endif

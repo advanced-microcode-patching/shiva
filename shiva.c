@@ -149,7 +149,12 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 			return false;
 		}
 	} else {
-		strcpy(ctx->module_path, SHIVA_DEFAULT_MODULE_PATH);
+		char *mpath = getenv("SHIVA_MODULE_PATH");
+		if (mpath != NULL) {
+			strcpy(ctx->module_path, mpath);
+		} else {
+			strcpy(ctx->module_path, SHIVA_DEFAULT_MODULE_PATH);
+		}
 	}
 
 	if (shiva_module_loader(ctx, ctx->module_path,
@@ -276,7 +281,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	 * These steps are to be carried out from within the shiva_trace API,
 	 * specifically shiva_trace_set_breakpoint case PLTGOT_HOOK 
 	 */
-
 	test_mark(); /* Used for debugging Shiva with GDB. I set a breakpoint on test_mark() */
 	uint64_t *ptr = (void *)rsp;
 	SHIVA_ULEXEC_LDSO_TRANSFER(rsp, ctx->ulexec.ldso.entry_point, entry_point);
@@ -426,13 +430,18 @@ int main(int argc, char **argv, char **envp)
 		goto transfer_control;
 
 	if (shiva_target_has_prelinking(&ctx) == true) {
-                if (shiva_target_get_module_path(&ctx, ctx.module_path) == false) {
-                        fprintf(stderr, "shiva_target_get_module_path() failed\n");
-                        return false;
-                }
-        } else {
-                strcpy(ctx.module_path, SHIVA_DEFAULT_MODULE_PATH);
-        }
+		if (shiva_target_get_module_path(&ctx, ctx.module_path) == false) {
+			fprintf(stderr, "shiva_target_get_module_path() failed\n");
+			return false;
+		}
+	} else {
+		char *mpath = getenv("SHIVA_MODULE_PATH");
+		if (mpath != NULL) {
+			strcpy(ctx.module_path, mpath);
+		} else {
+			strcpy(ctx.module_path, SHIVA_DEFAULT_MODULE_PATH);
+		}
+	}
 
 	if (shiva_module_loader(&ctx, ctx.module_path,
 	    &ctx.module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
