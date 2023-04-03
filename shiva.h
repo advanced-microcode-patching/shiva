@@ -65,6 +65,7 @@
 #define SHIVA_MODULE_F_INIT	(1UL << 1) /* deprecated, meaningless */
 #define SHIVA_MODULE_F_DUMMY_TEXT	(1UL << 2) /* Module has empty text region */
 #define SHIVA_MODULE_F_TRANSFORM	(1UL << 3) /* Module has transform records */
+#define SHIVA_MODULE_F_DELAYED_RELOCS	(1UL << 4) /* Module has delayed relocs to process */
 
 #define SHIVA_DT_NEEDED	(DT_LOOS + 10)
 #define SHIVA_DT_SEARCH (DT_LOOS + 11)
@@ -99,6 +100,19 @@
 						"mov x0, #0	\n"	\
 						"ret		" \
 						:: "r" (stack), "r" (addr));
+
+#define SHIVA_ULEXEC_TARGET_TRANSFER2(entry) __asm__ __volatile__ ("mov x9, %0\n" \
+								   "br x9"	\
+								   :: "r"(entry));
+
+#define SHIVA_ULEXEC_TARGET_TRANSFER(entry) __asm__ __volatile__("mov x30, %0	\n"	\
+								 "ret		" \
+	 						 	:: "r"(entry));
+#define SHIVA_ULEXEC_TARGET_TRANSFER3(entry, arg0) __asm__ __volatile__ ("mov x0, %0\n"	\
+								   "mov x9, %1\n" \
+                                                                   "blr x9"      \
+                                                                   :: "r"(arg0), "r"(entry));
+
 #endif
 
 /*
@@ -338,6 +352,22 @@ typedef struct shiva_transform {
 	TAILQ_ENTRY(shiva_transform) _linkage;
 } shiva_transform_t;
 
+/*
+ * Delayed relocatoin entries are not handled until
+ * after ld-linux.so is completely done and passes
+ * control back to Shiva AT_ENTRY, if needed.
+ */
+struct shiva_module_delayed_reloc {
+	uint8_t *rel_unit;
+	uint64_t rel_addr;
+	uint64_t symval;	   /* The symbols value */
+	struct elf_relocation rel; /* Original relocation: (May be updated/modified by Transforms though) */
+	uint64_t flags;
+	char *symname;
+	char so_path[PATH_MAX];
+	TAILQ_ENTRY(shiva_module_delayed_reloc) _linkage;
+} shiva_module_delayed_reloc_t;
+
 struct shiva_module {
 	int fd;
 	uint64_t flags;
@@ -369,12 +399,14 @@ struct shiva_module {
 		TAILQ_HEAD(, shiva_module_section_mapping) section_maplist;
 		TAILQ_HEAD(, shiva_module_plt_entry) plt_list;
 		TAILQ_HEAD(, shiva_transform) transform_list;
+		TAILQ_HEAD(, shiva_module_delayed_reloc) delayed_reloc_list;
 	} tailq;
 	struct {
 		struct hsearch_data bss;
 		struct hsearch_data got;
 	} cache;
 	shiva_linking_mode_t mode;
+	struct shiva_ctx *ctx; /* this is a pointer back to the main context */
 };
 
 typedef struct shiva_trace_regset_x86_64 {
@@ -535,6 +567,9 @@ bool shiva_maps_validate_addr(shiva_ctx_t *, uint64_t);
 void shiva_maps_iterator_init(shiva_ctx_t *, shiva_maps_iterator_t *);
 shiva_iterator_res_t shiva_maps_iterator_next(shiva_maps_iterator_t *, struct shiva_mmap_entry *);
 bool shiva_maps_get_base(shiva_ctx_t *, uint64_t *);
+bool shiva_maps_get_so_base(struct shiva_ctx *, char *,
+    uint64_t *);
+
 /*
  * shiva_callsite.c
  */
@@ -772,4 +807,15 @@ shiva_iterator_res_t shiva_xref_iterator_next(struct shiva_xref_iterator *, stru
  */
 bool shiva_tf_process_transforms(struct shiva_module *, uint8_t *,
     struct elf_section section, uint64_t *segment_offset);
+
+/*
+ * shiva_so.c
+ */
+bool shiva_so_resolve_symbol(struct shiva_module *, char *, struct elf_symbol *,
+    char **);
+
+/*
+ * shiva_post_linker.c
+ */
+void shiva_post_linker(void);
 #endif

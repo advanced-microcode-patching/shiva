@@ -36,6 +36,7 @@ uint8_t plt_stub[8] = "\x11\x00\x00\x58"  /* ldr	x17, got_entry_mem */
 
 static bool module_has_transforms(struct shiva_module *);
 static bool get_section_mapping(struct shiva_module *, char *, struct shiva_module_section_mapping *);
+static bool enable_post_linker(struct shiva_module *);
 /*
  * Returns the name of the ELF section that the symbol lives in, within the
  * loaded ET_REL module.
@@ -330,7 +331,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 	shiva_iterator_res_t ires;
 	struct elf_symbol symbol;
 	bool res;
-	char *symname = NULL;
+	const char *symname = NULL;
 
 #if __x86_64__
 	fprintf(stderr, "Cannot apply external patch links on x86_64. Unsupported\n");
@@ -486,13 +487,26 @@ got_entry_by_name(struct shiva_module *linker, char *name, struct shiva_module_g
 static bool
 resolve_pltgot_entries(struct shiva_module *linker)
 {
-	uint64_t gotaddr;
+	uint64_t gotaddr, so_base;
 	uint64_t *GOT;
 	struct shiva_module_got_entry *current = NULL;
+	char *so_path;
+	bool res;
 
+	/*
+	 * Order of symbol resolution:
+	 * 1. Resolve symbol from local Shiva module (i.e. patch.o)
+	 * 2. Resolve symbol from target executable
+	 * 3. Resolve symbol from targets shared library dependencies.
+	 */
 	gotaddr = linker->data_vaddr + linker->pltgot_off;
 	TAILQ_FOREACH(current, &linker->tailq.got_list, _linkage) {
 		struct elf_symbol symbol;
+
+		/*
+		 * Setup the modules internal GOT table.
+		 */
+		GOT = (uint64_t *)((uint64_t)(linker->data_vaddr + linker->pltgot_off + current->gotoff));
 
 		/*
 		 * First look for the functions symbol within the loaded Shiva module
@@ -501,19 +515,16 @@ resolve_pltgot_entries(struct shiva_module *linker)
 			/*
 			 * TODO: investigate why we are accepting STT_OBJECT here. This is our
 			 * PLT/GOT for the Shiva module. Should only be function calls in this
-			 * part of the GOT, I think...
+			 * part of the GOT, I think... Could cause a bug.
 			 */
 			if (symbol.type == STT_FUNC || symbol.type == STT_OBJECT) {
 				shiva_debug("Setting [%#lx] GOT entry '%s' to %#lx\n",
 				    linker->data_vaddr + linker->pltgot_off +
 				    current->gotoff, current->symname, symbol.value + linker->text_vaddr +
 				    (module_has_transforms(linker) == true ? linker->tf_text_offset : 0));
-
-				GOT = (uint64_t *)
-				    ((uint64_t)(linker->data_vaddr + linker->pltgot_off + current->gotoff));
 				*GOT = symbol.value + linker->text_vaddr +
 				    (module_has_transforms(linker) == true ? linker->tf_text_offset : 0);
-				shiva_debug("*GOT = %#lx\n", *GOT);
+				shiva_debug("*GOT = %#lx (Address within Shiva module)\n", *GOT);
 				continue;
 			}
 		}
@@ -525,6 +536,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		if (linker->mode == SHIVA_LINKING_MICROCODE_PATCH) {
 			bool in_target = false;
 			struct elf_plt plt_entry;
+			struct shiva_module_delayed_reloc *delay_rel;
 
 			if (elf_symbol_by_name(linker->target_elfobj, current->symname,
 			    &symbol) == true) {
@@ -539,40 +551,109 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				 */
 					if (elf_plt_by_name(linker->target_elfobj,
 					    symbol.name, &plt_entry) == true) {
-						if (elf_symbol_by_name(&linker->self,
-						    symbol.name, &symbol) == false) {
-							fprintf(stderr, "failed to resolve symbol '%s'\n", symbol.name);
+						struct elf_symbol tmp;
+						char path_out[PATH_MAX];
+
+						shiva_debug("Symbol '%s' is a PLT entry, let's look it up in the shared libraries\n",
+						    symbol.name);
+						res = shiva_so_resolve_symbol(linker, symbol.name, &tmp, &so_path);
+						if (res == false) {
+							fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
+							    symbol.name);
 							return false;
 						}
+						if (realpath(so_path, path_out) == NULL) {
+							perror("realpath");
+							return false;
+						}
+						delay_rel = shiva_malloc(sizeof(*delay_rel));
+						delay_rel->rel_unit = (uint8_t *)GOT;
+						delay_rel->rel_addr = (uint64_t)GOT;
+						delay_rel->symval = tmp.value;
+						delay_rel->symname = shiva_strdup(symbol.name);
+						strncpy(delay_rel->so_path, path_out, PATH_MAX);
+						delay_rel->so_path[PATH_MAX - 1] = '\0';
+						shiva_debug("Delayed relocation for GOT[%s] -> lookup %s\n",
+						    symbol.name, delay_rel->so_path);
+						/*
+						 * We don't fill out the value of the GOT. The shared library
+						 * whom the symbol lives in hasn't even been loaded by the
+						 * ld-linux.so yes. Once ld-linux.so is finished it will pass
+						 * control to shiva_post_linker() function once the base address
+						 * can be known of the library. We must insert a delayed relocation
+						 * entry.
+						 */
+						if (enable_post_linker(linker) == false) {
+							fprintf(stderr, "failed to enable delayed relocs\n");
+							return false;
+						}
+						TAILQ_INSERT_TAIL(&linker->tailq.delayed_reloc_list, delay_rel, _linkage);
+					} else {
+						fprintf(stderr, "Undefined linking behavior: No PLT entry for STT_FUNC '%s' with zero value\n",
+						    symbol.name);
+						return false;
 					}
 				} else if (symbol.value > 0 && symbol.type == STT_FUNC) {
-					shiva_debug("resolved symbol IN TARGET\n");
-					in_target = true;
+					shiva_debug("resolved symbol in target: %s\n", elf_pathname(linker->target_elfobj));
+					*(uint64_t *)GOT = symbol.value + linker->target_base;
 				}
 			} else {
 				/*
 				 * The symbol isn't in the target ELF exectutable, or in the Shiva
-				 * module. Let's try to get it from the Shiva linker itself (Which
-				 * has musl-libc linked into it statically).
+				 * module. Let's try resolving it from the shared library dependencies
+				 * listed in the targets dynamic segment.
 				 */
-				if (elf_symbol_by_name(&linker->self, symbol.name, &symbol) == false) {
-					fprintf(stderr, "failed to resolve symbol '%s'\n", symbol.name);
+				struct elf_symbol tmp;
+				char path_out[PATH_MAX];
+
+				res = shiva_so_resolve_symbol(linker, symbol.name, &tmp, &so_path);
+				if (res == false) {
+					fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
+					    symbol.name);
 					return false;
 				}
+				if (realpath(so_path, path_out) == NULL) {
+					perror("realpath");
+					return false;
+				}
+				delay_rel = shiva_malloc(sizeof(*delay_rel));
+				delay_rel->rel_unit = (uint8_t *)GOT;
+				delay_rel->rel_addr = (uint64_t)GOT;
+				delay_rel->symval = tmp.value;
+				delay_rel->symname = shiva_strdup(symbol.name);
+				strncpy(delay_rel->so_path, path_out, PATH_MAX);
+				delay_rel->so_path[PATH_MAX - 1] = '\0';
+				shiva_debug("Delayed relocation for GOT[%s] -> lookup %s\n",
+				    symbol.name, delay_rel->so_path);
+				/*
+				 * We don't fill out the value of the GOT. The shared library
+				 * whom the symbol lives in hasn't even been loaded by the
+				 * ld-linux.so yes. Once ld-linux.so is finished it will pass
+				 * control to shiva_post_linker() function once the base address
+				 * can be known of the library. We must insert a delayed relocation
+				 * entry.
+				 */
+				 if (enable_post_linker(linker) == false) {
+					fprintf(stderr, "failed to enable delayed relocs\n");
+					return false;
+				}
+				TAILQ_INSERT_TAIL(&linker->tailq.delayed_reloc_list, delay_rel, _linkage);
+				continue;
 			}
-			if (in_target == true) {
-				shiva_debug("Found symbol '%s' within target ELF executable. Symbol value: %#lx\n",
-				    current->symname, symbol.value);
-			} else {
-				shiva_debug("Found symbol '%s' within Shiva binary. Symbol value: %#lx\n",
-				    current->symname, symbol.value);
-			}
+			/*
+			 * This next condition only exists on x86_64 currently anyway.
+			 * We may remove linker->mode from the AMP version of Shiva
+			 * and start erraticating old linking styles that are still
+			 * important, but not so much to AMP. Although I think it could
+			 * be?
+			 */
 		} else if (linker->mode == SHIVA_LINKING_MODULE) {
 			if (elf_symbol_by_name(&linker->self, current->symname, &symbol) == false) {
 				fprintf(stderr, "Could not resolve symbol '%s'. Linkage failure!\n",
 				    current->symname);
 				return false;
 			}
+			*(uint64_t *)GOT = symbol.value;
 			shiva_debug("Found symbol '%s':%#lx within the Shiva API\n", current->symname,
 			    symbol.value);
 		} else {
@@ -580,25 +661,6 @@ resolve_pltgot_entries(struct shiva_module *linker)
 			shiva_debug("undefined linking behavior\n");
 			return false;
 		}
-		GOT = (uint64_t *)((uint64_t)(linker->data_vaddr + linker->pltgot_off + current->gotoff));
-#ifdef __x86_64__
-#ifdef SHIVA_STANDALONE
-		/*
-		 * NOTE: Shiva is now linked as an ET_EXEC in standalone mode to promote
-		 * certain capabilities, such as 'SHIVA_TRACE_BP_CALL' hooks, which only work
-		 * in small code models.
-		 */
-		*(uint64_t *)GOT = symbol.value;
-#else
-		*(uint64_t *)GOT = symbol.value + linker->shiva_base;
-#endif
-#elif __aarch64__
-		/*
-		 * NOTE aarch64 version of Shiva is an ET_EXEC always.
-		 */
-		shiva_debug("HELLO: GOT(%p) = %#lx\n", GOT, symbol.value);
-		*(uint64_t *)GOT = symbol.value;
-#endif
 	}
 	return true;
 }
@@ -665,15 +727,17 @@ get_section_mapping(struct shiva_module *linker, char *shdrname, struct shiva_mo
 }
 
 /*
- * Looks for a symbol within the /opt/bin/shiva executable process address space,
- * or within the target executable, depending.
+ * An STT_NOTYPE symbol was found within the Shiva module;
+ * This must be an external reference to a symbol. Search order:
+ * 1. Check target executable for symbol.
+ * 2. Check target executable's dependencies (DT_NEEDED) for symbol.
  */
 #define RESOLVER_TARGET_SHIVA_SELF 0
 #define RESOLVER_TARGET_EXECUTABLE 1
-
+#define RESOLVER_TARGET_SO_RESOLVE 2
 static bool
 internal_symresolve(struct shiva_module *linker, char *symname,
-    struct elf_symbol *symbol, uint64_t *e_type, uint64_t *type)
+    struct elf_symbol *symbol, uint64_t *e_type, uint64_t *type, char *path_out)
 {
 	struct elf_symbol tmp;
 	struct elfobj *elfobj = linker->mode == SHIVA_LINKING_MODULE ?
@@ -688,7 +752,17 @@ internal_symresolve(struct shiva_module *linker, char *symname,
 	if (res == true) {
 		switch(tmp.type) {
 		case STT_NOTYPE:
+			/*
+			 * XXX this NOTYPE case is somewhat undefined. We're looking for a symbol
+			 * that was STT_NOTYPE in the Shiva patch, and so we search externally for
+			 * it, and it is again STT_NOTYPE. I think we might only hit this case
+			 * by random. Temporarily commenting this code out, I'm pretty sure this
+			 * is an invalid ELF linking path to take.
+			 */
 			shiva_debug("Found symbol '%s' in target, but it's NOTYPE\n", symname);
+			shiva_debug("Undefined linking behavior\n");
+			return false;
+#if 0
 			switch (linker->mode) {
 			case SHIVA_LINKING_MICROCODE_PATCH:
 				*e_type = elf_type(&linker->self);
@@ -704,6 +778,7 @@ internal_symresolve(struct shiva_module *linker, char *symname,
 				shiva_debug("Found no symbol '%s' in shiva binary\n", symname);
 				return false;
 			}
+#endif
 		case STT_FUNC:
 		case STT_OBJECT:
 			shiva_debug("Found symbol '%s' in %s\n", symname, linker->mode == SHIVA_LINKING_MODULE ?
@@ -719,6 +794,21 @@ internal_symresolve(struct shiva_module *linker, char *symname,
 			return false;
 		}
 	} else if (res == false && linker->mode == SHIVA_LINKING_MICROCODE_PATCH) {
+		char *so_path;
+
+		res = shiva_so_resolve_symbol(linker, symname, &tmp, &so_path);
+		if (res == true) {
+			*type = RESOLVER_TARGET_SO_RESOLVE;
+			*e_type = ET_DYN;
+			if (realpath(so_path, path_out) == NULL) {
+				perror("realpath");
+				return false;
+			}
+			shiva_debug("Found symbol '%s:%#lx' within shared library '%s'\n", symname,
+			    tmp.value, path_out);
+			memcpy(symbol, &tmp, sizeof(*symbol));
+			return true;
+		}
 		res = elf_symbol_by_name(&linker->self, symname, &tmp);
 		if (res == true) {
 			*type = RESOLVER_TARGET_SHIVA_SELF;
@@ -732,6 +822,50 @@ internal_symresolve(struct shiva_module *linker, char *symname,
 		}
 	}
 	return false;
+}
+
+static bool
+enable_post_linker(struct shiva_module *linker)
+{
+
+	shiva_ctx_t *ctx = linker->ctx;
+	shiva_auxv_iterator_t a_iter;
+	struct shiva_auxv_entry a_entry;
+
+	if (linker->flags & SHIVA_MODULE_F_DELAYED_RELOCS)
+		return true;
+
+	shiva_debug("Enabling post linker for delayed relocations\n");
+	linker->flags |= SHIVA_MODULE_F_DELAYED_RELOCS;
+	if (shiva_auxv_iterator_init(ctx, &a_iter,
+	    ctx->ulexec.auxv.vector) == false) {
+		fprintf(stderr, "shiva_auxv_iterator_init failed\n");
+		return false;
+	}
+	while (shiva_auxv_iterator_next(&a_iter, &a_entry) == SHIVA_ITER_OK) {
+		if (a_entry.type == AT_ENTRY) {
+			uint64_t entry;
+
+			/*
+			 * IMPORTANT NOTE:
+			 * In our aarch64 implementation, shiva is an ET_EXEC
+			 * so we can pass a function address as absolute. In
+			 * other implementations we would have to create a macro
+			 * to entry = GET_RIP() - &shiva_post_linker
+			 * -- In aarch64 Shiva we can just pass &shiva_post_linker address
+			 *  directly.
+			 */
+			shiva_debug("Enabling post linker, setting AT_ENTRY to %#lx\n",
+			    &shiva_post_linker);
+			entry = (uint64_t)&shiva_post_linker;
+			if (shiva_auxv_set_value(&a_iter, entry) == false) {
+				fprintf(stderr, "shiva_auxv_set_value failed (Setting %#lx)\n", entry);
+				return false;
+			}
+			break;
+		}
+	}
+	return true;
 }
 
 bool
@@ -886,28 +1020,24 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
 		 */
 		if (elf_symbol_by_name(&linker->elfobj, rel.symname,
 		    &symbol) == true) {
-			/*
-			 * If the symbol is a NOTYPE then it is an external reference
-			 * to a symbol somewhere else (i.e. shiva_ctx_t *global_ctx).
-			 * Probably exists in the Shiva binary (Which is loaded into
-			 * our executable process image :)) NOTE: All of libelfmaster
-			 * and libmusl are statically linked into Shiva, so there are
-			 * relocations that apply to these symbols externally.
-			 *
-			 * internal_symresolve will look for the symbol within the Shiva
-			 * binary if linking mode is set to SHIVA_LINKING_MODULE, otherwise
-			 * internal_symresolve will check the target ELF executable first,
-			 * and then Shiva (XXX: In the future we will resolve external
-			 * symbols from shared libraries... Shiva having musl-libc baked
-			 * in is a convenient work-around for libc symbol resolutions).
-			 */
-
 			if (symbol.type == STT_NOTYPE) {
 				uint64_t e_type, target_type;
+				char so_path[PATH_MAX];
 
+				/*
+				 * internal_symresolve() will search in the following order:
+				 * 1. Search the Shiva module: patch1.o, patch2.o, ...
+				 * 2. Search the target executable
+				 * 3. Search the target executables shared library dependencies
+				 */
 				res = internal_symresolve(linker, rel.symname,
-				    &symbol, &e_type, &target_type);
+				    &symbol, &e_type, &target_type, so_path);
 				if (res == true) {
+					uint64_t so_base;
+					struct shiva_module_delayed_reloc *delay_rel;
+					char path_out[PATH_MAX];
+					char *so_path;
+					struct elf_symbol tmp;
 #ifdef __x86_64__
 #ifdef SHIVA_STANDALONE
 					symval = symbol.value;
@@ -915,12 +1045,52 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
 					symval = symbol.value + linker->shiva_base;
 #endif
 #elif __aarch64__
-					if (target_type == RESOLVER_TARGET_SHIVA_SELF) {
+					switch(target_type) {
+					case RESOLVER_TARGET_SHIVA_SELF:
 						symval = e_type == ET_EXEC ? symbol.value :
 						    symbol.value + linker->shiva_base;
-					} else if (target_type == RESOLVER_TARGET_EXECUTABLE) {
+						break;
+					case RESOLVER_TARGET_EXECUTABLE:
 						symval = e_type == ET_EXEC ? symbol.value :
 						    symbol.value + linker->target_base;
+						break;
+					case RESOLVER_TARGET_SO_RESOLVE:
+						/*
+						 * DELAYED RELOCATIONS
+						 *
+						 * In the event that this is a libc.so symbol we can
+						 * resolve the symbol value offset but we won't know
+						 * the base of libc.so until ld-linux.so loads it.
+						 * Insert this as a delayed relocation so that the
+						 * shiva_post_linker code can handle it later.
+						 */
+						res = shiva_so_resolve_symbol(linker, symbol.name, &tmp, &so_path);
+						if (res == false) {
+							fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
+							    symbol.name);
+							return false;
+						}
+						if (realpath(so_path, path_out) == NULL) {
+							perror("realpath");
+							return false;
+						}
+
+						delay_rel = shiva_malloc(sizeof(*delay_rel));
+						delay_rel->rel_unit = &linker->text_mem[smap.offset + rel.offset];
+						delay_rel->rel_addr = linker->text_vaddr + smap.offset + rel.offset;
+						delay_rel->symval = tmp.value;
+						delay_rel->symname = shiva_strdup(symbol.name);
+						strncpy(delay_rel->so_path, path_out, PATH_MAX);
+						delay_rel->so_path[PATH_MAX - 1] = '\0';
+
+						if (enable_post_linker(linker) == false) {
+							fprintf(stderr, "Failed to enable delayed relocs\n");
+							return false;
+						}
+						shiva_debug("Delayed relocation for symbol '%s', must resolve in %s\n",
+						    symbol.name, delay_rel->so_path);
+						TAILQ_INSERT_TAIL(&linker->tailq.delayed_reloc_list, delay_rel, _linkage);
+						return true;
 					}
 #endif
 					shiva_debug("Symval: %#lx\n", symval);
@@ -2466,11 +2636,15 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	linker->flags = flags;
 	linker->shiva_base = ctx->shiva.base;
 	linker->target_base = ctx->ulexec.base_vaddr;
+	linker->ctx = ctx;
 	*linkerptr = linker;
 
+	shiva_debug("ctx_global: %p\n", ctx_global);
+	shiva_debug("linker: %p\n", linker);
 	TAILQ_INIT(&linker->tailq.transform_list);
 	TAILQ_INIT(&linker->tailq.section_maplist);
 	TAILQ_INIT(&linker->tailq.plt_list);
+	TAILQ_INIT(&linker->tailq.delayed_reloc_list);
 
 	shiva_debug("elf_open_object(%s, ...)\n", path);
 

@@ -27,6 +27,33 @@ shiva_maps_get_base(struct shiva_ctx *ctx, uint64_t *out)
 	return false;
 }
 
+bool
+shiva_maps_get_so_base(struct shiva_ctx *ctx, char *so_path,
+    uint64_t *out)
+{
+	FILE *fp;
+	char buf[PATH_MAX];
+	char *p;
+
+	fp = fopen("/proc/self/maps", "r");
+	if (fp == NULL) {
+		perror("fopen");
+		return false;
+	}
+	while (fgets(buf, sizeof(buf), fp) != NULL) {
+		if (strstr(buf, so_path) == NULL)
+			continue;
+		if (strstr(buf, "r-xp") == NULL)
+			continue;
+		p = strchr(buf, '-');
+		*p = '\0';
+		*out = strtoul(buf, NULL, 16);
+		fclose(fp);
+		return true;
+	}
+	fclose(fp);
+	return false;
+}
 /*
  * Checking if 'addr' is a valid address mapping.
  * It's valid if it exists in /proc/pid/maps, as long as it
@@ -95,10 +122,10 @@ shiva_maps_build_list(struct shiva_ctx *ctx)
 				if (strstr(buf, "r----") != NULL) {
 					if (ctx->shiva_path == NULL) {
 						p = strchr(tmp, '/');
-                                		ctx->shiva_path = shiva_malloc(PATH_MAX + 1);
-                                		for (i = 0; *p != '\n' && *p != '\0'; p++, i++)
-                                        		ctx->shiva_path[i] = *p;
-                                		ctx->shiva_path[i] = '\0';
+						ctx->shiva_path = shiva_malloc(PATH_MAX + 1);
+						for (i = 0; *p != '\n' && *p != '\0'; p++, i++)
+							ctx->shiva_path[i] = *p;
+						ctx->shiva_path[i] = '\0';
 					}
 				}
 				entry->mmap_type = SHIVA_MMAP_TYPE_SHIVA;

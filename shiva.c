@@ -157,6 +157,21 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		}
 	}
 
+	/*
+         * Get the entry point of the target executable. Stored in AT_ENTRY
+         * of the auxiliary vector.
+         */
+        if (shiva_auxv_iterator_init(ctx, &auxv_iter, NULL) == false) {
+                fprintf(stderr, "shiva_auxv_iterator_init failed\n");
+                return false;
+        }
+        while (shiva_auxv_iterator_next(&auxv_iter, &auxv_entry) == SHIVA_ITER_OK) {
+                if (auxv_entry.type == AT_ENTRY) {
+                        ctx->ulexec.entry_point = auxv_entry.value;
+                        shiva_debug("[1] Entry point: %#lx\n", entry_point);
+                        break;
+                }
+        }
 	if (shiva_module_loader(ctx, ctx->module_path,
 	    &ctx->module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");
@@ -194,7 +209,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	while (shiva_auxv_iterator_next(&auxv_iter, &auxv_entry) == SHIVA_ITER_OK) {
 		if (auxv_entry.type == AT_ENTRY) {
 			entry_point = auxv_entry.value;
-			shiva_debug("Entry point: %#lx\n", entry_point);
+			shiva_debug("[2] Entry point: %#lx\n", entry_point);
 			break;
 		}
 	}
