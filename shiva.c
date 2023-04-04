@@ -199,21 +199,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		return false;
 	}
 	/*
-	 * Get the entry point of the target executable. Stored in AT_ENTRY
-	 * of the auxiliary vector.
-	 */
-	if (shiva_auxv_iterator_init(ctx, &auxv_iter, NULL) == false) {
-		fprintf(stderr, "shiva_auxv_iterator_init failed\n");
-		return false;
-	}
-	while (shiva_auxv_iterator_next(&auxv_iter, &auxv_entry) == SHIVA_ITER_OK) {
-		if (auxv_entry.type == AT_ENTRY) {
-			entry_point = auxv_entry.value;
-			shiva_debug("[2] Entry point: %#lx\n", entry_point);
-			break;
-		}
-	}
-	/*
 	 * We must create a new stack before passing control to LDSO. Normally in interpreter
 	 * mode it wouldn't matter since we can just re-use the stack, auxv, etc. In our case
 	 * though we call back to various data structures, symbols and code within the Shiva
