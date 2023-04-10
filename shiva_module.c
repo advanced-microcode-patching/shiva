@@ -2614,6 +2614,18 @@ set_linker_mode(struct shiva_module *linker)
 	}
 	return;
 }
+static bool
+apply_memory_protection(struct shiva_module *linker)
+{
+	if (mprotect(linker->text_mem,
+	    ELF_PAGEALIGN(linker->text_size, PAGE_SIZE),
+	    PROT_READ|PROT_EXEC) < 0) {
+		perror("mprotect");
+		return false;
+	}
+	return true;
+}
+
 /*
  * NOTE: const char *path: path to the ELF module
  */
@@ -2714,6 +2726,12 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	if (resolve_pltgot_entries(linker) == false) {
 		shiva_debug("Failed to resolve PLTGOT entries\n");
 		return false;
+	}
+	if ((linker->flags & SHIVA_MODULE_F_DELAYED_RELOCS) == 0) {
+		if (apply_memory_protection(linker) == false) {
+			shiva_debug("Failed to apply module segment memory protection\n");
+			return false;
+		}
 	}
 
 	/*

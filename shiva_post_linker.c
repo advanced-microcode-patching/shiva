@@ -53,6 +53,18 @@ shiva_post_linker(void)
 	shiva_debug("Transfering control to %#lx\n", ctx_global->ulexec.entry_point);
 	test_mark();
 
+	/*
+	 * Mark the text segment as writable now that there won't
+	 * be any final fixups in the modules .text.
+	 */
+	if (mprotect(ctx_global->module.runtime->text_mem,
+	    ELF_PAGEALIGN(ctx_global->module.runtime->text_size,
+	    PAGE_SIZE),
+	    PROT_READ|PROT_EXEC) < 0) {
+		perror("mprotect");
+		return false;
+	}
+
 	__asm__ __volatile__ ("mov x21, %0" :: "r"(ctx_global->ulexec.entry_point));
 	return;
 }
