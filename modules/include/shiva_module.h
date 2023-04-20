@@ -24,6 +24,15 @@
 #define SHIVA_T_PAIR_X6(var) register int64_t var asm("x6");
 #define SHIVA_T_PAIR_X7(var) register int64_t var asm("x7");
 
+#define SHIVA_T_PAIR_W0(var) register int64_t var asm("w0");
+#define SHIVA_T_PAIR_W1(var) register int64_t var asm("w1");
+#define SHIVA_T_PAIR_W2(var) register int64_t var asm("w2");
+#define SHIVA_T_PAIR_W3(var) register int64_t var asm("w3");
+#define SHIVA_T_PAIR_W4(var) register int64_t var asm("w4");
+#define SHIVA_T_PAIR_W5(var) register int64_t var asm("w5");
+#define SHIVA_T_PAIR_W6(var) register int64_t var asm("w6");
+#define SHIVA_T_PAIR_W7(var) register int64_t var asm("w7");
+
 #define SHIVA_T_PAIR_BP_16(var) asm volatile ("ldr x9, [x29, #16]"); \
 				  register int64_t var asm("x9");
 #define SHIVA_T_PAIR_BP_32(var) asm volatile ("ldr x9, [x29, #32]"); \
