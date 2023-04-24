@@ -10,7 +10,7 @@ int foo(int num, char *str)
 		goto done;
 	strcpy(global_buf, banner);
 	if (str != NULL) {
-		fprintf(stdout, "global_buf: %s\n", global_buf);
+		fprintf(stdout, "Printing str: %s\n", str);
 	}
 	fprintf(stdout, "global_buf: %s\n", global_buf);
 	bar();

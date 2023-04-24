@@ -66,6 +66,7 @@
 #define SHIVA_MODULE_F_DUMMY_TEXT	(1UL << 2) /* Module has empty text region */
 #define SHIVA_MODULE_F_TRANSFORM	(1UL << 3) /* Module has transform records */
 #define SHIVA_MODULE_F_DELAYED_RELOCS	(1UL << 4) /* Module has delayed relocs to process */
+#define SHIVA_MODULE_F_HELPERS		(1UL << 5) /* Module has helper records */
 
 #define SHIVA_DT_NEEDED	(DT_LOOS + 10)
 #define SHIVA_DT_SEARCH (DT_LOOS + 11)
@@ -324,6 +325,18 @@ typedef enum shiva_transform_type {
 	SHIVA_TRANSFORM_UNKNOWN
 } shiva_transform_type_t;
 
+typedef enum shiva_helper_type {
+	SHIVA_HELPER_CALL_EXTERNAL = 0, // instruct linker to call external version of symbol
+	SHIVA_HELPER_UNKNOWN
+} shiva_helper_type_t;
+
+
+typedef struct shiva_helper {
+	shiva_helper_type_t type;
+	struct elf_symbol symbol;
+	TAILQ_ENTRY(shiva_helper) _linkage;
+} shiva_helper_t;
+
 typedef struct shiva_transform {
 	shiva_transform_type_t type;
 	struct elf_symbol target_symbol;
@@ -400,10 +413,12 @@ struct shiva_module {
 		TAILQ_HEAD(, shiva_module_plt_entry) plt_list;
 		TAILQ_HEAD(, shiva_transform) transform_list;
 		TAILQ_HEAD(, shiva_module_delayed_reloc) delayed_reloc_list;
+		TAILQ_HEAD(, shiva_helper) helper_list;
 	} tailq;
 	struct {
 		struct hsearch_data bss;
 		struct hsearch_data got;
+		struct hsearch_data helpers;
 	} cache;
 	shiva_linking_mode_t mode;
 	struct shiva_ctx *ctx; /* this is a pointer back to the main context */

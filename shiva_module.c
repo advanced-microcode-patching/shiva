@@ -489,7 +489,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 {
 	uint64_t gotaddr, so_base;
 	uint64_t *GOT;
-	struct shiva_module_got_entry *current = NULL;
+	struct shiva_module_got_entry *current;
 	char *so_path;
 	bool res;
 
@@ -507,7 +507,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		 * Setup the modules internal GOT table.
 		 */
 		GOT = (uint64_t *)((uint64_t)(linker->data_vaddr + linker->pltgot_off + current->gotoff));
-
+		shiva_debug("Processing GOT[%s](%#lx)\n", current->symname, (uint64_t)GOT);
 		/*
 		 * First look for the functions symbol within the loaded Shiva module
 		 */
@@ -537,18 +537,52 @@ resolve_pltgot_entries(struct shiva_module *linker)
 			bool in_target = false;
 			struct elf_plt plt_entry;
 			struct shiva_module_delayed_reloc *delay_rel;
+			ENTRY e, *ep;
 
+			e.key = current->symname;
+			e.data = NULL;
+
+			/*
+			 * Handle the special case of SHIVA_HELPER_CALL_EXTERNAL()
+			 * macro. Symbols are in the patch object, but give Shiva
+			 * descriptive information about resolving an external symbol
+			 * within the target. See SHIVA HELPER macros in documentation.
+			 */
+			shiva_debug("Searching cache for %s\n", current->symname);
+			if (hsearch_r(e, FIND, &ep, &linker->cache.helpers) != 0) {
+				char *real_symname;
+				/*
+				 * We are dealing with a helper symbol that denotes that
+				 * we need to resolve the GOT entry with the value of the
+				 * external version of a given symbol. See SHIVA_HELPER macros
+				 * in documentation.
+				 */
+				real_symname = strstr(symbol.name, "_orig_func_");
+				real_symname += strlen("_orig_func_");
+
+				shiva_debug("Looking up symbol: '%s' in target\n", real_symname);
+				if (elf_symbol_by_name(linker->target_elfobj, real_symname,
+				    &symbol) == true) {
+					if (symbol.value == 0 || symbol.type != STT_FUNC) {
+						fprintf(stderr, "external symbol is invalid: %s\n",
+						    symbol.name);
+						return false;
+					}
+					shiva_debug("Resolving helper function '%s' to external symbol '%s'"
+					    " = %#lx\n", symbol.name, real_symname,
+					    symbol.value + linker->target_base);
+					*(uint64_t *)GOT = symbol.value + linker->target_base;
+					continue;
+				}
+			}
+			/*
+			 * Next we handle all other cases
+			 */
+			shiva_debug("Looking up symbol '%s' in target %s\n", current->symname,
+			    elf_pathname(linker->target_elfobj));
 			if (elf_symbol_by_name(linker->target_elfobj, current->symname,
 			    &symbol) == true) {
 				if (symbol.value == 0 && symbol.type == STT_FUNC) {
-				/*
-				 * Symbol value is 0?? Probably a PLT call.
-				 * If the function that our patch is calling exists within the target
-				 * executable as a PLT call to a shared library function (Probably in libc)
-				 * then let's try to resolve the same symbol within the Shiva binary.
-				 * XXX This is temporary in the future we need to write a resolver
-				 * for imported shared library symbols.
-				 */
 					if (elf_plt_by_name(linker->target_elfobj,
 					    symbol.name, &plt_entry) == true) {
 						struct elf_symbol tmp;
@@ -1023,13 +1057,13 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
 			if (symbol.type == STT_NOTYPE) {
 				uint64_t e_type, target_type;
 				char so_path[PATH_MAX];
-
 				/*
 				 * internal_symresolve() will search in the following order:
 				 * 1. Search the Shiva module: patch1.o, patch2.o, ...
 				 * 2. Search the target executable
 				 * 3. Search the target executables shared library dependencies
 				 */
+				shiva_debug("Internal symresolve on %s\n", rel.symname);
 				res = internal_symresolve(linker, rel.symname,
 				    &symbol, &e_type, &target_type, so_path);
 				if (res == true) {
@@ -1768,7 +1802,8 @@ calculate_data_size(struct shiva_module *linker)
 				return false;
 			}
 
-			shiva_debug("Inserting entries into GOT cache and GOT list\n");
+			shiva_debug("Inserting entry into GOT cache and GOT list\n"
+			    "GOT entry for %s\n", got_entry->symname);
 			TAILQ_INSERT_TAIL(&linker->tailq.got_list, got_entry, _linkage);
 			offset += sizeof(uint64_t);
 
@@ -2248,6 +2283,68 @@ next_function_by_address(elfobj_t *elfobj, uint64_t current_func, struct elf_sym
 	}
 	return true;
 }
+
+#define SHIVA_HELPERS_MAX 4096
+
+static bool
+validate_helpers(struct shiva_ctx *ctx, struct shiva_module *linker)
+{
+	struct elf_section shdr;
+	elf_section_iterator_t shdr_iter;
+	struct elf_symbol symbol, target_sym;
+	elf_symtab_iterator_t sym_iter;
+	char *dst_symname;
+	struct shiva_helper *helper;
+	ENTRY e, *ep;
+
+	(void) hcreate_r(SHIVA_HELPERS_MAX, &linker->cache.helpers);
+
+	elf_symtab_iterator_init(&linker->elfobj, &sym_iter);
+	while (elf_symtab_iterator_next(&sym_iter, &symbol) == ELF_ITER_OK) {
+		if (symbol.type != STT_NOTYPE || symbol.bind != STB_GLOBAL)
+			continue;
+		if (strncasecmp(symbol.name, SHIVA_HELPER_CALL_EXTERNAL_ID,
+		    strlen(SHIVA_HELPER_CALL_EXTERNAL_ID)) == 0) {
+			dst_symname = strstr(symbol.name, "_orig_func_");
+			if (dst_symname == NULL) {
+				fprintf(stderr, "Invalid format to "
+				    "SHIVA_HELPER_CALL_EXTERNAL\n");
+				return false;
+			}
+			dst_symname += strlen("_orig_func_");
+			shiva_debug("Function %s\n", dst_symname);
+			if (elf_symbol_by_name(linker->target_elfobj,
+				dst_symname, &target_sym) == false) {
+				fprintf(stderr, "The symbol doesn't exist: %s not found in %s\n",
+				    dst_symname, elf_pathname(linker->target_elfobj));
+				return false;
+			}
+
+			e.key = (char *)symbol.name; /* i.e. __shiva_helper_orig_func */
+			e.data = NULL;
+
+                        if (hsearch_r(e, FIND, &ep, &linker->cache.helpers) != 0)
+				continue;
+
+			helper = shiva_malloc(sizeof(*helper));
+			helper->type = SHIVA_HELPER_CALL_EXTERNAL;
+			memcpy(&helper->symbol, &target_sym, sizeof(struct elf_symbol));
+
+ 			if (hsearch_r(e, ENTER, &ep, &linker->cache.helpers) == 0) {
+                                free(helper);
+                                fprintf(stderr, "Failed to add helper: %s\n", symbol.name);
+                                return false;
+                        }
+			shiva_debug("Inserting helper record\n"
+					"Helper type: SHIVA_HEPLER_CALL_EXTERNAL\n"
+					"External symbol value: %#lx\n", target_sym.value);
+			TAILQ_INSERT_TAIL(&linker->tailq.helper_list, helper, _linkage);
+		}
+	}
+
+	return true;
+}
+
 /*
  * Transformations (formerly known as PTD)
  * If there are any transformations, make internal transformation
@@ -2654,6 +2751,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	shiva_debug("ctx_global: %p\n", ctx_global);
 	shiva_debug("linker: %p\n", linker);
 	TAILQ_INIT(&linker->tailq.transform_list);
+	TAILQ_INIT(&linker->tailq.helper_list);
 	TAILQ_INIT(&linker->tailq.section_maplist);
 	TAILQ_INIT(&linker->tailq.plt_list);
 	TAILQ_INIT(&linker->tailq.delayed_reloc_list);
@@ -2697,6 +2795,10 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	}
 	if (validate_transformations(ctx, linker) == false) {
 		fprintf(stderr, "Failed to validate transformations\n");
+		return false;
+	}
+	if (validate_helpers(ctx, linker) == false) {
+		fprintf(stderr, "Failed to validate helpers\n");
 		return false;
 	}
 	if (calculate_text_size(linker) == false) {

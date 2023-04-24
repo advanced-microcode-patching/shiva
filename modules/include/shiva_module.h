@@ -46,3 +46,36 @@
 #define SHIVA_T_PAIR_BP_96(var) asm volatile ("ldr x9, [x29, #96]"); \
                                   register int64_t var asm("x9");
 
+#define SHIVA_HELPER_CALL_EXTERNAL_ID "__shiva_helper_orig_func_"
+
+#define SHIVA_HELPER_CALL_EXTERNAL(name)	\
+	__shiva_helper_orig_func_##name();
+
+#define SHIVA_HELPER_CALL_EXTERNAL_ARGS1(name, arg1)	\
+	__shiva_helper_orig_func_##name(arg1);
+
+#define SHIVA_HELPER_CALL_EXTERNAL_ARGS2(name, arg1, arg2)	\
+	__shiva_helper_orig_func_##name(arg1, arg2);
+
+#define SHIVA_HELPER_CALL_EXTERNAL_ARGS3(name, arg1, arg2)	\
+	__shiva_helper_orig_func_##name(arg1, arg2, arg3)
+
+#define SHIVA_HELPER_CALL_EXTERNAL_ARGS4(name, arg1, arg2, arg3, arg4)        \
+        __shiva_helper_orig_func_##name(arg1, arg2, arg3, arg4);
+
+#define SHIVA_HELPER_CALL_EXTERNAL_ARGS5(name, arg1, arg2, arg3, arg4, arg5)  \
+        __shiva_helper_orig_func_##name(arg1, arg2, arg3, arg4, arg5);
+
+#define SHIVA_HELPER_CALL_EXTERNAL_ARGS6(name, arg1, arg2, arg3, arg4, arg5, arg6)  \
+        __shiva_helper_orig_func_##name(arg1, arg2, arg3, arg4, arg5, arg6);
+
+#define SHIVA_HELPER_CALL_EXTERNAL_ARGS7(name, arg1, arg2, arg3, arg4, arg5, arg6, arg7)  \
+        __shiva_helper_orig_func_##name(arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+
+
+
+
+
+
+
+
