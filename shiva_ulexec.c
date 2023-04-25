@@ -256,6 +256,31 @@ shiva_ulexec_total_segment_len(elfobj_t *elfobj, size_t *len)
 	shiva_debug("Total mapping size: %#zu\n", *len);
 	return true;
 }
+
+bool
+shiva_ulexec_get_orig_interp(struct shiva_ctx *ctx, char *outbuf)
+{
+	struct elf_dynamic_entry dyn;
+	elf_dynamic_iterator_t dyn_iter;
+	size_t len;
+	bool res;
+
+	elf_dynamic_iterator_init(&ctx->elfobj, &dyn_iter);
+	while (elf_dynamic_iterator_next(&dyn_iter, &dyn) == ELF_ITER_OK) {
+		if (dyn.tag != SHIVA_DT_ORIG_INTERP)
+			continue;
+		res = shiva_target_copy_string(ctx, outbuf,
+		    (const char *)dyn.value, &len);
+		if (res == false) {
+			fprintf(stderr, "shiva_target_copy_string() failed at %#lx\n",
+			    dyn.value);
+			return false;
+		}
+		break;
+	}
+	return true;
+}
+
 /*
  * XXX -- We currently only support PIE binaries. This is very temporary.
  */
@@ -422,8 +447,28 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 	shiva_auxv_iterator_t a_iter;
 	struct shiva_auxv_entry a_entry;
 
-	if (elf_type(&ctx->elfobj) == ET_DYN) {
-		interp = elf_interpreter_path(&ctx->elfobj);
+	if (elf_linking_type(&ctx->elfobj) == ELF_LINKING_DYNAMIC) {
+		/*
+		 * If the target binary is has been shiva-prelinked already,
+		 * then it's PT_INTERP segment will contain /lib/shiva. We
+		 * need the path of it's original interpreter "ld-linux.so"
+		 * so that we can prepare to map it into memory.
+		 */
+		if (shiva_target_has_prelinking(ctx) == true) {
+			char interp_path[PATH_MAX];
+
+			if (shiva_ulexec_get_orig_interp(ctx, interp_path) == false) {
+				fprintf(stderr, "shiva_target_get_orig_interp() failed\n");
+				return false;
+			}
+			interp = interp_path;
+		} else {
+			interp = elf_interpreter_path(&ctx->elfobj);
+			if (interp == NULL) {
+				fprintf(stderr, "elf_interpreter_path() failed\n");
+				return false;
+			}
+		}
 		if (interp != NULL) {
 			shiva_debug("Interp path: %s\n", interp);
 			ctx->ulexec.flags |= SHIVA_F_ULEXEC_LDSO_NEEDED;

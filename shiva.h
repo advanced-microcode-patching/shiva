@@ -70,6 +70,7 @@
 
 #define SHIVA_DT_NEEDED	(DT_LOOS + 10)
 #define SHIVA_DT_SEARCH (DT_LOOS + 11)
+#define SHIVA_DT_ORIG_INTERP (DT_LOOS + 12)
 
 #define SHIVA_DEFAULT_MODULE_PATH "/opt/shiva/modules/shakti.o"
 
@@ -468,6 +469,7 @@ typedef struct shiva_ctx {
 	int duplicate_pid;
 	uint64_t duplicate_base;
 	char *shiva_path; // path to /bin/shiva
+	char orig_interp_path[PATH_MAX];
 	union {
 		struct shiva_trace_regset_x86_64 regset_x86_64;
 	} regs;

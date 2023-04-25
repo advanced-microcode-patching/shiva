@@ -87,7 +87,6 @@ shiva_target_get_module_path(struct shiva_ctx *ctx, char *buf)
 	return true;
 }
 
-
 /*
  * This function modifies the "live" dynamic segment in memory. It will modify
  * the first dynamic tag found of type 'tag' and change it to 'value'.

@@ -1,13 +1,6 @@
 #include <stdio.h>
 
-/*
- * .rodata string
- */
 const char *banner = "ElfMaster";
-
-/*
- * .bss static buffer
- */
 char global_buf[255];
 
 int foo(int num, char *str)

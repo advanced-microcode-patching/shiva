@@ -41,6 +41,7 @@
 
 #define SHIVA_DT_NEEDED	DT_LOOS + 10
 #define SHIVA_DT_SEARCH DT_LOOS + 11
+#define SHIVA_DT_ORIG_INTERP DT_LOOS + 12
 
 #define SHIVA_SIGNATURE 0x31f64
 
@@ -69,6 +70,7 @@ struct shiva_prelink_ctx {
 	char *output_exec;
 	char *search_path;
 	char *interp_path;
+	char *orig_interp_path;
 	struct {
 		elfobj_t elfobj;
 	} bin;
@@ -123,6 +125,8 @@ elf_segment_copy(elfobj_t *elfobj, uint8_t *dst, struct elf_segment segment)
 	return true;
 }
 
+#define NEW_DYN_COUNT 3
+
 bool
 shiva_prelink(struct shiva_prelink_ctx *ctx)
 {
@@ -142,6 +146,19 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	uint8_t *old_dynamic_segment;
 	size_t old_dynamic_size, dynamic_index;
 
+	ctx->orig_interp_path = elf_interpreter_path(&ctx->bin.elfobj);
+	if (ctx->orig_interp_path == NULL) {
+		fprintf(stderr, "elf_interpreter_path() failed\n");
+		return false;
+	}
+	/*
+	 * We must do this or it will get overwritten later by an strcpy
+	 */
+	ctx->orig_interp_path = strdup(ctx->orig_interp_path);
+	if (ctx->orig_interp_path == NULL) {
+		perror("strdup");
+		return false;
+	}
 	if (elf_flags(&ctx->bin.elfobj, ELF_DYNAMIC_F) == false) {
 		fprintf(stderr, "Currently we do not support static ELF executable\n");
 		return false;
@@ -162,7 +179,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		} else if (segment.type == PT_DYNAMIC) {
 			found_dynamic = true;
 			ctx->new_segment.dyn_size = elf_dtag_count(&ctx->bin.elfobj) * sizeof(ElfW(Dyn));
-			ctx->new_segment.dyn_size += (sizeof(ElfW(Dyn)) * 2);
+			ctx->new_segment.dyn_size += (sizeof(ElfW(Dyn)) * NEW_DYN_COUNT);
 			ctx->new_segment.dyn_offset = 0;
 
 			old_dynamic_size = elf_dtag_count(&ctx->bin.elfobj) * sizeof(ElfW(Dyn));
@@ -183,9 +200,10 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			/*
 			 * Make room for the two new additional dynamic entries
 			 */
-			ctx->new_segment.filesz += sizeof(ElfW(Dyn)) * 2;
+			ctx->new_segment.filesz += sizeof(ElfW(Dyn)) * NEW_DYN_COUNT;
 			ctx->new_segment.filesz += strlen(ctx->input_patch) + 1;
 			ctx->new_segment.filesz += strlen(ctx->search_path) + 1;
+			ctx->new_segment.filesz += strlen(ctx->orig_interp_path) + 1;
 			/*
 			 * Mark the index of this segment so that we can modify it
 			 * to match the new dynamic segment location once we know it.
@@ -319,7 +337,9 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		return false;
 	}
 
-	ElfW(Dyn) dyn[3];
+#define NEW_DYN_ENTRY_SZ 4
+
+	ElfW(Dyn) dyn[NEW_DYN_ENTRY_SZ];
 
 	/*
 	 * Write out new dynamic entry for SHIVA_DT_SEARCH and
@@ -328,9 +348,13 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	dyn[0].d_tag = SHIVA_DT_SEARCH;
 	dyn[0].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size;
 	dyn[1].d_tag = SHIVA_DT_NEEDED;
-	dyn[1].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + strlen(ctx->search_path) + 1;
-	dyn[2].d_tag = DT_NULL;
-	dyn[2].d_un.d_ptr = 0x0;
+	dyn[1].d_un.d_ptr = ctx->new_segment.vaddr +
+	    ctx->new_segment.dyn_size + strlen(ctx->search_path) + 1;
+	dyn[2].d_tag = SHIVA_DT_ORIG_INTERP;
+	dyn[2].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size +
+	    strlen(ctx->search_path) + 1 + strlen(ctx->input_patch) + 1;
+	dyn[3].d_tag = DT_NULL;
+	dyn[3].d_un.d_ptr = 0x0;
 
 	if (write(fd, &dyn[0], sizeof(dyn)) < 0) {
 		perror("write 4.");
@@ -345,6 +369,13 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		return false;
 	}
 
+	printf("Writing out original interp path: %s\n", ctx->orig_interp_path);
+
+	if (write(fd, ctx->orig_interp_path,
+	    strlen(ctx->orig_interp_path) + 1) < 0) {
+		perror("write 7.");
+		return false;
+	}
 	if (fchown(fd, st.st_uid, st.st_gid) < 0) {
 		perror("fchown");
 		return false;

@@ -439,9 +439,19 @@ int main(int argc, char **argv, char **envp)
 		if (mpath != NULL) {
 			strcpy(ctx.module_path, mpath);
 		} else {
-			strcpy(ctx.module_path, SHIVA_DEFAULT_MODULE_PATH);
+			/*
+			 * If the target binary has no shiva-prelinking
+			 * and we are executing it with /lib/shiva directly
+			 * then we can flip on ulexec mode. Shiva won't load
+			 * any modules. it will simply pass control to ld-linux.so
+			 * and effectively ulexec the target ELF binary.
+			 */
+			ctx.flags |= SHIVA_OPTS_F_ULEXEC_ONLY;
 		}
 	}
+
+	if (ctx.flags & SHIVA_OPTS_F_ULEXEC_ONLY)
+		goto transfer_control;
 
 	if (shiva_module_loader(&ctx, ctx.module_path,
 	    &ctx.module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
