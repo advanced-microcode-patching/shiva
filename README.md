@@ -1,4 +1,4 @@
-# Shiva -- Programmable runtime linking and microcode patching
+# Shiva JIT micropatching engine README
 
 
 ## Description
@@ -88,7 +88,7 @@ program interpreter `"/lib/shiva"`, and the path to the patch module (i.e.
 
 ## Patch testing
 
-We have already compiled and prelinked the patches. Shiva prelinking
+We have already compiled and prelinked the example patches. Shiva prelinking
 refers specifically to the Shiva prelinking applied by the shiva-ld tool.
 
 Take a look at the Makefile for each patch, and you will see how shiva-ld is
@@ -266,6 +266,12 @@ rodata_string: The Great Arcanum
 val: 5
 elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/rodata_interposing$ 
 ```
+
+### Work in progress
+
+This README is a work in progress. A "Friendly guide to micropatching with Shiva" User manual
+will be available soon!
+
 
 ### Author contact
 
