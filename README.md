@@ -9,14 +9,16 @@ process address space and given intricate control over program instrumentation
 via ShivaTrace API. ShivaTrace is an in-process debugging and instrumentation
 API with innovative debugging and hooking features.
 
-Shiva has been custom tailored towards the requirements of the AMP project and
+Shiva has been custom tailored towards the requirements of the DARPA AMP project and
 with support for the AArch64 architecture. This fork of the project has created
 an abundant set of new microcode patching capabilities, including symbol interposition
 on functions (i.e. .text), as well as on global data (i.e. .rodata, .data, .bss).
 
 The original Shiva project can be found at https://github.com/elfmaster/shiva
+and is specific to x86_64.
 
-This README will only cover Shiva as it relates to the AMP project.
+This README will only cover Shiva as it relates to the DARPA AMP project, and only as
+it pertains to AArch64 (Current support).
 
 Please see ./documentation/shiva_preliminary_design.pdf for a technical description
 of Shiva.
@@ -29,7 +31,7 @@ ELF AArch64 ET_DYN binaries, so currently we are meeting the requirements.
 
 ## Build
 
-This has been tested on aarch64 ubuntu 18.04 and 22.
+This has been tested on aarch64 ubuntu 18.04 and ubuntu 22.
 Shiva relies on libelfmaster and musl-libc.
 
 ## Dependencies
@@ -265,6 +267,8 @@ val: 5
 elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/rodata_interposing$ 
 ```
 
-### A work in progress...
+### Author contact
 
+Ryan O'Neill
+ryan@bitlackeys.org
 
