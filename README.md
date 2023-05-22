@@ -1,33 +1,22 @@
-# Shiva JIT micropatching engine README
+# Shiva JIT micropatching engine
 
 
 ## Description
 
-Shiva is a programmable runtime linker (Program interpreter) for ELF
-x64/aarch64 Linux -- ELF-microprograms (Shiva modules) are linked into the
-process address space and given intricate control over program instrumentation
-via ShivaTrace API. ShivaTrace is an in-process debugging and instrumentation
-API with innovative debugging and hooking features.
+Shiva is an ELF dynamic linker that is specialized for patching native Linux
+software. Shiva has been custom tailored towards the requirements of the DARPA
+AMP project and currently supports the AArch64 architecture.
 
-Shiva has been custom tailored towards the requirements of the DARPA AMP project and
-with support for the AArch64 architecture. This fork of the project has created
-an abundant set of new microcode patching capabilities, including symbol interposition
-on functions (i.e. .text), as well as on global data (i.e. .rodata, .data, .bss).
-
-The original Shiva project can be found at https://github.com/elfmaster/shiva
-and is specific to x86_64.
-
-This README will only cover Shiva as it relates to the DARPA AMP project, and only as
-it pertains to AArch64 (Current support).
-
-Please see ./documentation/shiva_preliminary_design.pdf for a technical description
-of Shiva.
+Patches are written in C and compiled into ELF relocatable objects. Shiva loads,
+links, and patches the new code into memory.
 
 ## Support
 
-Support is limited to ELF AArch64 ET_DYN binaries. Future support for ET_EXEC will
-be added as needed. The cFS software and the patch challenge-10 binaries are
-ELF AArch64 ET_DYN binaries, so currently we are meeting the requirements.
+OS: Linux
+Architectures: AArch64
+ELF binary support: AArch64 ELF PIE executables (aka. ET_DYN)
+
+Support for ET_EXEC binaries and other architectures are on the way.
 
 ## Build
 
@@ -46,7 +35,7 @@ git --fetch all
 git checkout aarch64_support
 ```
 
-The original build for libelfmaster seems broken and I haven't yet fixed it.
+The original build for libelfmaster is broken and I haven't yet fixed it.
 Meanwhile just use the simple build shellscript I made.
 
 ```
@@ -79,17 +68,21 @@ make patches
 sudo make install
 ```
 
-Shiva is copied to `"/lib/shiva"` and can be executed directly, but more commonly
-indirectly as an interpreter.
+Shiva is copied to `"/lib/shiva"` and can be executed directly or indirectly as
+an interpreter.
 
-The shiva-ld utility is used to modify binaries with the path to the new
-program interpreter `"/lib/shiva"`, and the path to the patch module (i.e.
-`"/opt/modules/shiva/patch1.o"`).
+The shiva-ld utility is known as the "Shiva Prelinker" and is used to modify
+binaries with the path to the new program interpreter `"/lib/shiva"`, and the
+path to the patch module (i.e.  `"/opt/modules/shiva/patch1.o"`).
 
 ## Patch testing
 
-We have already compiled and prelinked the example patches. Shiva prelinking
-refers specifically to the Shiva prelinking applied by the shiva-ld tool.
+
+$ cd modules/aarch64/cfs_patch1
+
+We have already compiled and prelinked the example patches in the previous
+steps. Shiva prelinking refers specifically to the prelinking applied by
+the shiva-ld tool.
 
 Take a look at the Makefile for each patch, and you will see how shiva-ld is
 used to apply the pre-patch meta-data.
@@ -98,7 +91,7 @@ used to apply the pre-patch meta-data.
 shiva-ld -e core-cpu1 -p cfs_patch1.o -i /lib/shiva -s /opt/shiva/modules -o core-cpu1.patched
 ```
 
-The Shiva make install script installs all of the patch modules into `/opt/shiva/modules`
+The Shiva install script installs all of the patch modules into `/opt/shiva/modules`
 
 The patch build environments are stored in `modules/aarch64_patches/` and are as follows:
 
