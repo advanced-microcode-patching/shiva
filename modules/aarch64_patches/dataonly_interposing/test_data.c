@@ -11,6 +11,7 @@ int foo(void)
 
 int bar(void)
 {
+	static int data_var2 = 10;
 	printf("I am a function that won't be patched\n");
 	printf("I'm accessing data_var and its value is %#x\n", data_var);
 	return 0;

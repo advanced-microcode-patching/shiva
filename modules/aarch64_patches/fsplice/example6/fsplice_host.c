@@ -1,3 +1,7 @@
+/*
+ * The original program that we want to patch
+ */
+
 #include <stdio.h>
 
 const char *banner = "ElfMaster";
@@ -8,7 +12,7 @@ int foo(int num, char *str)
 	if (num == 7)
 		goto done;
 	strcpy(global_buf, banner);
-	printf("Printing str: %s\n", str); // <- replace with patch
+	printf("Printing str: %s\n", str); // <- splice code in here
 done:
 	return 0;
 }
