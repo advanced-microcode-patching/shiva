@@ -1,5 +1,0 @@
-Peformance of plt_cfi.c
-
-Each PLT call takes about 4.6% longer to execute with this module installed.
-Keep in mind that this module can be sped up by using a hash to store the
-CFI data.

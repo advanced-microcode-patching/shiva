@@ -23,7 +23,6 @@
 
 #include "include/capstone/capstone.h"
 
-#include "./udis86-1.7.2/udis86.h"
 #include "/opt/elfmaster/include/libelfmaster.h"
 #include "shiva_debug.h"
 #include "shiva_misc.h"
