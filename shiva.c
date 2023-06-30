@@ -236,7 +236,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	 */
 	o_stack_end = ELF_PAGEALIGN(o_stack_addr, 0x1000);
 	copy_len = o_stack_end - o_stack_addr;
-
+	
 	shiva_debug("o_stack_addr: %#lx o_stack_end: %#lx\n", o_stack_addr, o_stack_end);
 	/*
 	 * shiva_ulexec_allocstack() returns a pointer that points to the very

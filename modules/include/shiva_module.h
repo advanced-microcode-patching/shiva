@@ -33,18 +33,66 @@
 #define SHIVA_T_PAIR_W6(var) register int64_t var asm("w6");
 #define SHIVA_T_PAIR_W7(var) register int64_t var asm("w7");
 
+
+/*
+ * XXX
+ * The following macros use register x9. This means you can't use
+ * more than one macro at a time without clobbering x9.
+ *
+ * In the future: Allow the developer to select the register as it
+ * greatly depends on the function being transformed.
+ */
 #define SHIVA_T_PAIR_BP_16(var) asm volatile ("ldr x9, [x29, #16]"); \
+				  register int64_t var asm("x9");
+#define SHIVA_T_PAIR_BP_24(var) asm volatile ("ldr x9, [x29, #24]"); \
 				  register int64_t var asm("x9");
 #define SHIVA_T_PAIR_BP_32(var) asm volatile ("ldr x9, [x29, #32]"); \
 				  register int64_t var asm("x9");
+#define SHIVA_T_PAIR_BP_40(var) asm volatile ("ldr x9, [x29, #40]"); \
+				  register int64_t var asm("x9");
 #define SHIVA_T_PAIR_BP_48(var) asm volatile ("ldr x9, [x29, #48]"); \
+				  register int64_t var asm("x9");
+#define SHIVA_T_PAIR_BP_56(var) asm volatile ("ldr x9, [x29, #56]"); \
 				  register int64_t var asm("x9");
 #define SHIVA_T_PAIR_BP_64(var) asm volatile ("ldr x9, [x29, #64]"); \
 				  register int64_t var asm("x9");
+#define SHIVA_T_PAIR_BP_72(var) asm volatile ("ldr x9, [x29, #64"); \
+				  register int64_t var asm("x9");
 #define SHIVA_T_PAIR_BP_80(var) asm volatile ("ldr x9, [x29, #80]"); \
                                   register int64_t var asm("x9");
+#define SHIVA_T_PAIR_BP_88(var) asm volatile ("ldr x9, [x29, #88]"); \
+				  register int64_t var asm("x9");
 #define SHIVA_T_PAIR_BP_96(var) asm volatile ("ldr x9, [x29, #96]"); \
                                   register int64_t var asm("x9");
+
+
+#define SHIVA_T_LEA_BP_16(var) asm volatile ("mov x9, x29\n" \
+					     "add x9, x9, #16"); \
+				register int64_t var asm("x9");
+
+#define SHIVA_T_LEA_BP_24(var) asm volatile ("mov x9, x29\n" \
+					     "add x9, x9, #24"); \
+				register int64_t var asm("x9");
+
+#define SHIVA_T_LEA_BP_32(var) asm volatile ("mov x9, x29\n" \
+					     "add x9, x9, #32"); \
+                                register int64_t var asm("x9");
+
+#define SHIVA_T_LEA_BP_40(var) asm volatile ("mov x9, x29\n" \
+					     "add x9, x9, #40"); \
+                                register int64_t var asm("x9");
+
+#define SHIVA_T_LEA_BP_48(var) asm volatile ("mov x9, x29\n" \
+					     "add x9, x9, #48"); \
+                                register int64_t var asm("x9");
+
+#define SHIVA_T_LEA_BP_56(var) asm volatile ("mov x9, x29\n" \
+					     "add x9, x9, #54"); \
+				register int64_t var asm("x9");
+
+#define SHIVA_T_LEA_BP_96(var) asm volatile ("mov x9, x29\n"   \
+					     "add x9, x9, #96"); \
+				  register int64_t var asm("x9");
 
 #define SHIVA_HELPER_CALL_EXTERNAL_ID "__shiva_helper_orig_func_"
 
