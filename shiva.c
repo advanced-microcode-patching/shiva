@@ -96,8 +96,9 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	shiva_maps_iterator_t maps_iter;
 	struct shiva_mmap_entry mmap_entry;
 	uint8_t *o_stack, *n_stack;
-	uint64_t o_stack_addr, o_stack_end;
+	uint64_t o_stack_addr;
 	size_t copy_len;
+	uint64_t o_stack_end = 0;
 
 	ctx_global = ctx;
 	shiva_init_lists(ctx);
@@ -124,9 +125,15 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 
 	shiva_maps_iterator_init(ctx, &maps_iter);
 	while (shiva_maps_iterator_next(&maps_iter, &mmap_entry) == SHIVA_ITER_OK) {
-		if (mmap_entry.mmap_type == SHIVA_MMAP_TYPE_SHIVA) {
+		if (mmap_entry.mmap_type == SHIVA_MMAP_TYPE_STACK) {
+			o_stack_end = mmap_entry.base + mmap_entry.len;
+			shiva_debug("Original stack upper bound: %#lx\n", o_stack_end);
 			break;
 		}
+	}
+	if (o_stack_end == 0) {
+		fprintf(stderr, "Unable to find SHIVA_MMAP_TYPE_STACK entry\n");
+		return false;
 	}
 	ctx->shiva.base = mmap_entry.base;
 	shiva_debug("Setting shiva base: %#lx\n", mmap_entry.base);
@@ -224,17 +231,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	 */
 	o_stack = (uint8_t *)rsp;
 	o_stack_addr = (uint64_t)o_stack;
-	/*
-	 * XXX BUG XXX
-	 * There is a bug here that occasionally results in a segfault
-	 * later on in the code.
-	 * There are some situations I think where the o_stack_end
-	 * (Which points to the highest stack address) needs to be
-	 * page aligned up one more time. There's not enough room
-	 * being allocated for the stacks copylen in some cases with the
-	 * current code... debug this!
-	 */
-	o_stack_end = ELF_PAGEALIGN(o_stack_addr, 0x1000);
 	copy_len = o_stack_end - o_stack_addr;
 	
 	shiva_debug("o_stack_addr: %#lx o_stack_end: %#lx\n", o_stack_addr, o_stack_end);
