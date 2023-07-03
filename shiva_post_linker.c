@@ -54,7 +54,7 @@ shiva_post_linker(void)
 	test_mark();
 
 	/*
-	 * Mark the text segment as writable now that there won't
+	 * Mark the text segment as read-only now that there won't
 	 * be any final fixups in the modules .text.
 	 */
 	if (mprotect(ctx_global->module.runtime->text_mem,

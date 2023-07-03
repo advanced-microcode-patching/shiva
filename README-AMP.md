@@ -1,11 +1,11 @@
-- README file for Shiva (From AMP phase-2)
+# Shiva JIT micropatching engine
 
 This collection of files is from the DARPA Assured micropatching (AMP)
 program. This README provides a basic description of the AMP program
 and the overall manifest and description for each file.
 
 
----- Assured Micropatching Program
+## Assured Micropatching Program
 
 The AMP program is a DARPA effort to develop technologies for advancing
 the state of patching ELF binaries and verifying the stability of the
@@ -20,17 +20,23 @@ since the data was produced by a research prototype, it is practically guarantee
 to be imperfect.
 
 
----- Description of Shiva
+## Description of Shiva
 
-Shiva was a phase-2 effort to advance the state of ELF binary patching by
-introducing a custom ELF interpreter for loading and linking ELF relocatable
-objects into the process image at runtime. Shiva aims to make patch development
-a seamless process, fitting right into the existing ELF ABI toolchain of
-compilers and linkers. Shiva supports Linux AArch64 environments.
+Shiva is the product of AMP-phase-2 and advances the state of ELF binary
+patching by introducing a custom ELF interpreter for loading and linking ELF
+relocatable objects into the process image at runtime. Shiva aims to make patch
+development a seamless process, fitting right into the existing ELF ABI
+toolchain. Shiva supports Linux AArch64 environments currently.
 
----- Github location
+## Support
 
-Shiva's github home is at https://github.com/advanced-microcode-patching/shiva
+OS: Linux
+Architectures: AArch64
+ELF binary support: AArch64 ELF PIE executable
+
+## Github
+
+https://github.com/advanced-microcode-patching/shiva
 
 ---- File descriptions
 
