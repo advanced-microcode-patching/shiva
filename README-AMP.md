@@ -1,5 +1,7 @@
 # Shiva JIT micropatching engine
 
+![My Image](shiva_logo.png)
+
 This collection of files is from the DARPA Assured micropatching (AMP)
 program. This README provides a basic description of the AMP program
 and the overall manifest and description for each file.
