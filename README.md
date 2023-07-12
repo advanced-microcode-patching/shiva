@@ -21,7 +21,7 @@ Support for ET_EXEC binaries and other architectures are on the way.
 ## Build
 
 This has been tested on aarch64 ubuntu 18.04 and ubuntu 22.
-Shiva relies on libelfmaster and musl-libc.
+Shiva relies on libelfmaster, musl-libc, and libcapstone.
 
 ## Dependencies
 
