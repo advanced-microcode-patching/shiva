@@ -40,11 +40,21 @@ https://github.com/advanced-microcode-patching/shiva
 
 ---- File descriptions
 
-README-AMP.md: This file
-README.md: File describing how to build and use Shiva
+### README-AMP.md
+This file
+
+### File describing how to build and use Shiva
 documentation/shiva_final_design.pdf: A document describing the internal design of Shiva
-libcapstone.a: A pre-built static library of the Capstone API
-modules/aarch64_patches/cfs_patch1/core-cpu1: A binary built from NASA cSF github repository to test patching against
-modules/aarch64/amp_challenge10/program_c: An aarch64 binary taken from the beaglebone, as a patch challenge for AMP
-include/capstone: Header files from capstone disassembly API
+
+### libcapstone.a
+A pre-built static library of the Capstone API
+
+### modules/aarch64_patches/cfs_patch1/core-cpu1
+A binary built from NASA cSF github repository to test patching against
+
+### modules/aarch64/amp_challenge10/program_c 
+An aarch64 binary taken from the beaglebone, as a patch challenge for AMP
+
+### include/capstone
+Header files from capstone disassembly API
 
