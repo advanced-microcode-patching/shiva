@@ -260,10 +260,9 @@ val: 5
 elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/rodata_interposing$ 
 ```
 
-### Work in progress
+### Friendly user guide to micropatching with Shiva
 
-This README is a work in progress. A "Friendly guide to micropatching with Shiva" User manual
-will be available soon!
+Read the user manual. https://github.com/advanced-microcode-patching/shiva_user_manual
 
 
 ### Author contact
