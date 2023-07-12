@@ -52,13 +52,15 @@ part of the prelinking process.
 #### Custom Dynamic tags for the Shiva interpreter
 
 ```
-#define SHIVA_DT_NEEDED (DT_LOOS + 10)
-#define SHIVA_DT_SEARCH (DT_LOOS + 11)
+#define SHIVA_DT_NEEDED (DT_LOOS + 10) // Patch basename (i.e. "patch.o")
+#define SHIVA_DT_SEARCH (DT_LOOS + 11) // Search path (i.e. "/opt/shiva/modules")
+#define SHIVA_DT_ORIG_INTERP (DT_LOOS + 12) // Original interpreter path (i.e. "/lib/ld-linux.so")
 ```
 
 #### Using shiva-ld command line tool
 
-$ shiva-ld -e ./vuln_program -p patch_fix.o -i /lib/shiva -s /opt/shiva/modules -o ./vuln_program.patched
+The Shiva prelinker is called "/usr/bin/shiva-ld" and has the following command line
+usage:
 
 ```
 Usage: shiva-ld -e test_bin -p patch1.o -i /lib/shiva-s /opt/shiva/modules/ -o test_bin_final
@@ -68,3 +70,14 @@ Usage: shiva-ld -e test_bin -p patch1.o -i /lib/shiva-s /opt/shiva/modules/ -o t
 [-s] --search_path	Module search path (For patch object)
 [-o] --output_exec	Output executable
 ```
+
+Prelink the executable "vuln_program". Don't forget to copy patch.o into the search
+path specified to shiva-ld; in our case "/opt/shiva/modules". This is akin to how
+shared libraries are typically stored in /lib/x86-64-linux.gnu/
+
+```
+$ shiva-ld -e ./vuln_program -p patch.o -i /lib/shiva -s /opt/shiva/modules -o ./vuln_program
+$ sudo cp patch.o /opt/shiva/modules
+```
+
+elfmaster@arcana-research.io
