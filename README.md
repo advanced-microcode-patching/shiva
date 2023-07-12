@@ -1,5 +1,5 @@
 # Shiva JIT micropatching engine
-![My Image](blob/main/shiva_logo.png)
+![My Image](shiva_logo.png)
 
 ## Description
 
