@@ -61,8 +61,9 @@ shiva_post_linker(void)
 	    ELF_PAGEALIGN(ctx_global->module.runtime->text_size,
 	    PAGE_SIZE),
 	    PROT_READ|PROT_EXEC) < 0) {
+		fprintf(stderr, "shiva_post_linker() Unable to mark text as read-only\n");
 		perror("mprotect");
-		return false;
+		exit(EXIT_FAILURE);
 	}
 
 	__asm__ __volatile__ ("mov x21, %0" :: "r"(ctx_global->ulexec.entry_point));

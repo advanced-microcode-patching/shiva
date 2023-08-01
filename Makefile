@@ -29,7 +29,7 @@ interp:
 	$(CC) $(GCC_OPTS) shiva_transform.c -o	shiva_transform.o
 	$(CC) $(GCC_OPTS) shiva_so.c -o		shiva_so.o
 	$(CC) $(GCC_OPTS) -fno-stack-protector shiva_post_linker.c -o shiva_post_linker.o
-	$(MUSL) -static -Wl,-undefined=system -Wl,-undefined=prctl -Wl,-undefined=pause -Wl,-undefined=puts -Wl,-undefined=putchar $(OBJ_LIST) $(STATIC_LIBS) -o $(BUILD_DIR)/shiva
+	$(MUSL) -static $(OBJ_LIST) $(STATIC_LIBS) -o $(BUILD_DIR)/shiva
 
 shiva-ld:
 	make -C tools/shiva-ld

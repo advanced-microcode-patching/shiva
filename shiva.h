@@ -803,9 +803,11 @@ struct shiva_trace_handler * shiva_trace_find_handler(struct shiva_ctx *, void *
 struct shiva_trace_bp * shiva_trace_bp_struct(void *);
 bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(void *), uint64_t, void *, shiva_error_t *);
 bool shiva_trace_write(struct shiva_ctx *, pid_t, void *, const void *, size_t, shiva_error_t *);
+#if __x86_64__
 void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *);
 void __attribute__((naked)) shiva_trace_setjmp_x86_64(shiva_trace_jumpbuf_t *);
 void shiva_trace_longjmp_x86_64(shiva_trace_jumpbuf_t *jumpbuf, uint64_t ip);
+#endif
 uint64_t shiva_trace_base_addr(struct shiva_ctx *);
 /*
  * shiva_trace_thread.c
@@ -835,3 +837,8 @@ bool shiva_so_resolve_symbol(struct shiva_module *, char *, struct elf_symbol *,
  */
 void shiva_post_linker(void);
 #endif
+
+/*
+ * debug stub to set breakpoints on.
+ */
+int test_mark(void);

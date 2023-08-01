@@ -7,9 +7,9 @@ static bool shiva_trace_op_peek(struct shiva_ctx *, pid_t,
  * XXX FIXME
  * temporary version.
  */
+#if __x86_64__
 void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *regs)
 {
-#if defined(__x86_64__)
 	__asm__ __volatile__(
 		"movq %rax, (%rdi)\n\t"
 		"movq %rbx, 8(%rdi)\n\t"
@@ -26,7 +26,6 @@ void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset
 		"movq %r15, 104(%rdi)\n\t"
 		"ret\n\t"
 		);
-#endif
 }
 
 /*
@@ -37,7 +36,6 @@ void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset
  */
 void __attribute__ ((naked)) shiva_trace_setjmp_x86_64(shiva_trace_jumpbuf_t *jmpbuf)
 {
-#if defined(__x86_64__)
 	__asm__ __volatile__(
 		"movq %rax, 0(%rdi)\n\t"
 		"movq %rbx, 8(%rdi)\n\t"
@@ -58,12 +56,10 @@ void __attribute__ ((naked)) shiva_trace_setjmp_x86_64(shiva_trace_jumpbuf_t *jm
 		"xor  %rax, %rax\n\t"
 		"ret\n\t"
 		);
-#endif
 }
 
 void shiva_trace_longjmp_x86_64(shiva_trace_jumpbuf_t *jumpbuf, uint64_t ip)
 {
-#if defined(__x86_64__)
 	__asm__ __volatile__(
 		"movq 0(%rdi), %rax\n\t"
 		"movq 8(%rdi), %rbx\n\t"
@@ -84,8 +80,8 @@ void shiva_trace_longjmp_x86_64(shiva_trace_jumpbuf_t *jumpbuf, uint64_t ip)
 	__asm__ __volatile__ (
 			"movq %0, %%rdx\n\t"
 			"jmp *%%rdx" :: "r"(ip));
-#endif
 }
+#endif
 
 uint64_t
 shiva_trace_base_addr(struct shiva_ctx *ctx)
@@ -510,28 +506,11 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 								 */
 								bp->plt_addr = branch_site->target_vaddr;
 								
-#if 0
 								/*
 								 * We cannot use an hcreate cache because there's
 								 * some incompatibility when using it cross module
 								 * execution.
 								 */
-								val = branch_site->retaddr + ctx->ulexec.base_vaddr;
-								sprintf(tmp, "%#lx", val);
-								memcpy(ptr_val, &val, sizeof(val));
-								e.key = (char *)tmp;
-								e.data = (void *)ptr_val;
-								printf("Adding PLT retaddr %s to cache\n", e.key);
-								printf("data: %#lx\n", *(uint64_t *)e.data);
-								if (hsearch_r(e, ENTER, &ep, &bp->valid_plt_retaddrs) == 0) {
-									shiva_error_set(error, "hsearch_r failed: %s\n",
-									    strerror(errno));
-									return false;
-								}
-								if (hsearch_r(e, FIND, &ep, &bp->valid_plt_retaddrs) != 0) {
-									printf("FOUND IT: data: %#lx\n", *(uint64_t *)e.data);
-								}
-#endif
 							}
 						}
 						TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);

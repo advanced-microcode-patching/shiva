@@ -460,7 +460,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 				symbol.bind = STB_GLOBAL;
 				symbol.type = STT_OBJECT;
 				symbol.visibility = STV_PROTECTED;
-				if (elf_section_index_by_name(&ctx->elfobj, shdr.name, &symbol.shndx)
+				if (elf_section_index_by_name(&ctx->elfobj, shdr.name, (uint64_t *)&symbol.shndx)
 				    == false) {
 					fprintf(stderr, "Failed to find section index for %s in %s\n",
 					    shdr.name, elf_pathname(&ctx->elfobj));

@@ -590,7 +590,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 
 						shiva_debug("Symbol '%s' is a PLT entry, let's look it up in the shared libraries\n",
 						    symbol.name);
-						res = shiva_so_resolve_symbol(linker, symbol.name, &tmp, &so_path);
+						res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 						if (res == false) {
 							fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
 							    symbol.name);
@@ -640,7 +640,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				struct elf_symbol tmp;
 				char path_out[PATH_MAX];
 
-				res = shiva_so_resolve_symbol(linker, symbol.name, &tmp, &so_path);
+				res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 				if (res == false) {
 					fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
 					    symbol.name);
@@ -830,7 +830,7 @@ internal_symresolve(struct shiva_module *linker, char *symname,
 	} else if (res == false && linker->mode == SHIVA_LINKING_MICROCODE_PATCH) {
 		char *so_path;
 
-		res = shiva_so_resolve_symbol(linker, symname, &tmp, &so_path);
+		res = shiva_so_resolve_symbol(linker, (char *)symname, &tmp, &so_path);
 		if (res == true) {
 			*type = RESOLVER_TARGET_SO_RESOLVE;
 			*e_type = ET_DYN;
@@ -1098,7 +1098,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
 						 * Insert this as a delayed relocation so that the
 						 * shiva_post_linker code can handle it later.
 						 */
-						res = shiva_so_resolve_symbol(linker, symbol.name, &tmp, &so_path);
+						res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 						if (res == false) {
 							fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
 							    symbol.name);
@@ -1668,7 +1668,7 @@ calculate_bss_size(struct shiva_module *linker, size_t *out)
 			if (hsearch_r(e, FIND, &ep, &linker->cache.bss) != 0)
 				continue;
 			bss_entry = shiva_malloc(sizeof(*bss_entry));
-			bss_entry->symname = symbol.name;
+			bss_entry->symname = (char *)symbol.name;
 			bss_entry->addr = linker->bss_vaddr + var_offset;
 			bss_entry->offset = var_offset;
 			var_offset += symbol.size;
@@ -2409,7 +2409,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 				    sizeof(struct elf_symbol));
 				memcpy(&transform->source_symbol, &tf_sym,
 				    sizeof(struct elf_symbol));
-				transform->name = target_sym.name;
+				transform->name = (char *)target_sym.name;
 				transform->ptr = NULL;
 				shiva_debug("Source symbol '%s' value: %zu size: %zu\n",
 				    transform->source_symbol.name, transform->source_symbol.value, transform->source_symbol.size);
@@ -2579,7 +2579,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			    transform->source_symbol.value);
 			if (elf_section_by_name(&linker->elfobj, ".text", &text_shdr) == false) {
 				fprintf(stderr,
-				    "elf_section_by_name(%p, \".text\", ...) failed\n");
+				    "elf_section_by_name(%p, \".text\", ...) failed\n", &linker->elfobj);
 				return false;
 			}
 			if (next_func.value == transform->source_symbol.value) {
