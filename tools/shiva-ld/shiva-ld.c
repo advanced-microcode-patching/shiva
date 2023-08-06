@@ -36,6 +36,7 @@
 #include <fcntl.h>
 #include <link.h>
 #include <getopt.h>
+#include <errno.h>
 
 #include "/opt/elfmaster/include/libelfmaster.h"
 #include "../../include/capstone/capstone.h"
@@ -201,7 +202,7 @@ struct shiva_prelink_ctx {
 	} tailq;
 	struct {
 		char *strtab;
-		uint32_t current_offset, len;
+		uint32_t current_offset, max_size;
 	} shiva_strtab;
 } shiva_prelink_ctx;
 
@@ -627,8 +628,8 @@ gen_xref(struct shiva_prelink_ctx *ctx, struct elf_symbol *symbol, struct elf_sy
 	xref->adrp_o_insn = adrp_o_bytes; //*(uint32_t *)&tmp_ptr[c];
 	xref->next_o_insn = next_o_bytes; //*(uint32_t *)&tmp_ptr[c + ARM_INSN_LEN];
 	xref->target_vaddr = (adrp_site & ~0xfff) + adrp_imm + next_imm;
-	shiva_pl_debug("ADRP(%#lx): %x\n", adrp_site, xref->adrp_o_insn);
-	shiva_pl_debug("NEXT(%#lx): %x\n", xref->next_site, xref->next_o_insn);
+	shiva_pl_debug("ADRP(%#lx): %lx\n", adrp_site, xref->adrp_o_insn);
+	shiva_pl_debug("NEXT(%#lx): %lx\n", xref->next_site, xref->next_o_insn);
 	memcpy(&xref->symbol, symbol, sizeof(*symbol));
 	if (src_func != NULL)
 		memcpy(&xref->current_function, src_func, sizeof(*src_func));
@@ -643,12 +644,36 @@ get_shiva_strtab_offset(struct shiva_prelink_ctx *ctx)
 	return ctx->shiva_strtab.current_offset;
 }
 
-static void
-set_shiva_strtab_offset(struct shiva_prelink_ctx *ctx, uint32_t offset)
+static bool
+set_shiva_strtab_string(struct shiva_prelink_ctx *ctx, char *string)
 {
 
-	ctx->shiva_strtab.current_offset = offset;
-	return;
+	if (ctx->shiva_strtab.current_offset + strlen(string) + 1 >= ctx->shiva_strtab.max_size) {
+		ctx->shiva_strtab.strtab = realloc(ctx->shiva_strtab.strtab, ctx->shiva_strtab.max_size *= 2);
+		if (ctx->shiva_strtab.strtab == NULL) {
+			perror("realloc");
+			return false;
+		}
+	}
+	strcpy(ctx->shiva_strtab.strtab, string);
+	ctx->shiva_strtab.current_offset += strlen(string) + 1;
+	return true;
+}
+
+#define SHIVA_STRTAB_MAXLEN 4096
+
+static bool
+init_shiva_strtab(struct shiva_prelink_ctx *ctx)
+{
+
+	memset(&ctx->shiva_strtab, 0, sizeof(ctx->shiva_strtab));
+	ctx->shiva_strtab.max_size = SHIVA_STRTAB_MAXLEN;
+	ctx->shiva_strtab.strtab = calloc(ctx->shiva_strtab.max_size, 1);
+	if (ctx->shiva_strtab.strtab == NULL) {
+		perror("calloc");
+		return false;
+	}
+	return true;
 }
 
 static bool
@@ -656,9 +681,10 @@ build_aarch64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr)
 {
 	struct shiva_branch_site *tmp;
 	struct elf_symbol tmp_sym;
+	char insn_str[256];
 	char *p = strchr(ctx->disas.insn->op_str, '#');
 	size_t strtab_offset;
-
+	
 	if (p == NULL) {
 		fprintf(stderr,
 		    "Unforseen parsing error in build_aarch64_jmp()\n");
@@ -673,9 +699,11 @@ build_aarch64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr)
 	tmp->branch_site = pc_vaddr;
 	tmp->branch_type = SHIVA_BRANCH_JMP;
 	tmp->insn_string = get_shiva_strtab_offset(ctx);
-	strtab_offset = tmp->insn_string + strlen(ctx->disas.insn->mnemonic) + 1 +
-	    strlen(ctx->disas.insn->op_str) + 1;
-	set_shiva_strtab_offset(ctx, strtab_offset);
+
+	snprintf(insn_str, sizeof(insn_str), "%s %s", ctx->disas.insn->mnemonic,
+	    ctx->disas.insn->op_str);
+	set_shiva_strtab_string(ctx, insn_str);
+
 	if (elf_symbol_by_range(&ctx->bin.elfobj, pc_vaddr,
 	    &tmp_sym) == true) {
 		tmp->branch_flags |= SHIVA_BRANCH_F_SRC_SYMINFO;
@@ -685,7 +713,7 @@ build_aarch64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr)
 	/*
 	 * Unconditional branch at a PC-relative offset
 	 */
-	shiva_pl_debug("Found branch: %#lx:%s\n", pc_vaddr, tmp->insn_string);
+	shiva_pl_debug("Found branch: %#lx:(str_offset: %u)\n", pc_vaddr, tmp->insn_string);
 	TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 	return true;
 }
@@ -699,7 +727,6 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 	uint64_t call_site, call_addr, retaddr;
 	uint64_t current_address = ctx->disas.base;
 	int64_t call_offset;
-	int bits;
 
 	if (elf_section_by_name(&ctx->bin.elfobj, ".text", &section) == false) {
 		fprintf(stderr, "elf_section_by_name() failed\n");
@@ -724,7 +751,7 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 		return false;
 	}
 
-	shiva_pl_debug("disassembling text(%#lx), %d bytes\n", section.address, section.size);
+	shiva_pl_debug("disassembling text(%#lx), %zu bytes\n", section.address, section.size);
 	for (c = 0 ;; c += ARM_INSN_LEN) {
 		bool res;
 
@@ -846,16 +873,33 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 			tmp->branch_type = SHIVA_BRANCH_CALL;
 			tmp->branch_site = call_site;
 			tmp->branch_flags |= SHIVA_BRANCH_F_DST_SYMINFO;
-			tmp->insn_string = shiva_xfmtstrdup("%s %s",
-			    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
+			tmp->insn_string = get_shiva_strtab_offset(ctx);
+
+			char *tmp_str = shiva_xfmtstrdup("%s %s", ctx->disas.insn->mnemonic,
+			    ctx->disas.insn->op_str);
+
+			/*
+			 * Add the string to the .shiva.strtab string table.
+			 */
+			set_shiva_strtab_string(ctx, tmp_str);
 
 			if (elf_symbol_by_range(&ctx->bin.elfobj, code_vaddr - 4,
 			    &tmp_sym) == true) {
 				tmp->branch_flags |= SHIVA_BRANCH_F_SRC_SYMINFO;
-				memcpy(&tmp->current_function, &tmp_sym, sizeof(tmp_sym));
+				tmp->current_function.name = get_shiva_strtab_offset(ctx);
+				tmp->current_function.value = tmp_sym.value;
+				tmp->current_function.shndx = tmp_sym.shndx;
+				tmp->current_function.bind = tmp_sym.bind;
+				tmp->current_function.type = tmp_sym.type;
+				tmp->current_function.visibility = tmp_sym.visibility;
+				tmp->current_function.__pad = 0;
+				if (set_shiva_strtab_string(ctx, (char *)tmp_sym.name) == false) {
+					fprintf(stderr, "Failed to insert string into .shiva.strtab\n");
+					exit(EXIT_FAILURE);
+				}
 				shiva_pl_debug("Source symbol included: %s\n", tmp_sym.name);
 			}
-			shiva_pl_debug("Inserting branch for symbol %s callsite: %#lx\n", tmp->symbol.name, tmp->branch_site);
+			shiva_pl_debug("Inserting branch for symbol %s callsite: %#lx\n", tmp_sym.name, tmp->branch_site);
 			TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 			shiva_pl_debug("Done inserting it\n");
 		} else if (strcmp(ctx->disas.insn->mnemonic, "adrp") == 0) {
@@ -1102,6 +1146,8 @@ usage:
 	    ctx.interp_path == NULL || ctx.search_path == NULL || ctx.output_exec == NULL)
 		goto usage;
 
+	TAILQ_INIT(&ctx.tailq.xref_tqlist);
+	TAILQ_INIT(&ctx.tailq.branch_tqlist);
 	/*
 	 * Open the target executable, with modification privileges.
 	 */
@@ -1120,6 +1166,13 @@ usage:
 	}
 
 	ctx.disas.base = section.address;
+	ctx.disas.textptr = elf_address_pointer(&ctx.bin.elfobj, section.address);
+
+	if (init_shiva_strtab(&ctx) == false) {
+		fprintf(stderr, "Failed to allocate .shiva.strtab: %s\n",
+		    strerror(errno));
+		exit(EXIT_FAILURE);
+	}
 
 	if (analyze_binary(&ctx) == false) {
 		fprintf(stderr, "analyze_binary() failed on %s\n",
