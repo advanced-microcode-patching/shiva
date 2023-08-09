@@ -68,7 +68,7 @@
 #define ARM_INSN_LEN 4
 
 struct __elf_symbol {
-	uint32_t name; /* index into .shiva_strtab */
+	size_t name; /* index into .shiva_strtab */
 	uint64_t value;
 	uint64_t shndx;
 	uint8_t bind;
@@ -647,6 +647,7 @@ get_shiva_strtab_offset(struct shiva_prelink_ctx *ctx)
 static bool
 set_shiva_strtab_string(struct shiva_prelink_ctx *ctx, char *string)
 {
+	uint32_t off = ctx->shiva_strtab.current_offset;
 
 	if (ctx->shiva_strtab.current_offset + strlen(string) + 1 >= ctx->shiva_strtab.max_size) {
 		ctx->shiva_strtab.strtab = realloc(ctx->shiva_strtab.strtab, ctx->shiva_strtab.max_size *= 2);
@@ -655,7 +656,7 @@ set_shiva_strtab_string(struct shiva_prelink_ctx *ctx, char *string)
 			return false;
 		}
 	}
-	strcpy(ctx->shiva_strtab.strtab, string);
+	strcpy(&ctx->shiva_strtab.strtab[off], string);
 	ctx->shiva_strtab.current_offset += strlen(string) + 1;
 	return true;
 }
