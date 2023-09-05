@@ -215,36 +215,36 @@ struct shiva_prelink_ctx {
 char *
 shiva_strdup(const char *s)
 {
-        char *p = strdup(s);
-        if (p == NULL) {
-                perror("strdup");
-                exit(EXIT_FAILURE);
-        }
-        return p;
+	char *p = strdup(s);
+	if (p == NULL) {
+		perror("strdup");
+		exit(EXIT_FAILURE);
+	}
+	return p;
 }
 
 char *
 shiva_xfmtstrdup(char *fmt, ...)
 {
-        char buf[512];
-        char *s;
-        va_list va;
+	char buf[512];
+	char *s;
+	va_list va;
 
-        va_start(va, fmt);
-        vsnprintf(buf, sizeof(buf), fmt, va);
-        s = shiva_strdup(buf);
-        return s;
+	va_start(va, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, va);
+	s = shiva_strdup(buf);
+	return s;
 }
 
 void *
 shiva_malloc(size_t len)
 {
-        uint8_t *mem = malloc(len);
-        if (mem == NULL) {
-                perror("malloc");
-                exit(EXIT_FAILURE);
-        }
-        return mem;
+	uint8_t *mem = malloc(len);
+	if (mem == NULL) {
+		perror("malloc");
+		exit(EXIT_FAILURE);
+	}
+	return mem;
 }
 
 bool
@@ -360,6 +360,9 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			ctx->new_segment.filesz += strlen(ctx->input_patch) + 1;
 			ctx->new_segment.filesz += strlen(ctx->search_path) + 1;
 			ctx->new_segment.filesz += strlen(ctx->orig_interp_path) + 1;
+			ctx->new_segment.filesz += strlen(".shiva.strtab") + 1;
+			ctx->new_segment.filesz += strlen(".shiva.xref") + 1;
+			ctx->new_segment.filesz += strlen(".shiva.branch") + 1;
 			/*
 			 * Mark the index of this segment so that we can modify it
 			 * to match the new dynamic segment location once we know it.
@@ -371,8 +374,16 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				return false;
 			}
 			n_segment.type = PT_LOAD;
+			/*
+			 * Make room for the strings of 3 new section headers: .shiva.strtab, .shiva.xref and .shiva.branch
+			 * And for 3 section headers (i.e. Elf64_Shdr) entries being added. This will effect the file offset
+			 * to where our new segment lives.
+			 */
+			size_t new_lens = sizeof(ElfW(Shdr)) * 3;
+			new_lens += strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1 + strlen(".shiva.branch") + 1;
 			n_segment.offset =
-			    ELF_PAGEALIGN(ctx->bin.elfobj.size, last_load_align);
+			    ELF_PAGEALIGN(ctx->bin.elfobj.size + new_lens, last_load_align);
+
 			n_segment.filesz = ctx->new_segment.filesz;
 			n_segment.memsz = ctx->new_segment.filesz;
 			n_segment.vaddr = ELF_PAGEALIGN(last_load_vaddr +
@@ -455,7 +466,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	 * 2. New dynamic segment (With additional SHIVA_DT_ entries)
 	 * 3. Strings table '.shiva.strtab' for searchpath, module, cfg symbols
 	 * i.e.:
-	 * [ehdr][phdrs][text][data][shdrs][new_load_segment (PT_DYNAMIC, .shiva.strtab section)]
+	 * [ehdr][phdrs][text][data][shdrs (.shiva.xref, .shiva.branch)][new_load_segment (PT_DYNAMIC, .shiva.strtab section)]
 	 */
 
 	if (stat(elf_pathname(&ctx->bin.elfobj), &st) < 0) {
@@ -472,11 +483,67 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	shiva_pl_debug("Writing first %zu bytes of %s into tmpfile\n",
 	    ctx->bin.elfobj.size, ctx->bin.elfobj.path);
 
-	if (write(fd, ctx->bin.elfobj.mem, ctx->bin.elfobj.size) < 0) {
+	size_t shentsize;
+
+	if (elf_class(&ctx->bin.elfobj) == elfclass32) {
+		shentsize = sizeof(Elf32_Shdr);
+	} else if (elf_class(&ctx->bin.elfobj) == elfclass64) {
+		shentsize = sizeof(Elf64_Shdr);
+	}
+
+	if (elf_section_by_name(&ctx->bin.elfobj, ".shstrtab", &shstrtab_shdr) == false) {
+		fprintf(stderr, "elf_section_by_name(%p, \"%s\", ...) failed\n",
+		    &ctx->bin.elfobj, ".shstrtab");
+		return false;
+	}
+	/*
+	 * Write up until the location of the .shstrtab string data + sh_size
+	 */
+	if (write(fd, ctx->bin.elfobj.mem, shstrtab_shdr.sh_offset + shstrtab_shdr.sh_size) < 0) {
 		perror("write 1.");
 		return false;
 	}
 
+	/*
+	 * write out three new strings into .shstrtab
+	 */
+
+	if (write(fd, (char *)".shiva.strtab", strlen(".shiva.strtab") + 1) < 0) {
+		perror("write 2.");
+		return false;
+	}
+
+	if (write(fd, (char *)".shiva.xref", strlen(".shiva.xref") + 1) < 0) {
+		perror("write 3.");
+		return false;
+	}
+
+	if (write(fd, (char *)".shiva.branch", strlen(".shiva.branch") + 1) < 0) {
+		perror("write 4.");
+		return false;
+	}
+	size_t off = shstrtab_shdr.sh_offset + shstrtab_shdr.sh_size +
+	    strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1 + strlen(".shiva.branch") + 1;
+
+	/*
+	 * Write out rest of executable up until the end of where the section header table.
+	 */
+	if (write(fd, &ctx->bin.elfobj.mem[off],
+	    (elf_shoff(&ctx->bin.elfobj) + (elf_shnum(&ctx->bin.elfobj) * shentsize)) - off) < 0) {
+		perror("write 1.");
+		return false;
+	}
+
+	Elf64_Shdr shdr64;
+	/*
+	 * Write out shdr for .shiva.strtab
+	 */
+	shdr64.sh_name = shstrtab_shdr.sh_size;
+	shdr64.sh_type = SHT_STRTAB;
+	shdr64.sh_flags = SHF_ALLOC;
+	shdr64.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + ctx->shiva_strtab.
+	shdr64.sh_offset = ctx->new_segment.offset;
+	shdr64.
 	shiva_pl_debug("s.offset: %#lx ctx->bin.elfobj.size: %#lx\n", n_segment.offset, ctx->bin.elfobj.size);
 	shiva_pl_debug("Writing extended sement of %zu bytes\n",
 	    n_segment.offset - ctx->bin.elfobj.size);
@@ -674,6 +741,12 @@ init_shiva_strtab(struct shiva_prelink_ctx *ctx)
 		perror("calloc");
 		return false;
 	}
+	/*
+	 * Store these strings in the string table.
+	 */
+	set_shiva_strtab_string(ctx, ctx->search_path);
+	set_shiva_strtab_string(ctx, ctx->input_patch);
+	set_shiva_strtab_string(ctx, ctx->orig_interp_path);
 	return true;
 }
 
