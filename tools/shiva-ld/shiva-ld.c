@@ -204,7 +204,10 @@ struct shiva_prelink_ctx {
 		char *strtab;
 		uint32_t current_offset, max_size;
 	} shiva_strtab;
+	size_t xref_entry_totlen; /* total size of xref entries after CFG analysis */
 } shiva_prelink_ctx;
+
+static uint32_t get_shiva_strtab_offset(struct shiva_prelink_ctx *);
 
 /*
  * TODO
@@ -349,12 +352,13 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				fprintf(stderr, "Failed to copy original dynamic segment\n");
 				return false;
 			}
-			/*
-			 * Make room for original dynamic segment
-			 */
 			ctx->new_segment.filesz = segment.filesz;
+
 			/*
-			 * Make room for the two new additional dynamic entries
+			 * Make room for the 3 new additional dynamic entries
+			 * Make room for the string lens of the patch path, search path, and interp path
+			 * Make room for the string lens of the 3 new sections
+			 * Make room for the Shdr structs of the 3 new sections
 			 */
 			ctx->new_segment.filesz += sizeof(ElfW(Dyn)) * NEW_DYN_COUNT;
 			ctx->new_segment.filesz += strlen(ctx->input_patch) + 1;
@@ -363,6 +367,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			ctx->new_segment.filesz += strlen(".shiva.strtab") + 1;
 			ctx->new_segment.filesz += strlen(".shiva.xref") + 1;
 			ctx->new_segment.filesz += strlen(".shiva.branch") + 1;
+			ctx->new_segment.filesz += sizeof(ElfW(Shdr)) * 3;
 			/*
 			 * Mark the index of this segment so that we can modify it
 			 * to match the new dynamic segment location once we know it.
@@ -381,6 +386,8 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			 */
 			size_t new_lens = sizeof(ElfW(Shdr)) * 3;
 			new_lens += strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1 + strlen(".shiva.branch") + 1;
+			new_lens += sizeof(ElfW(Shdr)) * 3;
+
 			n_segment.offset =
 			    ELF_PAGEALIGN(ctx->bin.elfobj.size + new_lens, last_load_align);
 
@@ -438,7 +445,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	 * to reflect the new dynamic segment.
 	 */
 	elf_section_iterator_t shdr_iter;
-	struct elf_section shdr;
+	struct elf_section shdr, shstrtab_shdr;
 
 	elf_section_iterator_init(&ctx->bin.elfobj, &shdr_iter);
 	while (elf_section_iterator_next(&shdr_iter, &shdr) == ELF_ITER_OK) {
@@ -449,6 +456,25 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			tmp.offset = ctx->new_segment.offset;
 			tmp.address = ctx->new_segment.vaddr;
 			tmp.size = ctx->new_segment.dyn_size;
+
+			res = elf_section_modify(&ctx->bin.elfobj, shdr_iter.index - 1,
+			    &tmp, &error);
+			if (res == false) {
+				fprintf(stderr, "[!] elf_section_modify "
+				    "failed: %s\n", elf_error_msg(&error));
+				return false;
+			}
+			break;
+			/*
+			 * Update the .shstrtab section so that it's new size reflects
+			 * the new strings added for the new sections.
+			 */
+		} else if (strcmp(shdr.name, ".shstrtab") == 0) {
+			struct elf_section tmp;
+
+			memcpy(&tmp, &shdr, sizeof(tmp));
+			tmp.size += strlen(".shiva.strtab") + 1 +
+			    strlen(".shiva.xref") + 1 + strlen(".shiva.branch") + 1;
 
 			res = elf_section_modify(&ctx->bin.elfobj, shdr_iter.index - 1,
 			    &tmp, &error);
@@ -499,7 +525,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	/*
 	 * Write up until the location of the .shstrtab string data + sh_size
 	 */
-	if (write(fd, ctx->bin.elfobj.mem, shstrtab_shdr.sh_offset + shstrtab_shdr.sh_size) < 0) {
+	if (write(fd, ctx->bin.elfobj.mem, shstrtab_shdr.offset + shstrtab_shdr.size) < 0) {
 		perror("write 1.");
 		return false;
 	}
@@ -522,7 +548,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		perror("write 4.");
 		return false;
 	}
-	size_t off = shstrtab_shdr.sh_offset + shstrtab_shdr.sh_size +
+	size_t off = shstrtab_shdr.offset + shstrtab_shdr.size +
 	    strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1 + strlen(".shiva.branch") + 1;
 
 	/*
@@ -530,23 +556,56 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	 */
 	if (write(fd, &ctx->bin.elfobj.mem[off],
 	    (elf_shoff(&ctx->bin.elfobj) + (elf_shnum(&ctx->bin.elfobj) * shentsize)) - off) < 0) {
-		perror("write 1.");
+		perror("write 5.");
 		return false;
 	}
 
-	Elf64_Shdr shdr64;
+	ElfW(Shdr) tmp_shdr;
 	/*
 	 * Write out shdr for .shiva.strtab
 	 */
-	shdr64.sh_name = shstrtab_shdr.sh_size;
-	shdr64.sh_type = SHT_STRTAB;
-	shdr64.sh_flags = SHF_ALLOC;
-	shdr64.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + ctx->shiva_strtab.
-	shdr64.sh_offset = ctx->new_segment.offset;
-	shdr64.
-	shiva_pl_debug("s.offset: %#lx ctx->bin.elfobj.size: %#lx\n", n_segment.offset, ctx->bin.elfobj.size);
-	shiva_pl_debug("Writing extended sement of %zu bytes\n",
-	    n_segment.offset - ctx->bin.elfobj.size);
+	tmp_shdr.sh_name = shstrtab_shdr.size;
+	tmp_shdr.sh_type = SHT_STRTAB;
+	tmp_shdr.sh_flags = SHF_ALLOC;
+	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size;
+	tmp_shdr.sh_offset = ctx->new_segment.offset + old_dynamic_size + sizeof(ElfW(Dyn)) * 4;
+	tmp_shdr.sh_size = get_shiva_strtab_offset(ctx);
+	tmp_shdr.sh_link = 0;
+	tmp_shdr.sh_info = 0;
+	tmp_shdr.sh_addralign = 1;
+	tmp_shdr.sh_entsize = 1;
+
+	if (write(fd, &tmp_shdr, sizeof(ElfW(Shdr))) < 0) {
+		perror("write 6");
+		return false;
+	}
+
+	/*
+	 * Write out shdr for .shiva.xref
+	 */
+	tmp_shdr.sh_name = shstrtab_shdr.size + strlen(".shiva.strtab") + 1;
+	tmp_shdr.sh_type = SHT_STRTAB;
+	tmp_shdr.sh_flags = SHF_ALLOC;
+	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx);
+	tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx);
+	tmp_shdr.sh_size = ctx->xref_entry_totlen;
+	tmp_shdr.sh_link = 0;
+	tmp_shdr.sh_info = 0;
+	tmp_shdr.sh_addralign = 8;
+	tmp_shdr.sh_entsize = sizeof(struct shiva_xref_site) - sizeof(void *);
+
+	if (write(fd, &tmp_shdr, sizeof(ElfW(Shdr))) < 0) {
+		perror("write 7");
+		return false;
+	}
+
+	/*
+	 * Write out shdr for .shiva.branch
+	 */
+	tmp_shdr.sh_name = shstrtab_shdr.size + strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1;
+	tmp_shdr.sh_type = SHT_STRTAB;
+	tmp_shdr.sh_flags = SHF_ALLOC;
+	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
 
 	/*
 	 * Lseek to the offset of where our new segment begins.
@@ -701,6 +760,14 @@ gen_xref(struct shiva_prelink_ctx *ctx, struct elf_symbol *symbol, struct elf_sy
 	if (src_func != NULL)
 		memcpy(&xref->current_function, src_func, sizeof(*src_func));
 	TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref, _linkage);
+	/*
+	 * Increase size of xref_entry_totlen by sizeof(struct shiva_xref_entry),
+	 * however...
+	 * We don't include the size of the last member of the struct which
+	 * is a pointer to the next entry in the linked list. This isn't
+	 * necesary to store in the ELF file.
+	 */
+	ctx->xref_entry_totlen += (sizeof(struct shiva_xref_entry) - sizeof(uintptr_t));
 	return true;
 }
 
