@@ -205,6 +205,7 @@ struct shiva_prelink_ctx {
 		uint32_t current_offset, max_size;
 	} shiva_strtab;
 	size_t xref_entry_totlen; /* total size of xref entries after CFG analysis */
+	size_t branch_entry_totlen; /* total size of branch entries after CFG analysis */
 } shiva_prelink_ctx;
 
 static uint32_t get_shiva_strtab_offset(struct shiva_prelink_ctx *);
@@ -304,6 +305,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	struct stat st;
 	uint8_t *old_dynamic_segment;
 	size_t old_dynamic_size, dynamic_index;
+	size_t old_shstrtab_len;
 
 	ctx->orig_interp_path = elf_interpreter_path(&ctx->bin.elfobj);
 	if (ctx->orig_interp_path == NULL) {
@@ -473,6 +475,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			struct elf_section tmp;
 
 			memcpy(&tmp, &shdr, sizeof(tmp));
+			old_shstrtab_len = tmp.size;
 			tmp.size += strlen(".shiva.strtab") + 1 +
 			    strlen(".shiva.xref") + 1 + strlen(".shiva.branch") + 1;
 
@@ -548,8 +551,8 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		perror("write 4.");
 		return false;
 	}
-	size_t off = shstrtab_shdr.offset + shstrtab_shdr.size +
-	    strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1 + strlen(".shiva.branch") + 1;
+	size_t off = shstrtab_shdr.offset + old_shstrtab_len; // +
+	//    strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1 + strlen(".shiva.branch") + 1;
 
 	/*
 	 * Write out rest of executable up until the end of where the section header table.
@@ -564,7 +567,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	/*
 	 * Write out shdr for .shiva.strtab
 	 */
-	tmp_shdr.sh_name = shstrtab_shdr.size;
+	tmp_shdr.sh_name = old_shstrtab_len;
 	tmp_shdr.sh_type = SHT_STRTAB;
 	tmp_shdr.sh_flags = SHF_ALLOC;
 	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size;
@@ -583,8 +586,8 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	/*
 	 * Write out shdr for .shiva.xref
 	 */
-	tmp_shdr.sh_name = shstrtab_shdr.size + strlen(".shiva.strtab") + 1;
-	tmp_shdr.sh_type = SHT_STRTAB;
+	tmp_shdr.sh_name = old_shstrtab_len + strlen(".shiva.strtab") + 1;
+	tmp_shdr.sh_type = SHT_PROGBITS;
 	tmp_shdr.sh_flags = SHF_ALLOC;
 	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx);
 	tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx);
@@ -602,11 +605,12 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	/*
 	 * Write out shdr for .shiva.branch
 	 */
-	tmp_shdr.sh_name = shstrtab_shdr.size + strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1;
-	tmp_shdr.sh_type = SHT_STRTAB;
+	tmp_shdr.sh_name = old_shstrtab_len + strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1;
+	tmp_shdr.sh_type = SHT_PROGBITS;
 	tmp_shdr.sh_flags = SHF_ALLOC;
 	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
-
+	tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
+	tmp_shdr.sh_size = ctx->branch_entry_totlen;
 	/*
 	 * Lseek to the offset of where our new segment begins.
 	 */
@@ -767,7 +771,7 @@ gen_xref(struct shiva_prelink_ctx *ctx, struct elf_symbol *symbol, struct elf_sy
 	 * is a pointer to the next entry in the linked list. This isn't
 	 * necesary to store in the ELF file.
 	 */
-	ctx->xref_entry_totlen += (sizeof(struct shiva_xref_entry) - sizeof(uintptr_t));
+	ctx->xref_entry_totlen += sizeof(struct shiva_xref_site) - sizeof(uintptr_t);
 	return true;
 }
 
@@ -825,7 +829,7 @@ build_aarch64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr)
 	char insn_str[256];
 	char *p = strchr(ctx->disas.insn->op_str, '#');
 	size_t strtab_offset;
-	
+
 	if (p == NULL) {
 		fprintf(stderr,
 		    "Unforseen parsing error in build_aarch64_jmp()\n");
@@ -856,6 +860,7 @@ build_aarch64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr)
 	 */
 	shiva_pl_debug("Found branch: %#lx:(str_offset: %u)\n", pc_vaddr, tmp->insn_string);
 	TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
+	ctx->branch_entry_totlen += sizeof(struct shiva_branch_site) - sizeof(uintptr_t);
 	return true;
 }
 
@@ -1042,6 +1047,7 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 			}
 			shiva_pl_debug("Inserting branch for symbol %s callsite: %#lx\n", tmp_sym.name, tmp->branch_site);
 			TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
+			ctx->branch_entry_totlen += sizeof(struct shiva_branch_site) - sizeof(uintptr_t);
 			shiva_pl_debug("Done inserting it\n");
 		} else if (strcmp(ctx->disas.insn->mnemonic, "adrp") == 0) {
 			uint64_t adrp_imm, adrp_site;
