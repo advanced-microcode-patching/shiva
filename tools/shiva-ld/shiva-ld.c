@@ -363,12 +363,9 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			 * Make room for the Shdr structs of the 3 new sections
 			 */
 			ctx->new_segment.filesz += sizeof(ElfW(Dyn)) * NEW_DYN_COUNT;
-			ctx->new_segment.filesz += strlen(ctx->input_patch) + 1;
-			ctx->new_segment.filesz += strlen(ctx->search_path) + 1;
-			ctx->new_segment.filesz += strlen(ctx->orig_interp_path) + 1;
-			ctx->new_segment.filesz += strlen(".shiva.strtab") + 1;
-			ctx->new_segment.filesz += strlen(".shiva.xref") + 1;
-			ctx->new_segment.filesz += strlen(".shiva.branch") + 1;
+			ctx->new_segment.filesz += get_shiva_strtab_offset(ctx);
+			ctx->new_segment.filesz += ctx->xref_entry_totlen;
+			ctx->new_segment.filesz += ctx->branch_entry_totlen;
 			ctx->new_segment.filesz += sizeof(ElfW(Shdr)) * 3;
 			/*
 			 * Mark the index of this segment so that we can modify it
@@ -592,7 +589,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx);
 	tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx);
 	tmp_shdr.sh_size = ctx->xref_entry_totlen;
-	tmp_shdr.sh_link = 0;
+	tmp_shdr.sh_link = 0; // should point to .shiva.strtab shdr index
 	tmp_shdr.sh_info = 0;
 	tmp_shdr.sh_addralign = 8;
 	tmp_shdr.sh_entsize = sizeof(struct shiva_xref_site) - sizeof(void *);
@@ -611,6 +608,11 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
 	tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
 	tmp_shdr.sh_size = ctx->branch_entry_totlen;
+	tmp_shdr.sh_link = 0; // should point to .shiva.strtab shdr index
+	tmp_shdr.sh_info = 0;
+	tmp_shdr.sh_addralign = 8;
+	tmp_shdr.sh_entsize = sizeof(struct shiva_branch_site) - sizeof(void *);
+
 	/*
 	 * Lseek to the offset of where our new segment begins.
 	 */
@@ -663,6 +665,13 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	 * Write out the string data (Marked by our new
 	 * section: .shiva.strtab)
 	 */
+	if (write(fd, ctx->shiva_strtab.strtab, ctx->shiva_strtab.current_offset) < 0) {
+		perror("write 5");
+		return false;
+	}
+	
+	
+#if 0
 	if (write(fd, ctx->search_path, strlen(ctx->search_path) + 1) < 0) {
 		perror("write 5.");
 		return false;
@@ -679,6 +688,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		perror("write 7.");
 		return false;
 	}
+#endif
 	if (fchown(fd, st.st_uid, st.st_gid) < 0) {
 		perror("fchown");
 		return false;
@@ -813,11 +823,14 @@ init_shiva_strtab(struct shiva_prelink_ctx *ctx)
 		return false;
 	}
 	/*
-	 * Store these strings in the string table.
+	 * Store these initial strings in the string table.
 	 */
 	set_shiva_strtab_string(ctx, ctx->search_path);
 	set_shiva_strtab_string(ctx, ctx->input_patch);
 	set_shiva_strtab_string(ctx, ctx->orig_interp_path);
+	set_shiva_strtab_string(ctx, ".shiva.strtab");
+	set_shiva_strtab_string(ctx, ".shiva.xref");
+	set_shiva_strtab_string(ctx, ".shiva.branch");
 	return true;
 }
 
