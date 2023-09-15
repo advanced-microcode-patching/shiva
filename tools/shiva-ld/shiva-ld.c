@@ -24,6 +24,7 @@
 
 #define _GNU_SOURCE
 
+#include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,14 +68,26 @@
 #define BIT_MASK(n)	((1U << n) - 1)
 #define ARM_INSN_LEN 4
 
+/*
+ * NOTE: 
+ * Regarding struct elf_symbol
+ * Usually the first 8 bytes are taken up by
+ * a pointer to the symbol name, i.e.
+ * char *name;
+ * Instead we are using a 32bit index into a string
+ * table when storing this struct onto disk. Notice the
+ * uint32_t name; and the uint32_t __pad1 member next, 
+ * to account for the entire 64bit 'char *name' ptr.
+ */
 struct __elf_symbol {
-	size_t name; /* index into .shiva_strtab */
+	uint32_t name; /* index into .shiva_strtab */
+	uint32_t __pad1;
 	uint64_t value;
 	uint64_t shndx;
 	uint8_t bind;
 	uint8_t type;
 	uint8_t visibility;
-	uint8_t __pad;
+	uint8_t __pad2;
 };
 
 static char *shiva_strtab = NULL;
@@ -209,7 +222,7 @@ struct shiva_prelink_ctx {
 } shiva_prelink_ctx;
 
 static uint32_t get_shiva_strtab_offset(struct shiva_prelink_ctx *);
-
+static bool set_shiva_strtab_string(struct shiva_prelink_ctx *, const char *, uint32_t *);
 /*
  * TODO
  * shiva_strdup, shiva_xfmtstrdup, and shiva_malloc are copied from 
@@ -463,7 +476,6 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				    "failed: %s\n", elf_error_msg(&error));
 				return false;
 			}
-			break;
 			/*
 			 * Update the .shstrtab section so that it's new size reflects
 			 * the new strings added for the new sections.
@@ -475,7 +487,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			old_shstrtab_len = tmp.size;
 			tmp.size += strlen(".shiva.strtab") + 1 +
 			    strlen(".shiva.xref") + 1 + strlen(".shiva.branch") + 1;
-
+			shiva_pl_debug("Increased .shstrtab size by %zu bytes\n", tmp.size - old_shstrtab_len);
 			res = elf_section_modify(&ctx->bin.elfobj, shdr_iter.index - 1,
 			    &tmp, &error);
 			if (res == false) {
@@ -483,12 +495,17 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				    "failed: %s\n", elf_error_msg(&error));
 				return false;
 			}
-			break;
 		}
 	}
 	/*
+	 * Commit the changes to the section header data on the backend.
+	 */
+	 elf_section_commit(&ctx->bin.elfobj);
+
+	/*
 	 * Write out
-	 * 1. Original ELF executable
+	 * 1. Original ELF executable up until .shstrtab section
+	 * 2. Add additional string data for 3 new sections ".shiva.xref, .shiva.branch, .shiva.strtab"
 	 * 2. New dynamic segment (With additional SHIVA_DT_ entries)
 	 * 3. Strings table '.shiva.strtab' for searchpath, module, cfg symbols
 	 * i.e.:
@@ -509,23 +526,30 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	shiva_pl_debug("Writing first %zu bytes of %s into tmpfile\n",
 	    ctx->bin.elfobj.size, ctx->bin.elfobj.path);
 
-	size_t shentsize;
-
-	if (elf_class(&ctx->bin.elfobj) == elfclass32) {
-		shentsize = sizeof(Elf32_Shdr);
-	} else if (elf_class(&ctx->bin.elfobj) == elfclass64) {
-		shentsize = sizeof(Elf64_Shdr);
-	}
-
 	if (elf_section_by_name(&ctx->bin.elfobj, ".shstrtab", &shstrtab_shdr) == false) {
 		fprintf(stderr, "elf_section_by_name(%p, \"%s\", ...) failed\n",
 		    &ctx->bin.elfobj, ".shstrtab");
 		return false;
 	}
+
+	size_t shentsize;
+
+	if (elf_class(&ctx->bin.elfobj) == elfclass32) {
+		shiva_pl_debug("Increasing e_shoff by %zu bytes\n", shstrtab_shdr.size - old_shstrtab_len);
+		ctx->bin.elfobj.ehdr32->e_shoff += shstrtab_shdr.size - old_shstrtab_len;
+		ctx->bin.elfobj.ehdr32->e_shnum += 3;
+		shentsize = sizeof(Elf32_Shdr);
+	} else if (elf_class(&ctx->bin.elfobj) == elfclass64) {
+		shiva_pl_debug("Increasing e_shoff by %zu bytes\n", shstrtab_shdr.size - old_shstrtab_len);
+		ctx->bin.elfobj.ehdr64->e_shoff += shstrtab_shdr.size - old_shstrtab_len;
+		ctx->bin.elfobj.ehdr64->e_shnum += 3;
+		shentsize = sizeof(Elf64_Shdr);
+	}
+
 	/*
 	 * Write up until the location of the .shstrtab string data + sh_size
 	 */
-	if (write(fd, ctx->bin.elfobj.mem, shstrtab_shdr.offset + shstrtab_shdr.size) < 0) {
+	if (write(fd, ctx->bin.elfobj.mem, shstrtab_shdr.offset + old_shstrtab_len) < 0) {
 		perror("write 1.");
 		return false;
 	}
@@ -548,8 +572,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		perror("write 4.");
 		return false;
 	}
-	size_t off = shstrtab_shdr.offset + old_shstrtab_len; // +
-	//    strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1 + strlen(".shiva.branch") + 1;
+	size_t off = shstrtab_shdr.offset + old_shstrtab_len;
 
 	/*
 	 * Write out rest of executable up until the end of where the section header table.
@@ -605,8 +628,10 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	tmp_shdr.sh_name = old_shstrtab_len + strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1;
 	tmp_shdr.sh_type = SHT_PROGBITS;
 	tmp_shdr.sh_flags = SHF_ALLOC;
-	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
-	tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
+	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size +
+	    get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
+	tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size +
+	    get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
 	tmp_shdr.sh_size = ctx->branch_entry_totlen;
 	tmp_shdr.sh_link = 0; // should point to .shiva.strtab shdr index
 	tmp_shdr.sh_info = 0;
@@ -665,12 +690,20 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	 * Write out the string data (Marked by our new
 	 * section: .shiva.strtab)
 	 */
+	shiva_pl_debug("Writing out strtab\n");
+	int i;
+
+	printf("strtab len: %d\n", get_shiva_strtab_offset(ctx));
+
+	for (i = 0; i < get_shiva_strtab_offset(ctx); i++) {
+		printf("%c\n", ctx->shiva_strtab.strtab[i]);
+		fflush(stdout);
+	}
+	shiva_pl_debug("Calling write to write it out\n");
 	if (write(fd, ctx->shiva_strtab.strtab, ctx->shiva_strtab.current_offset) < 0) {
 		perror("write 5");
 		return false;
 	}
-	
-	
 #if 0
 	if (write(fd, ctx->search_path, strlen(ctx->search_path) + 1) < 0) {
 		perror("write 5.");
@@ -736,6 +769,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 }
 
 /*
+ * TODO
  * Way to many args, turn this into a macro.
  */
 static inline bool
@@ -758,6 +792,13 @@ gen_xref(struct shiva_prelink_ctx *ctx, struct elf_symbol *symbol, struct elf_sy
 		memcpy(&xref->deref_symbol, deref_symbol, sizeof(struct elf_symbol));
 		gotaddr = (adrp_site & ~0xfff) + adrp_imm + next_imm;
 		xref->got = (uint64_t *)gotaddr;
+		assert(deref_symbol->name != NULL);
+		if (set_shiva_strtab_string(ctx, deref_symbol->name,
+		    &xref->deref_symbol.name) == false) {
+			fprintf(stderr, "Failed to insert '%s' into string table\n",
+			    deref_symbol->name);
+			return false;
+		}
 	}
 	xref->type = xref_type;
 	xref->flags = xref_flags;
@@ -771,8 +812,23 @@ gen_xref(struct shiva_prelink_ctx *ctx, struct elf_symbol *symbol, struct elf_sy
 	shiva_pl_debug("ADRP(%#lx): %lx\n", adrp_site, xref->adrp_o_insn);
 	shiva_pl_debug("NEXT(%#lx): %lx\n", xref->next_site, xref->next_o_insn);
 	memcpy(&xref->symbol, symbol, sizeof(*symbol));
-	if (src_func != NULL)
+	assert(symbol->name != NULL);
+	if (set_shiva_strtab_string(ctx, symbol->name,
+	    &xref->symbol.name) == false) {
+		fprintf(stderr, "Failed to insert '%s' into string table\n",
+		    symbol->name);
+		return false;
+	}
+	if (src_func != NULL) {
 		memcpy(&xref->current_function, src_func, sizeof(*src_func));
+		assert(src_func->name != NULL);
+		if (set_shiva_strtab_string(ctx, src_func->name,
+		    &xref->current_function.name) == false) {
+			fprintf(stderr, "Failed to insert '%s' into string table\n",
+			    src_func->name);
+			return false;
+		}
+	}
 	TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref, _linkage);
 	/*
 	 * Increase size of xref_entry_totlen by sizeof(struct shiva_xref_entry),
@@ -793,18 +849,25 @@ get_shiva_strtab_offset(struct shiva_prelink_ctx *ctx)
 }
 
 static bool
-set_shiva_strtab_string(struct shiva_prelink_ctx *ctx, char *string)
+set_shiva_strtab_string(struct shiva_prelink_ctx *ctx, const char *string, uint32_t *soff)
 {
 	uint32_t off = ctx->shiva_strtab.current_offset;
 
+	shiva_pl_debug("set_shiva_strtab_string(%p, %s)\n", ctx, string);
+
 	if (ctx->shiva_strtab.current_offset + strlen(string) + 1 >= ctx->shiva_strtab.max_size) {
+		shiva_pl_debug("reallocating strtab to %u bytes\n", ctx->shiva_strtab.max_size * 2);
 		ctx->shiva_strtab.strtab = realloc(ctx->shiva_strtab.strtab, ctx->shiva_strtab.max_size *= 2);
 		if (ctx->shiva_strtab.strtab == NULL) {
 			perror("realloc");
 			return false;
 		}
 	}
+	shiva_pl_debug("string '%s' offset %d\n", string, off);
 	strcpy(&ctx->shiva_strtab.strtab[off], string);
+	shiva_pl_debug("dest '%s'\n", (char *)&ctx->shiva_strtab.strtab[off]);
+	if (soff != NULL)
+		*soff = off;
 	ctx->shiva_strtab.current_offset += strlen(string) + 1;
 	return true;
 }
@@ -825,12 +888,9 @@ init_shiva_strtab(struct shiva_prelink_ctx *ctx)
 	/*
 	 * Store these initial strings in the string table.
 	 */
-	set_shiva_strtab_string(ctx, ctx->search_path);
-	set_shiva_strtab_string(ctx, ctx->input_patch);
-	set_shiva_strtab_string(ctx, ctx->orig_interp_path);
-	set_shiva_strtab_string(ctx, ".shiva.strtab");
-	set_shiva_strtab_string(ctx, ".shiva.xref");
-	set_shiva_strtab_string(ctx, ".shiva.branch");
+	set_shiva_strtab_string(ctx, ctx->search_path, NULL);
+	set_shiva_strtab_string(ctx, ctx->input_patch, NULL);
+	set_shiva_strtab_string(ctx, elf_interpreter_path(&ctx->bin.elfobj), NULL);
 	return true;
 }
 
@@ -860,12 +920,14 @@ build_aarch64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr)
 
 	snprintf(insn_str, sizeof(insn_str), "%s %s", ctx->disas.insn->mnemonic,
 	    ctx->disas.insn->op_str);
-	set_shiva_strtab_string(ctx, insn_str);
+	(void)set_shiva_strtab_string(ctx, insn_str, &tmp->insn_string);
 
 	if (elf_symbol_by_range(&ctx->bin.elfobj, pc_vaddr,
 	    &tmp_sym) == true) {
 		tmp->branch_flags |= SHIVA_BRANCH_F_SRC_SYMINFO;
 		memcpy(&tmp->current_function, &tmp_sym, sizeof(tmp_sym));
+		assert(tmp_sym.name != NULL);
+		(void)set_shiva_strtab_string(ctx, tmp_sym.name, &tmp->current_function.name);
 		shiva_pl_debug("Source function found: %s\n", tmp_sym.name);
 	}
 	/*
@@ -1029,6 +1091,8 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 			tmp->target_vaddr = call_addr;
 			memcpy(&tmp->o_insn, tmp_ptr + c, ARM_INSN_LEN);
 			memcpy(&tmp->symbol, &symbol, sizeof(symbol));
+			assert(symbol.name != NULL);
+			(void ) set_shiva_strtab_string(ctx, symbol.name, &tmp->symbol.name);
 			tmp->branch_type = SHIVA_BRANCH_CALL;
 			tmp->branch_site = call_site;
 			tmp->branch_flags |= SHIVA_BRANCH_F_DST_SYMINFO;
@@ -1040,19 +1104,18 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 			/*
 			 * Add the string to the .shiva.strtab string table.
 			 */
-			set_shiva_strtab_string(ctx, tmp_str);
-
+			(void) set_shiva_strtab_string(ctx, tmp_str, &tmp->insn_string);
 			if (elf_symbol_by_range(&ctx->bin.elfobj, code_vaddr - 4,
 			    &tmp_sym) == true) {
 				tmp->branch_flags |= SHIVA_BRANCH_F_SRC_SYMINFO;
-				tmp->current_function.name = get_shiva_strtab_offset(ctx);
 				tmp->current_function.value = tmp_sym.value;
 				tmp->current_function.shndx = tmp_sym.shndx;
 				tmp->current_function.bind = tmp_sym.bind;
 				tmp->current_function.type = tmp_sym.type;
 				tmp->current_function.visibility = tmp_sym.visibility;
-				tmp->current_function.__pad = 0;
-				if (set_shiva_strtab_string(ctx, (char *)tmp_sym.name) == false) {
+				tmp->current_function.__pad2 = 0;
+				if (set_shiva_strtab_string(ctx, (char *)tmp_sym.name,
+				    &tmp->current_function.name) == false) {
 					fprintf(stderr, "Failed to insert string into .shiva.strtab\n");
 					exit(EXIT_FAILURE);
 				}
