@@ -46,7 +46,7 @@
 #define SHIVA_DT_SEARCH DT_LOOS + 11
 #define SHIVA_DT_ORIG_INTERP DT_LOOS + 12
 
-#define SHIVA_SIGNATURE 0x31f64
+#define SHIVA_SIGNATURE 0x31f64 /* elf64 */
 
 #define ELF_MIN_ALIGN 4096
 #define ELF_PAGESTART(_v) ((_v) & ~(unsigned long)(ELF_MIN_ALIGN-1))
@@ -318,7 +318,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	struct stat st;
 	uint8_t *old_dynamic_segment;
 	size_t old_dynamic_size, dynamic_index;
-	size_t old_shstrtab_len;
+	size_t old_shstrtab_len, old_e_shoff, old_e_shnum;
 
 	ctx->orig_interp_path = elf_interpreter_path(&ctx->bin.elfobj);
 	if (ctx->orig_interp_path == NULL) {
@@ -536,12 +536,16 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 
 	if (elf_class(&ctx->bin.elfobj) == elfclass32) {
 		shiva_pl_debug("Increasing e_shoff by %zu bytes\n", shstrtab_shdr.size - old_shstrtab_len);
+		old_e_shoff = ctx->bin.elfobj.ehdr32->e_shoff;
 		ctx->bin.elfobj.ehdr32->e_shoff += shstrtab_shdr.size - old_shstrtab_len;
+		old_e_shnum = ctx->bin.elfobj.ehdr32->e_shnum;
 		ctx->bin.elfobj.ehdr32->e_shnum += 3;
 		shentsize = sizeof(Elf32_Shdr);
 	} else if (elf_class(&ctx->bin.elfobj) == elfclass64) {
 		shiva_pl_debug("Increasing e_shoff by %zu bytes\n", shstrtab_shdr.size - old_shstrtab_len);
+		old_e_shoff = ctx->bin.elfobj.ehdr64->e_shoff;
 		ctx->bin.elfobj.ehdr64->e_shoff += shstrtab_shdr.size - old_shstrtab_len;
+		old_e_shnum = ctx->bin.elfobj.ehdr64->e_shnum;
 		ctx->bin.elfobj.ehdr64->e_shnum += 3;
 		shentsize = sizeof(Elf64_Shdr);
 	}
@@ -577,8 +581,9 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	/*
 	 * Write out rest of executable up until the end of where the section header table.
 	 */
+	printf("shentsize: %d\n", shentsize);
 	if (write(fd, &ctx->bin.elfobj.mem[off],
-	    (elf_shoff(&ctx->bin.elfobj) + (elf_shnum(&ctx->bin.elfobj) * shentsize)) - off) < 0) {
+	    old_e_shoff + (old_e_shnum * shentsize) - off) < 0) {
 		perror("write 5.");
 		return false;
 	}
@@ -598,6 +603,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	tmp_shdr.sh_addralign = 1;
 	tmp_shdr.sh_entsize = 1;
 
+	printf("Writing out first shdr, %d bytes\n", sizeof(ElfW(Shdr)));
 	if (write(fd, &tmp_shdr, sizeof(ElfW(Shdr))) < 0) {
 		perror("write 6");
 		return false;
@@ -638,14 +644,19 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	tmp_shdr.sh_addralign = 8;
 	tmp_shdr.sh_entsize = sizeof(struct shiva_branch_site) - sizeof(void *);
 
+	if (write(fd, &tmp_shdr, sizeof(ElfW(Shdr))) < 0) {
+		perror("write 8");
+		return false;
+	}
 	/*
 	 * Lseek to the offset of where our new segment begins.
 	 */
-	if (lseek(fd, n_segment.offset - ctx->bin.elfobj.size, SEEK_CUR) < 0) {
+	if (lseek(fd, n_segment.offset, SEEK_SET) < 0) {
 		perror("lseek");
 		return false;
 	}
 
+	printf("Writing old dynamic segment entries\n");
 	/*
 	 * Write out entire old dynamic segment, except for the last entry
 	 * which will be DT_NULL
@@ -681,6 +692,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	 * 2. SHIVA_DT_NEEDED
 	 * 3. SHIVA_DT_ORIG_INTERP
 	 */
+	printf("Write out 3 new entries\n");
 	if (write(fd, &dyn[0], sizeof(dyn)) < 0) {
 		perror("write 4.");
 		return false;
@@ -722,6 +734,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		return false;
 	}
 #endif
+done:
 	if (fchown(fd, st.st_uid, st.st_gid) < 0) {
 		perror("fchown");
 		return false;
