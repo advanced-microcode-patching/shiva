@@ -581,7 +581,6 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	/*
 	 * Write out rest of executable up until the end of where the section header table.
 	 */
-	printf("shentsize: %d\n", shentsize);
 	if (write(fd, &ctx->bin.elfobj.mem[off],
 	    old_e_shoff + (old_e_shnum * shentsize) - off) < 0) {
 		perror("write 5.");
@@ -663,7 +662,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	 */
 	if (write(fd, old_dynamic_segment,
 	    old_dynamic_size - sizeof(ElfW(Dyn))) < 0) {
-		perror("write 3.");
+		perror("write 9.");
 		return false;
 	}
 
@@ -692,9 +691,8 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	 * 2. SHIVA_DT_NEEDED
 	 * 3. SHIVA_DT_ORIG_INTERP
 	 */
-	printf("Write out 3 new entries\n");
 	if (write(fd, &dyn[0], sizeof(dyn)) < 0) {
-		perror("write 4.");
+		perror("write 10.");
 		return false;
 	}
 
@@ -707,34 +705,48 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 
 	printf("strtab len: %d\n", get_shiva_strtab_offset(ctx));
 
+#if DEBUG
 	for (i = 0; i < get_shiva_strtab_offset(ctx); i++) {
 		printf("%c\n", ctx->shiva_strtab.strtab[i]);
 		fflush(stdout);
 	}
-	shiva_pl_debug("Calling write to write it out\n");
-	if (write(fd, ctx->shiva_strtab.strtab, ctx->shiva_strtab.current_offset) < 0) {
-		perror("write 5");
-		return false;
-	}
-#if 0
-	if (write(fd, ctx->search_path, strlen(ctx->search_path) + 1) < 0) {
-		perror("write 5.");
-		return false;
-	}
-	if (write(fd, ctx->input_patch, strlen(ctx->input_patch) + 1) < 0) {
-		perror("write 6.");
-		return false;
-	}
-
-	printf("Writing out original interp path: %s\n", ctx->orig_interp_path);
-
-	if (write(fd, ctx->orig_interp_path,
-	    strlen(ctx->orig_interp_path) + 1) < 0) {
-		perror("write 7.");
-		return false;
-	}
 #endif
-done:
+
+	if (write(fd, ctx->shiva_strtab.strtab, ctx->shiva_strtab.current_offset) < 0) {
+		perror("write 11");
+		return false;
+	}
+
+	/*
+	 * Write out xref entries into the .shiva.xref section area.
+	 */
+	struct shiva_xref_site *xref_site;
+
+	TAILQ_FOREACH(xref_site, &ctx->tailq.xref_tqlist, _linkage) {
+		int ret;
+
+		ret = write(fd, xref_site, sizeof(*xref_site) - sizeof(uintptr_t));
+		if (ret < 0) {
+			perror("write");
+			return false;
+		}
+	}
+
+	/*
+	 * Write out branch entries into .shiva.branch section area.
+	 */
+	struct shiva_branch_site *branch_site;
+
+	TAILQ_FOREACH(branch_site, &ctx->tailq.branch_tqlist, _linkage) {
+		int ret;
+
+		ret = write(fd, branch_site, sizeof(*branch_site) - sizeof(uintptr_t));
+		if (ret < 0) {
+			perror("write");
+			return false;
+		}
+	}
+
 	if (fchown(fd, st.st_uid, st.st_gid) < 0) {
 		perror("fchown");
 		return false;
