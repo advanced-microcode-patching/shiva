@@ -617,7 +617,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx);
 	tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx);
 	tmp_shdr.sh_size = ctx->xref_entry_totlen;
-	tmp_shdr.sh_link = 0; // should point to .shiva.strtab shdr index
+	tmp_shdr.sh_link = old_e_shnum; // This should now point to .shiva.strtab
 	tmp_shdr.sh_info = 0;
 	tmp_shdr.sh_addralign = 8;
 	tmp_shdr.sh_entsize = sizeof(struct shiva_xref_site) - sizeof(void *);
@@ -638,7 +638,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size +
 	    get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
 	tmp_shdr.sh_size = ctx->branch_entry_totlen;
-	tmp_shdr.sh_link = 0; // should point to .shiva.strtab shdr index
+	tmp_shdr.sh_link = old_e_shnum; // should point to .shiva.strtab shdr index
 	tmp_shdr.sh_info = 0;
 	tmp_shdr.sh_addralign = 8;
 	tmp_shdr.sh_entsize = sizeof(struct shiva_branch_site) - sizeof(void *);
