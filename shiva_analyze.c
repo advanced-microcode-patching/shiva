@@ -504,6 +504,18 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 	return true;
 }
 
+/*
+ * Simple macro to check the .shiva.strtab offset
+ * before accessing potentially invalid memory.
+ */
+#define VALIDATE_STRTAB_OFFSET(name) do { \
+	if ((size_t)name  >= shiva_strtab_shdr.size) { \
+		fprintf(stderr, "[%zu] invalid offset into .shiva.strtab string table\n", \
+		    (size_t)name); \
+		return false;	\
+	} \
+} while (0)
+
 bool
 shiva_analyze_run(struct shiva_ctx *ctx)
 {
@@ -518,6 +530,7 @@ shiva_analyze_run(struct shiva_ctx *ctx)
 	 */
 	struct elf_section xref_shdr;
 	struct elf_section branch_shdr;
+	struct elf_section shiva_strtab_shdr;
 	struct shiva_xref_site xref_site = {0};
 	struct shiva_xref_site *xref_new;
 	struct shiva_branch_site branch_site = {0};
@@ -535,6 +548,14 @@ shiva_analyze_run(struct shiva_ctx *ctx)
 		fprintf(stderr, "elf_section_by_name failed to find .shiva.xref\n");
 		return false;
 	}
+	if (elf_section_by_index(&ctx->elfobj, xref_shdr.link,
+	    &shiva_strtab_shdr) == false) {
+		fprintf(stderr, "elf_section_by_index failed to find shdr at index %u\n",
+		    xref_shdr.link);
+		return false;
+	}
+
+	char *shiva_strtab =(char *)&ctx->elfobj.mem[shiva_strtab_shdr.offset];
 
 	for (i = 0; i < xref_shdr.size; i += xref_shdr.entsize) {
 		for (xptr = (uint8_t *)&xref_site, j = 0; j < xref_shdr.entsize; j += 8) {
@@ -546,10 +567,31 @@ shiva_analyze_run(struct shiva_ctx *ctx)
 			}
 			memcpy(xptr + j, (uint8_t *)&qword, 8);
 		}
+
+		/*
+		 * When we read the xref_site structs in, their symbol structs
+		 * char *name was replaced with a 'uint32_t name' offset into a
+		 * string table.  We must convert this offset back into a
+		 * pointer into the .shiva.strtab
+		 */
 		shiva_debug("Imported XREF for symbol %d\n", xref_site.symbol.name);
 		xref_new = shiva_malloc(sizeof(*xref_new));
 		memcpy(xref_new, &xref_site, sizeof(struct shiva_xref_site));
+
+		if (xref_site.flags & SHIVA_XREF_F_INDIRECT) {
+			VALIDATE_STRTAB_OFFSET((size_t)xref_site.deref_symbol.name);
+			xref_new->deref_symbol.name = 
+			    (char *)&shiva_strtab[(size_t)xref_site.deref_symbol.name];
+			shiva_debug("deref_symbol.name = %s\n", xref_new->deref_symbol.name);
+		}
+		VALIDATE_STRTAB_OFFSET(xref_site.symbol.name);
+		xref_new->symbol.name = (char *)&shiva_strtab[(size_t)xref_site.symbol.name];
+		VALIDATE_STRTAB_OFFSET((size_t)xref_site.current_function.name);
+		xref_new->current_function.name = 
+		    (char *)&shiva_strtab[(size_t)xref_site.current_function.name];
 		TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref_new, _linkage);
+		shiva_debug("current_function.name = %s\n", xref_new->current_function.name);
+		shiva_debug("symbol.name: %s\n", xref_new->symbol.name);
 	}
 
 	if (elf_section_by_name(&ctx->elfobj, ".shiva.branch",
