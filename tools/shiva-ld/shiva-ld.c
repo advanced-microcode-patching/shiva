@@ -80,8 +80,7 @@
  * to account for the entire 64bit 'char *name' ptr.
  */
 struct __elf_symbol {
-	uint32_t name; /* index into .shiva_strtab */
-	uint32_t __pad1;
+	uint64_t name;
 	uint64_t value;
 	uint64_t shndx;
 	uint8_t bind;
@@ -170,7 +169,7 @@ struct shiva_branch_site {
 			   * retaddr is not used in any other branch
 			   * site type.
 			   */
-	uint32_t insn_string; /* Index into .shiva_strtab of mnemonic name */ 
+	uint64_t insn_string; /* Index into .shiva_strtab of mnemonic name */ 
 	TAILQ_ENTRY(shiva_branch_site) _linkage;
 } shiva_branch_site_t;
 
@@ -215,14 +214,14 @@ struct shiva_prelink_ctx {
 	} tailq;
 	struct {
 		char *strtab;
-		uint32_t current_offset, max_size;
+		size_t current_offset, max_size;
 	} shiva_strtab;
 	size_t xref_entry_totlen; /* total size of xref entries after CFG analysis */
 	size_t branch_entry_totlen; /* total size of branch entries after CFG analysis */
 } shiva_prelink_ctx;
 
-static uint32_t get_shiva_strtab_offset(struct shiva_prelink_ctx *);
-static bool set_shiva_strtab_string(struct shiva_prelink_ctx *, const char *, uint32_t *);
+static size_t get_shiva_strtab_offset(struct shiva_prelink_ctx *);
+static bool set_shiva_strtab_string(struct shiva_prelink_ctx *, const char *, size_t *);
 /*
  * TODO
  * shiva_strdup, shiva_xfmtstrdup, and shiva_malloc are copied from 
@@ -587,15 +586,19 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		return false;
 	}
 
+	loff_t section_offset;
+
+	section_offset = lseek(fd, 0, SEEK_CUR);
+
 	ElfW(Shdr) tmp_shdr;
 	/*
 	 * Write out shdr for .shiva.strtab
 	 */
 	tmp_shdr.sh_name = old_shstrtab_len;
-	tmp_shdr.sh_type = SHT_STRTAB;
+	tmp_shdr.sh_type = SHT_PROGBITS;
 	tmp_shdr.sh_flags = SHF_ALLOC;
 	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size;
-	tmp_shdr.sh_offset = ctx->new_segment.offset + old_dynamic_size + sizeof(ElfW(Dyn)) * 4;
+	tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size;
 	tmp_shdr.sh_size = get_shiva_strtab_offset(ctx);
 	tmp_shdr.sh_link = 0;
 	tmp_shdr.sh_info = 0;
@@ -635,8 +638,8 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	tmp_shdr.sh_flags = SHF_ALLOC;
 	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size +
 	    get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
-	tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size +
-	    get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
+	tmp_shdr.sh_offset =  ctx->new_segment.offset + ctx->new_segment.dyn_size +
+            get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
 	tmp_shdr.sh_size = ctx->branch_entry_totlen;
 	tmp_shdr.sh_link = old_e_shnum; // should point to .shiva.strtab shdr index
 	tmp_shdr.sh_info = 0;
@@ -854,6 +857,7 @@ gen_xref(struct shiva_prelink_ctx *ctx, struct elf_symbol *symbol, struct elf_sy
 			return false;
 		}
 	}
+	shiva_pl_debug("Generated XREF: For symbol %s(stroffset: %zu\n", symbol->name, xref->symbol.name);
 	TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref, _linkage);
 	/*
 	 * Increase size of xref_entry_totlen by sizeof(struct shiva_xref_entry),
@@ -866,7 +870,7 @@ gen_xref(struct shiva_prelink_ctx *ctx, struct elf_symbol *symbol, struct elf_sy
 	return true;
 }
 
-static uint32_t
+static size_t 
 get_shiva_strtab_offset(struct shiva_prelink_ctx *ctx)
 {
 
@@ -874,9 +878,9 @@ get_shiva_strtab_offset(struct shiva_prelink_ctx *ctx)
 }
 
 static bool
-set_shiva_strtab_string(struct shiva_prelink_ctx *ctx, const char *string, uint32_t *soff)
+set_shiva_strtab_string(struct shiva_prelink_ctx *ctx, const char *string, size_t *soff)
 {
-	uint32_t off = ctx->shiva_strtab.current_offset;
+	size_t off = ctx->shiva_strtab.current_offset;
 
 	shiva_pl_debug("set_shiva_strtab_string(%p, %s)\n", ctx, string);
 
@@ -890,9 +894,9 @@ set_shiva_strtab_string(struct shiva_prelink_ctx *ctx, const char *string, uint3
 	}
 	shiva_pl_debug("string '%s' offset %d\n", string, off);
 	strcpy(&ctx->shiva_strtab.strtab[off], string);
-	shiva_pl_debug("dest '%s'\n", (char *)&ctx->shiva_strtab.strtab[off]);
 	if (soff != NULL)
 		*soff = off;
+	shiva_pl_debug("strtab ptr: %s\n", &ctx->shiva_strtab.strtab[off]);
 	ctx->shiva_strtab.current_offset += strlen(string) + 1;
 	return true;
 }
@@ -904,6 +908,7 @@ init_shiva_strtab(struct shiva_prelink_ctx *ctx)
 {
 
 	memset(&ctx->shiva_strtab, 0, sizeof(ctx->shiva_strtab));
+	ctx->shiva_strtab.current_offset = 0;
 	ctx->shiva_strtab.max_size = SHIVA_STRTAB_MAXLEN;
 	ctx->shiva_strtab.strtab = calloc(ctx->shiva_strtab.max_size, 1);
 	if (ctx->shiva_strtab.strtab == NULL) {
