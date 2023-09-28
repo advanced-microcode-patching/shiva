@@ -558,7 +558,6 @@ shiva_analyze_run(struct shiva_ctx *ctx)
 
 	char *shiva_strtab =(char *)&ctx->elfobj.mem[shiva_strtab_shdr.offset];
 
-	printf("First characters: %s\n", shiva_strtab);
 	for (i = 0; i < xref_shdr.size; i += xref_shdr.entsize) {
 		for (xptr = (uint8_t *)&xref_site, j = 0; j < xref_shdr.entsize; j += 8) {
 			res = elf_read_offset(&ctx->elfobj, xref_shdr.offset + i + j, &qword, ELF_QWORD);

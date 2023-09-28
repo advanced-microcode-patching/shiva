@@ -1,4 +1,5 @@
 #include "shiva.h"
+#include <time.h>
 
 struct shiva_ctx *ctx_global;
 
@@ -114,10 +115,21 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		    " the effects of breakpoints/instrumentation\n", elf_pathname(&ctx->elfobj));
 	}
 
+#ifdef SPEED_TEST
+	struct timespec tv, tv2;
+	double elapsed_time;
+	clock_gettime(CLOCK_REALTIME, &tv);
+#endif
 	if (shiva_analyze_run(ctx) == false) {
 		fprintf(stderr, "Failed to run the analyzers\n");
-		return false;
+		exit(EXIT_FAILURE);
 	}
+#ifdef SPEED_TEST
+	clock_gettime(CLOCK_REALTIME, &tv2);
+	fprintf(stdout, "time to generate xref/branch data: %zu:%zu ms.\n", (size_t)tv2.tv_sec - (size_t)tv.tv_sec,
+	    (size_t)tv2.tv_nsec - (size_t)tv.tv_nsec);
+
+#endif
 
 	if (shiva_maps_build_list(ctx) == false) {
 		fprintf(stderr, "shiva_maps_build_list() failed\n");
@@ -170,20 +182,20 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	}
 
 	/*
-         * Get the entry point of the target executable. Stored in AT_ENTRY
-         * of the auxiliary vector.
-         */
-        if (shiva_auxv_iterator_init(ctx, &auxv_iter, NULL) == false) {
-                fprintf(stderr, "shiva_auxv_iterator_init failed\n");
-                return false;
-        }
-        while (shiva_auxv_iterator_next(&auxv_iter, &auxv_entry) == SHIVA_ITER_OK) {
-                if (auxv_entry.type == AT_ENTRY) {
-                        ctx->ulexec.entry_point = auxv_entry.value;
-                        shiva_debug("[1] Entry point: %#lx\n", entry_point);
-                        break;
-                }
-        }
+	 * Get the entry point of the target executable. Stored in AT_ENTRY
+	 * of the auxiliary vector.
+	 */
+	if (shiva_auxv_iterator_init(ctx, &auxv_iter, NULL) == false) {
+		fprintf(stderr, "shiva_auxv_iterator_init failed\n");
+		return false;
+	}
+	while (shiva_auxv_iterator_next(&auxv_iter, &auxv_entry) == SHIVA_ITER_OK) {
+		if (auxv_entry.type == AT_ENTRY) {
+			ctx->ulexec.entry_point = auxv_entry.value;
+			shiva_debug("[1] Entry point: %#lx\n", entry_point);
+			break;
+		}
+	}
 	if (shiva_module_loader(ctx, ctx->module_path,
 	    &ctx->module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");
@@ -418,19 +430,20 @@ int main(int argc, char **argv, char **envp)
 	 * into memory, we can run some analyzers on it to acquire
 	 * information (i.e. callsite locations).
 	 */
-	if (shiva_target_has_prelinking(&ctx) == false) {
-		/*
-		 * A Shiva signature exists, which means that the Shiva prelinker
-		 * has already been run. The prelinker builds a CFG and stores the
-		 * output in .shiva.xref and .shiva.branch sections. Therefore
-		 * it is unnecessary for Shiva to run shiva_analyze_run() to
-		 * generate another CFG.
-		 */
-		if (shiva_analyze_run(&ctx) == false) {
-			fprintf(stderr, "Failed to run the analyzers\n");
-			exit(EXIT_FAILURE);
-		}
+#ifdef SPEED_TEST
+	struct timespec tv, tv2;
+	double elapsed_time;
+	clock_gettime(CLOCK_REALTIME, &tv);
+#endif
+	if (shiva_analyze_run(&ctx) == false) {
+		fprintf(stderr, "Failed to run the analyzers\n");
+		exit(EXIT_FAILURE);
 	}
+#ifdef SPEED_TEST
+	clock_gettime(CLOCK_REALTIME, &tv2);
+	fprintf(stdout, "time to generate xref/branch data: %zu:%zu ms.\n", (size_t)tv2.tv_sec - (size_t)tv.tv_sec,
+	    (size_t)tv2.tv_nsec - (size_t)tv.tv_nsec);
+#endif
 	/*
 	 * This flag tells Shiva to ul_exec the target binary without installing
 	 * any patches at runtime.
