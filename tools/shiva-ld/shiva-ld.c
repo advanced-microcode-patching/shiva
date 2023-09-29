@@ -378,9 +378,11 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			 */
 			ctx->new_segment.filesz += sizeof(ElfW(Dyn)) * NEW_DYN_COUNT;
 			ctx->new_segment.filesz += get_shiva_strtab_offset(ctx);
-			ctx->new_segment.filesz += ctx->xref_entry_totlen;
-			ctx->new_segment.filesz += ctx->branch_entry_totlen;
-			ctx->new_segment.filesz += sizeof(ElfW(Shdr)) * 3;
+			if ((ctx->flags & SHIVA_LD_F_NO_CFG) == 0) {
+				ctx->new_segment.filesz += ctx->xref_entry_totlen;
+				ctx->new_segment.filesz += ctx->branch_entry_totlen;
+				ctx->new_segment.filesz += sizeof(ElfW(Shdr)) * 3;
+			}
 			/*
 			 * Mark the index of this segment so that we can modify it
 			 * to match the new dynamic segment location once we know it.
@@ -395,15 +397,18 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			/*
 			 * Make room for the strings of 3 new section headers: .shiva.strtab, .shiva.xref and .shiva.branch
 			 * And for 3 section headers (i.e. Elf64_Shdr) entries being added. This will effect the file offset
-			 * to where our new segment lives.
+			 * to where our new segment lives. (Only if we are generating CFG data for xrefs and branches)
 			 */
-			size_t new_lens = sizeof(ElfW(Shdr)) * 3;
-			new_lens += strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1 + strlen(".shiva.branch") + 1;
-			new_lens += sizeof(ElfW(Shdr)) * 3;
-
-			n_segment.offset =
-			    ELF_PAGEALIGN(ctx->bin.elfobj.size + new_lens, last_load_align);
-
+			if ((ctx->flags & SHIVA_LD_F_NO_CFG) == 0) {
+				size_t new_lens = sizeof(ElfW(Shdr)) * 3;
+				new_lens += strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1 + strlen(".shiva.branch") + 1;
+				new_lens += sizeof(ElfW(Shdr)) * 3;
+				n_segment.offset =
+				    ELF_PAGEALIGN(ctx->bin.elfobj.size + new_lens, last_load_align);
+			} else {
+				n_segment.offset =
+					ELF_PAGEALIGN(ctx->bin.elfobj.size, last_load_align);
+			}
 			n_segment.filesz = ctx->new_segment.filesz;
 			n_segment.memsz = ctx->new_segment.filesz;
 			n_segment.vaddr = ELF_PAGEALIGN(last_load_vaddr +
@@ -481,7 +486,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			 * Update the .shstrtab section so that it's new size reflects
 			 * the new strings added for the new sections.
 			 */
-		} else if (strcmp(shdr.name, ".shstrtab") == 0) {
+		} else if ((strcmp(shdr.name, ".shstrtab") == 0) && ((ctx->flags & SHIVA_LD_F_NO_CFG) == 0)) {
 			struct elf_section tmp;
 
 			memcpy(&tmp, &shdr, sizeof(tmp));
@@ -509,8 +514,6 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	 * 2. Add additional string data for 3 new sections ".shiva.xref, .shiva.branch, .shiva.strtab"
 	 * 2. New dynamic segment (With additional SHIVA_DT_ entries)
 	 * 3. Strings table '.shiva.strtab' for searchpath, module, cfg symbols
-	 * i.e.:
-	 * [ehdr][phdrs][text][data][shdrs (.shiva.xref, .shiva.branch)][new_load_segment (PT_DYNAMIC, .shiva.strtab section)]
 	 */
 
 	if (stat(elf_pathname(&ctx->bin.elfobj), &st) < 0) {
@@ -524,227 +527,288 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		return false;
 	}
 
-	shiva_pl_debug("Writing first %zu bytes of %s into tmpfile\n",
-	    ctx->bin.elfobj.size, ctx->bin.elfobj.path);
+	if ((ctx->flags & SHIVA_LD_F_NO_CFG) == 0) {
+		if (elf_section_by_name(&ctx->bin.elfobj, ".shstrtab", &shstrtab_shdr) == false) {
+			fprintf(stderr, "elf_section_by_name(%p, \"%s\", ...) failed\n",
+			    &ctx->bin.elfobj, ".shstrtab");
+			return false;
+		}
 
-	if (elf_section_by_name(&ctx->bin.elfobj, ".shstrtab", &shstrtab_shdr) == false) {
-		fprintf(stderr, "elf_section_by_name(%p, \"%s\", ...) failed\n",
-		    &ctx->bin.elfobj, ".shstrtab");
-		return false;
-	}
+		size_t shentsize;
 
-	size_t shentsize;
+		if (elf_class(&ctx->bin.elfobj) == elfclass32) {
+			shiva_pl_debug("Increasing e_shoff by %zu bytes\n", shstrtab_shdr.size - old_shstrtab_len);
+			old_e_shoff = ctx->bin.elfobj.ehdr32->e_shoff;
+			ctx->bin.elfobj.ehdr32->e_shoff += shstrtab_shdr.size - old_shstrtab_len;
+			old_e_shnum = ctx->bin.elfobj.ehdr32->e_shnum;
+			ctx->bin.elfobj.ehdr32->e_shnum += 3;
+			shentsize = sizeof(Elf32_Shdr);
+		} else if (elf_class(&ctx->bin.elfobj) == elfclass64) {
+			shiva_pl_debug("Increasing e_shoff by %zu bytes\n", shstrtab_shdr.size - old_shstrtab_len);
+			old_e_shoff = ctx->bin.elfobj.ehdr64->e_shoff;
+			ctx->bin.elfobj.ehdr64->e_shoff += shstrtab_shdr.size - old_shstrtab_len;
+			old_e_shnum = ctx->bin.elfobj.ehdr64->e_shnum;
+			ctx->bin.elfobj.ehdr64->e_shnum += 3;
+			shentsize = sizeof(Elf64_Shdr);
+		}
 
-	if (elf_class(&ctx->bin.elfobj) == elfclass32) {
-		shiva_pl_debug("Increasing e_shoff by %zu bytes\n", shstrtab_shdr.size - old_shstrtab_len);
-		old_e_shoff = ctx->bin.elfobj.ehdr32->e_shoff;
-		ctx->bin.elfobj.ehdr32->e_shoff += shstrtab_shdr.size - old_shstrtab_len;
-		old_e_shnum = ctx->bin.elfobj.ehdr32->e_shnum;
-		ctx->bin.elfobj.ehdr32->e_shnum += 3;
-		shentsize = sizeof(Elf32_Shdr);
-	} else if (elf_class(&ctx->bin.elfobj) == elfclass64) {
-		shiva_pl_debug("Increasing e_shoff by %zu bytes\n", shstrtab_shdr.size - old_shstrtab_len);
-		old_e_shoff = ctx->bin.elfobj.ehdr64->e_shoff;
-		ctx->bin.elfobj.ehdr64->e_shoff += shstrtab_shdr.size - old_shstrtab_len;
-		old_e_shnum = ctx->bin.elfobj.ehdr64->e_shnum;
-		ctx->bin.elfobj.ehdr64->e_shnum += 3;
-		shentsize = sizeof(Elf64_Shdr);
-	}
+		/*
+		 * Write up until the location of the .shstrtab string data + sh_size
+		 */
+		if (write(fd, ctx->bin.elfobj.mem, shstrtab_shdr.offset + old_shstrtab_len) < 0) {
+			perror("write 1.");
+			return false;
+		}
 
-	/*
-	 * Write up until the location of the .shstrtab string data + sh_size
-	 */
-	if (write(fd, ctx->bin.elfobj.mem, shstrtab_shdr.offset + old_shstrtab_len) < 0) {
-		perror("write 1.");
-		return false;
-	}
+		/*
+		 * write out three new strings into .shstrtab
+		 */
 
-	/*
-	 * write out three new strings into .shstrtab
-	 */
+		if (write(fd, (char *)".shiva.strtab", strlen(".shiva.strtab") + 1) < 0) {
+			perror("write 2.");
+			return false;
+		}
 
-	if (write(fd, (char *)".shiva.strtab", strlen(".shiva.strtab") + 1) < 0) {
-		perror("write 2.");
-		return false;
-	}
+		if (write(fd, (char *)".shiva.xref", strlen(".shiva.xref") + 1) < 0) {
+			perror("write 3.");
+			return false;
+		}
 
-	if (write(fd, (char *)".shiva.xref", strlen(".shiva.xref") + 1) < 0) {
-		perror("write 3.");
-		return false;
-	}
+		if (write(fd, (char *)".shiva.branch", strlen(".shiva.branch") + 1) < 0) {
+			perror("write 4.");
+			return false;
+		}
+		size_t off = shstrtab_shdr.offset + old_shstrtab_len;
 
-	if (write(fd, (char *)".shiva.branch", strlen(".shiva.branch") + 1) < 0) {
-		perror("write 4.");
-		return false;
-	}
-	size_t off = shstrtab_shdr.offset + old_shstrtab_len;
+		/*
+		 * Write out rest of executable up until the end of where the section header table.
+		 */
+		if (write(fd, &ctx->bin.elfobj.mem[off],
+		    old_e_shoff + (old_e_shnum * shentsize) - off) < 0) {
+			perror("write 5.");
+			return false;
+		}
 
-	/*
-	 * Write out rest of executable up until the end of where the section header table.
-	 */
-	if (write(fd, &ctx->bin.elfobj.mem[off],
-	    old_e_shoff + (old_e_shnum * shentsize) - off) < 0) {
-		perror("write 5.");
-		return false;
-	}
+		loff_t section_offset;
 
-	loff_t section_offset;
+		section_offset = lseek(fd, 0, SEEK_CUR);
 
-	section_offset = lseek(fd, 0, SEEK_CUR);
+		ElfW(Shdr) tmp_shdr;
+		/*
+		 * Write out shdr for .shiva.strtab
+		 */
+		tmp_shdr.sh_name = old_shstrtab_len;
+		tmp_shdr.sh_type = SHT_PROGBITS;
+		tmp_shdr.sh_flags = SHF_ALLOC;
+		tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size;
+		tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size;
+		tmp_shdr.sh_size = get_shiva_strtab_offset(ctx);
+		tmp_shdr.sh_link = 0;
+		tmp_shdr.sh_info = 0;
+		tmp_shdr.sh_addralign = 1;
+		tmp_shdr.sh_entsize = 1;
 
-	ElfW(Shdr) tmp_shdr;
-	/*
-	 * Write out shdr for .shiva.strtab
-	 */
-	tmp_shdr.sh_name = old_shstrtab_len;
-	tmp_shdr.sh_type = SHT_PROGBITS;
-	tmp_shdr.sh_flags = SHF_ALLOC;
-	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size;
-	tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size;
-	tmp_shdr.sh_size = get_shiva_strtab_offset(ctx);
-	tmp_shdr.sh_link = 0;
-	tmp_shdr.sh_info = 0;
-	tmp_shdr.sh_addralign = 1;
-	tmp_shdr.sh_entsize = 1;
+		if (write(fd, &tmp_shdr, sizeof(ElfW(Shdr))) < 0) {
+			perror("write 6");
+			return false;
+		}
 
-	if (write(fd, &tmp_shdr, sizeof(ElfW(Shdr))) < 0) {
-		perror("write 6");
-		return false;
-	}
+		/*
+		 * Write out shdr for .shiva.xref
+		 */
+		tmp_shdr.sh_name = old_shstrtab_len + strlen(".shiva.strtab") + 1;
+		tmp_shdr.sh_type = SHT_PROGBITS;
+		tmp_shdr.sh_flags = SHF_ALLOC;
+		tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx);
+		tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx);
+		tmp_shdr.sh_size = ctx->xref_entry_totlen;
+		tmp_shdr.sh_link = old_e_shnum; // This should now point to .shiva.strtab
+		tmp_shdr.sh_info = 0;
+		tmp_shdr.sh_addralign = 8;
+		tmp_shdr.sh_entsize = sizeof(struct shiva_xref_site) - sizeof(void *);
 
-	/*
-	 * Write out shdr for .shiva.xref
-	 */
-	tmp_shdr.sh_name = old_shstrtab_len + strlen(".shiva.strtab") + 1;
-	tmp_shdr.sh_type = SHT_PROGBITS;
-	tmp_shdr.sh_flags = SHF_ALLOC;
-	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx);
-	tmp_shdr.sh_offset = ctx->new_segment.offset + ctx->new_segment.dyn_size + get_shiva_strtab_offset(ctx);
-	tmp_shdr.sh_size = ctx->xref_entry_totlen;
-	tmp_shdr.sh_link = old_e_shnum; // This should now point to .shiva.strtab
-	tmp_shdr.sh_info = 0;
-	tmp_shdr.sh_addralign = 8;
-	tmp_shdr.sh_entsize = sizeof(struct shiva_xref_site) - sizeof(void *);
+		if (write(fd, &tmp_shdr, sizeof(ElfW(Shdr))) < 0) {
+			perror("write 7");
+			return false;
+		}
 
-	if (write(fd, &tmp_shdr, sizeof(ElfW(Shdr))) < 0) {
-		perror("write 7");
-		return false;
-	}
+		/*
+		 * Write out shdr for .shiva.branch
+		 */
+		tmp_shdr.sh_name = old_shstrtab_len + strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1;
+		tmp_shdr.sh_type = SHT_PROGBITS;
+		tmp_shdr.sh_flags = SHF_ALLOC;
+		tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size +
+		    get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
+		tmp_shdr.sh_offset =  ctx->new_segment.offset + ctx->new_segment.dyn_size +
+		    get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
+		tmp_shdr.sh_size = ctx->branch_entry_totlen;
+		tmp_shdr.sh_link = old_e_shnum; // should point to .shiva.strtab shdr index
+		tmp_shdr.sh_info = 0;
+		tmp_shdr.sh_addralign = 8;
+		tmp_shdr.sh_entsize = sizeof(struct shiva_branch_site) - sizeof(void *);
 
-	/*
-	 * Write out shdr for .shiva.branch
-	 */
-	tmp_shdr.sh_name = old_shstrtab_len + strlen(".shiva.strtab") + 1 + strlen(".shiva.xref") + 1;
-	tmp_shdr.sh_type = SHT_PROGBITS;
-	tmp_shdr.sh_flags = SHF_ALLOC;
-	tmp_shdr.sh_addr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size +
-	    get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
-	tmp_shdr.sh_offset =  ctx->new_segment.offset + ctx->new_segment.dyn_size +
-            get_shiva_strtab_offset(ctx) + ctx->xref_entry_totlen;
-	tmp_shdr.sh_size = ctx->branch_entry_totlen;
-	tmp_shdr.sh_link = old_e_shnum; // should point to .shiva.strtab shdr index
-	tmp_shdr.sh_info = 0;
-	tmp_shdr.sh_addralign = 8;
-	tmp_shdr.sh_entsize = sizeof(struct shiva_branch_site) - sizeof(void *);
+		if (write(fd, &tmp_shdr, sizeof(ElfW(Shdr))) < 0) {
+			perror("write 8");
+			return false;
+		}
+		/*
+		 * Lseek to the offset of where our new segment begins.
+		 */
+		if (lseek(fd, n_segment.offset, SEEK_SET) < 0) {
+			perror("lseek");
+			return false;
+		}
 
-	if (write(fd, &tmp_shdr, sizeof(ElfW(Shdr))) < 0) {
-		perror("write 8");
-		return false;
-	}
-	/*
-	 * Lseek to the offset of where our new segment begins.
-	 */
-	if (lseek(fd, n_segment.offset, SEEK_SET) < 0) {
-		perror("lseek");
-		return false;
-	}
-
-	/*
-	 * Write out entire old dynamic segment, except for the last entry
-	 * which will be DT_NULL
-	 */
-	if (write(fd, old_dynamic_segment,
-	    old_dynamic_size - sizeof(ElfW(Dyn))) < 0) {
-		perror("write 9.");
-		return false;
-	}
+		/*
+		 * Write out entire old dynamic segment, except for the last entry
+		 * which will be DT_NULL
+		 */
+		if (write(fd, old_dynamic_segment,
+		    old_dynamic_size - sizeof(ElfW(Dyn))) < 0) {
+			perror("write 9.");
+			return false;
+		}
 
 #define NEW_DYN_ENTRY_SZ 4
 
-	ElfW(Dyn) dyn[NEW_DYN_ENTRY_SZ];
+		ElfW(Dyn) dyn[NEW_DYN_ENTRY_SZ];
 
-	/*
-	 * Write out new dynamic entry for SHIVA_DT_SEARCH and
-	 * SHIVA_DT_NEEDED
-	 */
-	dyn[0].d_tag = SHIVA_DT_SEARCH;
-	dyn[0].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size;
-	dyn[1].d_tag = SHIVA_DT_NEEDED;
-	dyn[1].d_un.d_ptr = ctx->new_segment.vaddr +
-	    ctx->new_segment.dyn_size + strlen(ctx->search_path) + 1;
-	dyn[2].d_tag = SHIVA_DT_ORIG_INTERP;
-	dyn[2].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size +
-	    strlen(ctx->search_path) + 1 + strlen(ctx->input_patch) + 1;
-	dyn[3].d_tag = DT_NULL;
-	dyn[3].d_un.d_ptr = 0x0;
+		/*
+		 * Write out new dynamic entry for SHIVA_DT_SEARCH and
+		 * SHIVA_DT_NEEDED
+		 */
+		dyn[0].d_tag = SHIVA_DT_SEARCH;
+		dyn[0].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size;
+		dyn[1].d_tag = SHIVA_DT_NEEDED;
+		dyn[1].d_un.d_ptr = ctx->new_segment.vaddr +
+		    ctx->new_segment.dyn_size + strlen(ctx->search_path) + 1;
+		dyn[2].d_tag = SHIVA_DT_ORIG_INTERP;
+		dyn[2].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size +
+		    strlen(ctx->search_path) + 1 + strlen(ctx->input_patch) + 1;
+		dyn[3].d_tag = DT_NULL;
+		dyn[3].d_un.d_ptr = 0x0;
 
-	/*
-	 * Write out custom dtags, i.e.:
-	 * 1. SHIVA_DT_SEARCH
-	 * 2. SHIVA_DT_NEEDED
-	 * 3. SHIVA_DT_ORIG_INTERP
-	 */
-	if (write(fd, &dyn[0], sizeof(dyn)) < 0) {
-		perror("write 10.");
-		return false;
-	}
+		/*
+		 * Write out custom dtags, i.e.:
+		 * 1. SHIVA_DT_SEARCH
+		 * 2. SHIVA_DT_NEEDED
+		 * 3. SHIVA_DT_ORIG_INTERP
+		 */
+		if (write(fd, &dyn[0], sizeof(dyn)) < 0) {
+			perror("write 10.");
+			return false;
+		}
 
-	/*
-	 * Write out the string data (Marked by our new
-	 * section: .shiva.strtab)
-	 */
-	shiva_pl_debug("Writing out strtab\n");
-	int i;
-
+		/*
+		 * Write out the string data (Marked by our new
+		 * section: .shiva.strtab)
+		 */
+		shiva_pl_debug("Writing out strtab\n");
+		int i;
 
 #if DEBUG
-	for (i = 0; i < get_shiva_strtab_offset(ctx); i++) {
-		printf("%c", ctx->shiva_strtab.strtab[i]);
-		fflush(stdout);
-	}
+		for (i = 0; i < get_shiva_strtab_offset(ctx); i++) {
+			printf("%c", ctx->shiva_strtab.strtab[i]);
+			fflush(stdout);
+		}
 #endif
 
-	if (write(fd, ctx->shiva_strtab.strtab, ctx->shiva_strtab.current_offset) < 0) {
-		perror("write 11");
-		return false;
-	}
+		if (write(fd, ctx->shiva_strtab.strtab, ctx->shiva_strtab.current_offset) < 0) {
+			perror("write 11");
+			return false;
+		}
 
-	/*
-	 * Write out xref entries into the .shiva.xref section area.
-	 */
-	struct shiva_xref_site *xref_site;
+		/*
+		 * Write out xref entries into the .shiva.xref section area.
+		 */
+		struct shiva_xref_site *xref_site;
 
-	TAILQ_FOREACH(xref_site, &ctx->tailq.xref_tqlist, _linkage) {
-		int ret;
+		TAILQ_FOREACH(xref_site, &ctx->tailq.xref_tqlist, _linkage) {
+			int ret;
 
-		ret = write(fd, xref_site, sizeof(*xref_site) - sizeof(uintptr_t));
-		if (ret < 0) {
+			ret = write(fd, xref_site, sizeof(*xref_site) - sizeof(uintptr_t));
+			if (ret < 0) {
+				perror("write");
+				return false;
+			}
+		}
+
+		/*
+		 * Write out branch entries into .shiva.branch section area.
+		 */
+		struct shiva_branch_site *branch_site;
+
+		TAILQ_FOREACH(branch_site, &ctx->tailq.branch_tqlist, _linkage) {
+			int ret;
+
+			ret = write(fd, branch_site, sizeof(*branch_site) - sizeof(uintptr_t));
+			if (ret < 0) {
+				perror("write");
+				return false;
+			}
+		}
+	} else { /* 
+		  *  We are not generating a CFG... so we re-write the binary ELF binary
+		  *  with all of the changes, except adding in the .shiva.xref, .shiva.branch
+		  *  and .shiva.strtab sections.
+		  */
+		if (write(fd, ctx->bin.elfobj.mem, ctx->bin.elfobj.size) < 0) {
 			perror("write");
 			return false;
 		}
-	}
 
-	/*
-	 * Write out branch entries into .shiva.branch section area.
-	 */
-	struct shiva_branch_site *branch_site;
-
-	TAILQ_FOREACH(branch_site, &ctx->tailq.branch_tqlist, _linkage) {
-		int ret;
-
-		ret = write(fd, branch_site, sizeof(*branch_site) - sizeof(uintptr_t));
-		if (ret < 0) {
+		if (write(fd, &null, n_segment.offset - ctx->bin.elfobj.size) < 0) {
 			perror("write");
+			return false;
+		}
+ 
+		if (write(fd, old_dynamic_segment,
+		    old_dynamic_size - sizeof(ElfW(Dyn))) < 0) {
+			perror("write");
+			return false;
+		}
+
+#define NEW_DYN_ENTRY_SZ 4
+
+		ElfW(Dyn) dyn[NEW_DYN_ENTRY_SZ];
+
+		/*
+		 * Write out new dynamic entry for SHIVA_DT_SEARCH and
+		 * SHIVA_DT_NEEDED
+		 */
+		dyn[0].d_tag = SHIVA_DT_SEARCH;
+		dyn[0].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size;
+		dyn[1].d_tag = SHIVA_DT_NEEDED;
+		dyn[1].d_un.d_ptr = ctx->new_segment.vaddr +
+		    ctx->new_segment.dyn_size + strlen(ctx->search_path) + 1;
+		dyn[2].d_tag = SHIVA_DT_ORIG_INTERP;
+		dyn[2].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size +
+		    strlen(ctx->search_path) + 1 + strlen(ctx->input_patch) + 1;
+		dyn[3].d_tag = DT_NULL;
+		dyn[3].d_un.d_ptr = 0x0;
+
+		/*
+		 * Write out custom dtags, i.e.:
+		 * 1. SHIVA_DT_SEARCH
+		 * 2. SHIVA_DT_NEEDED
+		 * 3. SHIVA_DT_ORIG_INTERP
+		 */
+		if (write(fd, &dyn[0], sizeof(dyn)) < 0) {
+			perror("write");
+			return false;
+		}
+		if (write(fd, ctx->search_path, strlen(ctx->search_path) + 1) < 0) {
+			perror("write");
+			return false;
+		}
+		if (write(fd, ctx->input_patch, strlen(ctx->input_patch) + 1) < 0) {
+			perror("write");
+			return false;
+		}
+		if (write(fd, ctx->orig_interp_path,
+		    strlen(ctx->orig_interp_path) + 1) < 0) {
+			perror("write 7.");
 			return false;
 		}
 	}
@@ -1358,7 +1422,7 @@ usage:
 
 	memset(&ctx, 0, sizeof(ctx));
 
-	while ((opt = getopt_long(argc, argv, "e:p:i:s:o:",
+	while ((opt = getopt_long(argc, argv, "e:p:i:s:o:d",
 	    long_options, &long_index)) != -1) {
 		switch(opt) {
 		case 'e':
@@ -1439,11 +1503,14 @@ usage:
 		exit(EXIT_FAILURE);
 	}
 
-	if (analyze_binary(&ctx) == false) {
-		fprintf(stderr, "analyze_binary() failed on %s\n",
-		    elf_pathname(&ctx.bin.elfobj));
-		exit(EXIT_FAILURE);
+	if ((ctx.flags & SHIVA_LD_F_NO_CFG) == 0) {
+		if (analyze_binary(&ctx) == false) {
+			fprintf(stderr, "analyze_binary() failed on %s\n",
+			    elf_pathname(&ctx.bin.elfobj));
+			exit(EXIT_FAILURE);
+		}
 	}
+
 	printf("\n[+] Input executable: %s\n", ctx.input_exec);
 	printf("[+] Input search path for patch: %s\n", ctx.search_path);
 	printf("[+] Basename of patch: %s\n", ctx.input_patch);
