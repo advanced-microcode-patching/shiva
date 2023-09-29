@@ -42,6 +42,8 @@
 #include "/opt/elfmaster/include/libelfmaster.h"
 #include "../../include/capstone/capstone.h"
 
+#define SHIVA_LD_F_NO_CFG	(1UL << 0)
+
 #define SHIVA_DT_NEEDED	DT_LOOS + 10
 #define SHIVA_DT_SEARCH DT_LOOS + 11
 #define SHIVA_DT_ORIG_INTERP DT_LOOS + 12
@@ -605,7 +607,6 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	tmp_shdr.sh_addralign = 1;
 	tmp_shdr.sh_entsize = 1;
 
-	printf("Writing out first shdr, %d bytes\n", sizeof(ElfW(Shdr)));
 	if (write(fd, &tmp_shdr, sizeof(ElfW(Shdr))) < 0) {
 		perror("write 6");
 		return false;
@@ -658,7 +659,6 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		return false;
 	}
 
-	printf("Writing old dynamic segment entries\n");
 	/*
 	 * Write out entire old dynamic segment, except for the last entry
 	 * which will be DT_NULL
@@ -706,11 +706,10 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	shiva_pl_debug("Writing out strtab\n");
 	int i;
 
-	printf("strtab len: %d\n", get_shiva_strtab_offset(ctx));
 
 #if DEBUG
 	for (i = 0; i < get_shiva_strtab_offset(ctx); i++) {
-		printf("%c\n", ctx->shiva_strtab.strtab[i]);
+		printf("%c", ctx->shiva_strtab.strtab[i]);
 		fflush(stdout);
 	}
 #endif
@@ -978,6 +977,7 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 	uint64_t call_site, call_addr, retaddr;
 	uint64_t current_address = ctx->disas.base;
 	int64_t call_offset;
+	size_t insn_counter = 0;
 
 	if (elf_section_by_name(&ctx->bin.elfobj, ".text", &section) == false) {
 		fprintf(stderr, "elf_section_by_name() failed\n");
@@ -987,7 +987,7 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 	struct shiva_branch_site *tmp;
 	int xref_type;
 	size_t c, i, j;
-	size_t code_len = section.size - 1;
+	size_t code_len = section.size - 1; /* XXX what's up with the -1 ? check this */
 	uint64_t code_vaddr = section.address; /* Points to .text */
 	uint8_t *code_ptr = ctx->disas.textptr;
 	uint8_t *tmp_ptr = code_ptr;
@@ -1005,7 +1005,15 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 	shiva_pl_debug("disassembling text(%#lx), %zu bytes\n", section.address, section.size);
 	for (c = 0 ;; c += ARM_INSN_LEN) {
 		bool res;
+		double progress;
+		size_t insn_max_count = (code_len / ARM_INSN_LEN);
 
+		insn_counter++;
+		progress = insn_counter * 100.0 / insn_max_count;
+		if ((int)progress % 10 == 0) {
+			fprintf(stdout, ".");
+			fflush(stdout);
+		}
 		shiva_pl_debug("Address: %#lx\n", section.address + c);
 		shiva_pl_debug("(uint32_t)textptr: %#x\n", *(uint32_t *)code_ptr);
 		if (c >= section.size)
@@ -1344,6 +1352,7 @@ usage:
 		printf("[-i] --interp_path	Interpreter search path, i.e. \"/lib/shiva\"\n");
 		printf("[-s] --search_path	Module search path (For patch object)\n");
 		printf("[-o] --output_exec	Output executable\n");
+		printf("[-d] --disable-cfg-gen	Do not generate CFG data (i.e. .shiva.xref and .shiva.branch)\n");
 		exit(0);
 	}
 
@@ -1391,6 +1400,9 @@ usage:
 				exit(EXIT_FAILURE);
 			}
 			break;
+		case 'd':
+			ctx.flags |= SHIVA_LD_F_NO_CFG;
+			break;
 		default:
 			break;
 		}
@@ -1432,7 +1444,7 @@ usage:
 		    elf_pathname(&ctx.bin.elfobj));
 		exit(EXIT_FAILURE);
 	}
-	printf("[+] Input executable: %s\n", ctx.input_exec);
+	printf("\n[+] Input executable: %s\n", ctx.input_exec);
 	printf("[+] Input search path for patch: %s\n", ctx.search_path);
 	printf("[+] Basename of patch: %s\n", ctx.input_patch);
 	printf("[+] Output executable: %s\n", ctx.output_exec);
