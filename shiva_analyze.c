@@ -624,6 +624,8 @@ shiva_analyze_run(struct shiva_ctx *ctx)
 		branch_new->symbol.name = (char *)&shiva_strtab[(size_t)branch_site.symbol.name];
 		VALIDATE_STRTAB_OFFSET((size_t)branch_site.current_function.name);
 		branch_new->current_function.name = (char *)&shiva_strtab[(size_t)branch_site.current_function.name];
+		VALIDATE_STRTAB_OFFSET((size_t)branch_site.insn_string);
+		branch_new->insn_string = (char *)&shiva_strtab[(size_t)branch_site.insn_string];
 		TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, branch_new, _linkage);
 	}
 	return true;
