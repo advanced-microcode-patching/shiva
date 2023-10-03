@@ -46,7 +46,7 @@ install:
 	mkdir -p /opt/shiva/modules
 	cp $(PATCH_PATH)/*interposing*/*.o /opt/shiva/modules
 	cp $(PATCH_PATH)/cfs_patch1/*.o /opt/shiva/modules
-	cp $(PATCH_PATH)/amp_challenge10/*.o /opt/shiva/modules
+	cp $(PATCH_PATH)/bss_overflow/*.o /opt/shiva/modules
 	cat shiva.ansi
 clean:
 	rm -f *.o shiva
