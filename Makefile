@@ -49,4 +49,5 @@ install:
 	cp $(PATCH_PATH)/bss_overflow/*.o /opt/shiva/modules
 	cat shiva.ansi
 clean:
+	make -C tools/shiva-ld clean
 	rm -f *.o shiva
