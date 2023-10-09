@@ -8,10 +8,16 @@ bool
 shiva_target_has_prelinking(struct shiva_ctx *ctx)
 {
 	uint32_t magic = *(uint32_t *)&ctx->elfobj.mem[EI_PAD];
+	struct elf_section shdr;
 
-	if (magic == (uint32_t)SHIVA_SIGNATURE)
-		return true;
-	return false;
+	if (magic != (uint32_t)SHIVA_SIGNATURE)
+		return false;
+
+	if (elf_section_by_name(&ctx->elfobj, ".shiva.xref", &shdr) == true &&
+	    elf_section_by_name(&ctx->elfobj, ".shiva.branch", &shdr) == true) {
+		ctx->prelink_flags |= SHIVA_PRELINK_F_CFG_ENABLED;
+	}
+	return true;
 }
 
 /*

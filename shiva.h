@@ -452,6 +452,11 @@ typedef struct shiva_trace_regset_x86_64 shiva_trace_jumpbuf_t;
 #define R14_OFF 120
 #define R15_OFF 128
 
+/*
+ * Prelinking flags set by shiva-ld
+ */
+#define SHIVA_PRELINK_F_CFG_ENABLED 	(1UL << 0)
+
 typedef struct shiva_ctx {
 	char *path; // path to target executable
 	char module_path[PATH_MAX]; // TODO in the future add linked list of modules.
@@ -464,6 +469,7 @@ typedef struct shiva_ctx {
 	elfobj_t elfobj;	// target executable
 	elfobj_t ldsobj;	// ldso executable
 	uint64_t flags;
+	uint64_t prelink_flags; /* shiva-ld related flags set on binary */
 	int pid;
 	int duplicate_pid;
 	uint64_t duplicate_base;

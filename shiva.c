@@ -1,4 +1,5 @@
 #include "shiva.h"
+#include <time.h>
 
 struct shiva_ctx *ctx_global;
 
@@ -113,11 +114,23 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		fprintf(stderr, "Warning: Found .text relocations in '%s'. This may alter"
 		    " the effects of breakpoints/instrumentation\n", elf_pathname(&ctx->elfobj));
 	}
-	
+
+#ifdef SPEED_TEST
+	struct timespec tv, tv2;
+	double elapsed_time;
+	clock_gettime(CLOCK_REALTIME, &tv);
+#endif
 	if (shiva_analyze_run(ctx) == false) {
 		fprintf(stderr, "Failed to run the analyzers\n");
-		return false;
+		exit(EXIT_FAILURE);
 	}
+#ifdef SPEED_TEST
+	clock_gettime(CLOCK_REALTIME, &tv2);
+	fprintf(stdout, "time to generate xref/branch data: %zu:%zu ms.\n", (size_t)tv2.tv_sec - (size_t)tv.tv_sec,
+	    (size_t)tv2.tv_nsec - (size_t)tv.tv_nsec);
+
+#endif
+
 	if (shiva_maps_build_list(ctx) == false) {
 		fprintf(stderr, "shiva_maps_build_list() failed\n");
 		return false;
@@ -156,6 +169,10 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 			return false;
 		}
 	} else {
+		fprintf(stderr, "Shiva ELF Interpreter mode doesn't work without first using shiva-ld"
+		    " to prelink the target ELF binary\n");
+		return false;
+		/* XXX */
 		char *mpath = getenv("SHIVA_MODULE_PATH");
 		if (mpath != NULL) {
 			strcpy(ctx->module_path, mpath);
@@ -165,20 +182,20 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	}
 
 	/*
-         * Get the entry point of the target executable. Stored in AT_ENTRY
-         * of the auxiliary vector.
-         */
-        if (shiva_auxv_iterator_init(ctx, &auxv_iter, NULL) == false) {
-                fprintf(stderr, "shiva_auxv_iterator_init failed\n");
-                return false;
-        }
-        while (shiva_auxv_iterator_next(&auxv_iter, &auxv_entry) == SHIVA_ITER_OK) {
-                if (auxv_entry.type == AT_ENTRY) {
-                        ctx->ulexec.entry_point = auxv_entry.value;
-                        shiva_debug("[1] Entry point: %#lx\n", entry_point);
-                        break;
-                }
-        }
+	 * Get the entry point of the target executable. Stored in AT_ENTRY
+	 * of the auxiliary vector.
+	 */
+	if (shiva_auxv_iterator_init(ctx, &auxv_iter, NULL) == false) {
+		fprintf(stderr, "shiva_auxv_iterator_init failed\n");
+		return false;
+	}
+	while (shiva_auxv_iterator_next(&auxv_iter, &auxv_entry) == SHIVA_ITER_OK) {
+		if (auxv_entry.type == AT_ENTRY) {
+			ctx->ulexec.entry_point = auxv_entry.value;
+			shiva_debug("[1] Entry point: %#lx\n", entry_point);
+			break;
+		}
+	}
 	if (shiva_module_loader(ctx, ctx->module_path,
 	    &ctx->module.runtime, SHIVA_MODULE_F_RUNTIME) == false) {
 		fprintf(stderr, "shiva_module_loader failed\n");
@@ -413,14 +430,23 @@ int main(int argc, char **argv, char **envp)
 	 * into memory, we can run some analyzers on it to acquire
 	 * information (i.e. callsite locations).
 	 */
+#ifdef SPEED_TEST
+	struct timespec tv, tv2;
+	double elapsed_time;
+	clock_gettime(CLOCK_REALTIME, &tv);
+#endif
 	if (shiva_analyze_run(&ctx) == false) {
 		fprintf(stderr, "Failed to run the analyzers\n");
 		exit(EXIT_FAILURE);
 	}
+#ifdef SPEED_TEST
+	clock_gettime(CLOCK_REALTIME, &tv2);
+	fprintf(stdout, "time to generate xref/branch data: %zu:%zu ms.\n", (size_t)tv2.tv_sec - (size_t)tv.tv_sec,
+	    (size_t)tv2.tv_nsec - (size_t)tv.tv_nsec);
+#endif
 	/*
-	 * shiva_module_loader will load modules/shakti_module.o
-	 * into an executable region within our address space.
-	 * It will then pass control to the module.
+	 * This flag tells Shiva to ul_exec the target binary without installing
+	 * any patches at runtime.
 	 */
 	if (ctx.flags & SHIVA_OPTS_F_ULEXEC_ONLY)
 		goto transfer_control;
@@ -454,17 +480,6 @@ int main(int argc, char **argv, char **envp)
 		fprintf(stderr, "shiva_module_loader failed\n");
 		exit(EXIT_FAILURE);
 	}
-
-	/*
-	 * XXX: In the event that our module installed .got.plt hooks, we
-	 * must disable DT_BINDNOW before passing control to the RTLD, otherwise
-	 * our hooks will be overwritten by RTLD in strict linking mode.
-	 * We are basically disabling RELRO (read-only relocations) which is a
-	 * security issue. In the future we should inject PLT hooks purely by
-	 * injecting JUMPSLOT relocations.
-	 */
-	//(void) shiva_target_dynamic_set(&ctx, DT_FLAGS, 0);
-	//(void) shiva_target_dynamic_set(&ctx, DT_FLAGS_1, 0);
 
 	/*
 	 * Once the module has finished executing, we pass control

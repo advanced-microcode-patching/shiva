@@ -1,5 +1,6 @@
 INTERP_PATH="/lib/shiva"
 SHIVA-LD_PATH="../../../tools/shiva-ld/shiva-ld"
+all: patch prelink
 patch:
 	# Build the module ro_patch.c with a large code model
 	gcc -Wno-implicit-function-declaration -mcmodel=large -fno-pic -I ../../include -fno-stack-protector -c sshd_patch.c
