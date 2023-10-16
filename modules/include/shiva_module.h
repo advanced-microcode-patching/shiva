@@ -2,10 +2,9 @@
 #include <stdint.h>
 
 /*
- * In the future we will use clang/gcc plugin to create custom attributes
- * to generate the ptd data.
+ * These are the mnemonics for identifying the function
+ * name, and the patch start/end address.
  */
-
 #define SHIVA_T_SPLICE_FUNC_ID "__shiva_splice_fn_name_"
 #define SHIVA_T_SPLICE_INSERT_ID "__shiva_splice_insert_"
 #define SHIVA_T_SPLICE_EXTEND_ID "__shiva_splice_extend_"

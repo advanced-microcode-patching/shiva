@@ -2350,6 +2350,8 @@ validate_helpers(struct shiva_ctx *ctx, struct shiva_module *linker)
  * If there are any transformations, make internal transformation
  * records.
  */
+#define ARM_INSN_LEN 4
+
 static bool
 validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 {
@@ -2628,17 +2630,24 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			 * REPLACE: we are replacing B bytes of code with B bytes code.
 			 * NOP_PAD: the patch code is smaller than the target, so pad it with nops.
 			 * EXTEND: the patch code is larger than the target, so extend the function size.
-			 * INJECT: Can be set alongside extend and nop_pad, and is probably superlfuous.
-			 * XXX We may remove INJECT flag, let me see if it comes in handy.
+			 * INJECT: (Coupled with extend) signifies an extension between two contiguous addresses;
+			 * in other words we are not overwriting any code, just adding new code.
 			 */
 			if (transform->new_len == transform->old_len) {
 				transform->flags |= SHIVA_TRANSFORM_F_REPLACE;
 			} else if (transform->new_len < transform->old_len) {
 				transform->flags |=
-				    (SHIVA_TRANSFORM_F_NOP_PAD|SHIVA_TRANSFORM_F_INJECT);
+				    (SHIVA_TRANSFORM_F_NOP_PAD);
 			} else if (transform->new_len > transform->old_len) {
 				transform->flags |=
-				    (SHIVA_TRANSFORM_F_EXTEND|SHIVA_TRANSFORM_F_INJECT);
+				    (SHIVA_TRANSFORM_F_EXTEND);
+			} else if (transform->old_len == ARM_INSN_LEN && transform->new_len > 0) {
+				transform->flags |=
+				    (SHIVA_TRANSFORM_F_EXTEND | SHIVA_TRANSFORM_F_INJECT);
+			} else if (transform->old_len == 0 && transform->new_len == 0) {
+				fprintf(stderr, "Invalid patch lengths. Length of patch: %zu,"
+				    " Length of patch area: %zu\n", transform->new_len, transform->old_len);
+				return false;
 			}
 			memset(tmp, 0, sizeof(tmp));
 			strcpy(tmp, SHIVA_T_SPLICE_FUNC_ID);
