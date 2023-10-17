@@ -2638,12 +2638,14 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			} else if (transform->new_len < transform->old_len) {
 				transform->flags |=
 				    (SHIVA_TRANSFORM_F_NOP_PAD);
-			} else if (transform->new_len > transform->old_len) {
+			} else if ((transform->new_len > transform->old_len) &&
+				    transform->old_len > ARM_INSN_LEN) {
 				transform->flags |=
 				    (SHIVA_TRANSFORM_F_EXTEND);
 			} else if (transform->old_len == ARM_INSN_LEN && transform->new_len > 0) {
 				transform->flags |=
 				    (SHIVA_TRANSFORM_F_EXTEND | SHIVA_TRANSFORM_F_INJECT);
+				transform->offset += ARM_INSN_LEN;
 			} else if (transform->old_len == 0 && transform->new_len == 0) {
 				fprintf(stderr, "Invalid patch lengths. Length of patch: %zu,"
 				    " Length of patch area: %zu\n", transform->new_len, transform->old_len);

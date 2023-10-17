@@ -7,6 +7,7 @@
 #define COPY_SECOND_HALF	2
 #define COPY_TF_SOURCE		3
 
+#define ARM_INSN_LEN 4
 #define AARCH64_NOP 0xd503201f
 
 /*
@@ -58,6 +59,7 @@ shiva_tf_splice_function_extend(struct shiva_module *linker, struct shiva_transf
 	 * Copy first half of function into module image.
 	 */
 	copy_len = transform->offset;
+
 	shiva_debug("COPY_FIRST_HALF: dest:%p, source:%p, len:%zu\n",
 	    dest, source, copy_len);
 	memcpy(dest, source, copy_len);
