@@ -93,6 +93,14 @@
 					     "add x9, x9, #96"); \
 				  register int64_t var asm("x9");
 
+#define SHIVA_T_PUSH64_X0	asm volatile ("str x0, [sp, #-8]!");
+
+#define SHIVA_T_POP64_X0	asm volatile ("ldr x0, [sp], #8");
+
+#define SHIVA_T_PUSH64_X1       asm volatile ("str x1, [sp, #-8]!");
+
+#define SHIVA_T_POP64_X1        asm volatile ("ldr x1, [sp], #8");
+
 #define SHIVA_HELPER_CALL_EXTERNAL_ID "__shiva_helper_orig_func_"
 
 #define SHIVA_HELPER_CALL_EXTERNAL(name)	\
