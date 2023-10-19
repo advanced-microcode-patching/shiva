@@ -53,6 +53,7 @@ shiva_tf_splice_function_extend(struct shiva_module *linker, struct shiva_transf
 	 */
 	uint8_t *source = (uint8_t *)transform->target_symbol.value + linker->target_base;
 	size_t copy_len;
+	uint64_t src_tf_offset = transform->offset;
 
 	/*
 	 * Step 1 Inject first half
@@ -102,6 +103,14 @@ shiva_tf_splice_function_extend(struct shiva_module *linker, struct shiva_transf
 	shiva_debug("COPY_SECOND_HALF: dest:%#lx, source:%#lx, len:%zu\n",
 	    dest + transform->offset + transform->new_len,
 	    source + transform->offset + transform->old_len, copy_len);
+	if (transform->flags & SHIVA_TRANSFORM_F_INJECT) {
+		/*
+		 * A caveat when dealing with the INJECT flag.
+		 * XXX don't commit until we can garantee this
+		 * is the best solution.
+		 */
+		//src_tf_offset = transform->offset - ARM_INSN_LEN;
+	}
 	memcpy(dest + transform->offset + transform->new_len,
 	    source + transform->offset + transform->old_len, copy_len);
 	transform->splice.copy_len3 = copy_len;

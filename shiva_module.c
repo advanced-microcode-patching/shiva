@@ -913,8 +913,8 @@ is_text_encoding_reloc(struct shiva_module *linker, uint64_t r_offset)
 	shiva_debug("r_offset: %#lx\n", r_offset);
 
 	assert(elf_section_by_name(&linker->elfobj, ".text", &shdr) == true);
-	if (r_offset < shdr.offset || r_offset > shdr.offset + shdr.size)
-		return false;
+	shiva_debug("r_offset: %#lx shdr.offset: %#lx shdr.size: %#lx\n", r_offset, shdr.offset,
+	    shdr.size);
 	elf_symtab_iterator_init(&linker->elfobj, &sym_iter);
 	while (elf_symtab_iterator_next(&sym_iter, &symbol) == ELF_ITER_OK) {
 		if (symbol.type != STT_FUNC)
@@ -2646,6 +2646,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 				transform->flags |=
 				    (SHIVA_TRANSFORM_F_EXTEND | SHIVA_TRANSFORM_F_INJECT);
 				transform->offset += ARM_INSN_LEN;
+				transform->old_len = 0;
 			} else if (transform->old_len == 0 && transform->new_len == 0) {
 				fprintf(stderr, "Invalid patch lengths. Length of patch: %zu,"
 				    " Length of patch area: %zu\n", transform->new_len, transform->old_len);
