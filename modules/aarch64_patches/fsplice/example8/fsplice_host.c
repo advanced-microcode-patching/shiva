@@ -9,10 +9,12 @@ char global_buf[255];
 
 int foo(int num, char *str)
 {
+	/* ADD A NEW LINE OF C HERE */
+
 	if (num == 7)
 		goto done;
 	strcpy(global_buf, banner);
-	printf("Printing str: %s\n", str); // <- splice code in here
+	printf("Printing str: %s\n", str);
 done:
 	return 0;
 }

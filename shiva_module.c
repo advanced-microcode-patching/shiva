@@ -388,7 +388,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 				continue;
 #if __aarch64__
 			shiva_debug("Installing patch offset on target at %#lx for %s. Transform: %p\n",
-			    be.branch_site, symbol.name, tfptr);
+			    be.branch_site + ctx->ulexec.base_vaddr, symbol.name, tfptr);
 			res = install_aarch64_call26_patch(ctx, linker, &be, &symbol, tfptr);
 			if (res == false) {
 				fprintf(stderr, "external linkage failure: "
