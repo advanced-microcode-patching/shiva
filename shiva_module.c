@@ -2637,7 +2637,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 				transform->flags |= SHIVA_TRANSFORM_F_REPLACE;
 			} else if (transform->new_len < transform->old_len) {
 				transform->flags |=
-				    (SHIVA_TRANSFORM_F_NOP_PAD);
+				    (SHIVA_TRANSFORM_F_NOP_PAD | SHIVA_TRANSFORM_F_REPLACE);
 			} else if ((transform->new_len > transform->old_len) &&
 				    transform->old_len > ARM_INSN_LEN) {
 				transform->flags |=

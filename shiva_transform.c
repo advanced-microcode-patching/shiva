@@ -29,7 +29,7 @@
  * }
  */
 /*
- * shiva_tf_splice_function_extend
+ * shiva_tf_splice_function
  * Copy the function that is being transformed into a new location
  * while splicing the transform source (The patch) into place.
  * If the original byte-code is smaller than the patch, then we overwrite
@@ -41,7 +41,7 @@
  * offsets changing.
  */
 static bool
-shiva_tf_splice_function_extend(struct shiva_module *linker, struct shiva_transform *transform,
+shiva_tf_splice_function(struct shiva_module *linker, struct shiva_transform *transform,
     uint8_t *dst)
 {
 	/*
@@ -68,6 +68,11 @@ shiva_tf_splice_function_extend(struct shiva_module *linker, struct shiva_transf
 	test_mark();
 	/* Step 2. Inject patch code. If the patch code is larger
 	 * than the original code, then extend.
+	 * If the patch code is the same size, then simply replace
+	 * the code in question.
+	 * If the patch code is smaller than the target area, then
+	 * this implicitly instructs us to patch the remaining target
+	 * code with NOPS.
 	 * Copy the patch code (Transform source) into the correct
 	 * offset (transform->offset to be exact) of the new function.
 	 */
@@ -87,6 +92,30 @@ shiva_tf_splice_function_extend(struct shiva_module *linker, struct shiva_transf
 	*(uint32_t *)&transform->ptr[transform->new_len - 8] = AARCH64_NOP;
 #endif
 	memcpy(dest + transform->offset, transform->ptr, copy_len);
+
+	/*
+	 * If the end address is further away than the amount of code
+	 * we are copying, then overwrite the remaining target code
+	 * with NOPS. This technique allows a splicer to overwrite
+	 * multiple lines of code with just a single line of code in
+	 * their place, overwriting the remaining area with nops.
+	 */
+	if (transform->flags & SHIVA_TRANSFORM_F_NOP_PAD) {
+		uint32_t nop_bytes = AARCH64_NOP;
+		size_t nop_len = transform->old_len - transform->new_len;
+		size_t i;
+
+		assert((nop_len % ARM_INSN_LEN) == 0);
+
+		shiva_debug("Copying in %d NOP instructions at %p\n",
+		    (nop_len / 4) * ARM_INSN_LEN, dest);
+
+		for (i = 0; i < nop_len / 4; i++) {
+			memcpy(dest + transform->offset + copy_len + (i * ARM_INSN_LEN),
+			    &nop_bytes, ARM_INSN_LEN );
+		}
+		copy_len += (noplen / 4) * ARM_INSN_LEN;
+	}
 	transform->splice.copy_len2 = copy_len;
 
 	test_mark();
@@ -99,9 +128,11 @@ shiva_tf_splice_function_extend(struct shiva_module *linker, struct shiva_transf
 	source = (uint8_t *)transform->target_symbol.value + linker->target_base;
 	copy_len = transform->target_symbol.value + transform->target_symbol.size;
 	copy_len = copy_len - (transform->target_symbol.value + transform->offset + transform->old_len);
+
 	shiva_debug("COPY_SECOND_HALF: dest:%#lx, source:%#lx, len:%zu\n",
 	    dest + transform->offset + transform->new_len,
 	    source + transform->offset + transform->old_len, copy_len);
+
 	memcpy(dest + transform->offset + transform->new_len,
 	    source + transform->offset + transform->old_len, copy_len);
 	transform->splice.copy_len3 = copy_len;
@@ -577,7 +608,7 @@ shiva_tf_process_transforms(struct shiva_module *linker, uint8_t *dst,
 			shiva_debug("Transform offset: %#lx (%zu)\n", transform->offset,
 			    transform->offset);
 			if (transform->flags & SHIVA_TRANSFORM_F_EXTEND) {
-				res = shiva_tf_splice_function_extend(linker, transform, dst);
+				res = shiva_tf_splice_function(linker, transform, dst);
 				if (res == true ) {
 					transform->segment_offset = *segment_offset;
 					*segment_offset += transform->target_symbol.size;
@@ -592,6 +623,19 @@ shiva_tf_process_transforms(struct shiva_module *linker, uint8_t *dst,
 					res = shiva_tf_relink_new_func(linker, transform);
 				}
 				break;
+			} else if (transform->flags & SHIVA_TRANSFORM_F_REPLACE) {
+				res = shiva_tf_splice_function(linker, transform, dst);
+				if (res == true) {
+					transform->segment_offset = *segment_offset;
+					*segment_offset += transform->target_symbol.size;
+					*segment_offset += transform->source_symbol.size;
+					*segment_offset += transform->ext_len;
+					shiva_debug("setting segment_offset to %#lx\n", *segment_offset);
+					if (*segment_offset % ARM_INSN_LEN != 0) {
+						shiva_debug("Aligning *segment_offset to 4\n");
+						*segment_offset = *segment_offset + 4 & ~3;
+					}
+				}
 			}
 			break;
 		case SHIVA_TRANSFORM_EMIT_BYTECODE:
