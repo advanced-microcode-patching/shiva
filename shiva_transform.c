@@ -114,7 +114,7 @@ shiva_tf_splice_function(struct shiva_module *linker, struct shiva_transform *tr
 			memcpy(dest + transform->offset + copy_len + (i * ARM_INSN_LEN),
 			    &nop_bytes, ARM_INSN_LEN );
 		}
-		copy_len += (noplen / 4) * ARM_INSN_LEN;
+		copy_len += (nop_len / 4) * ARM_INSN_LEN;
 	}
 	transform->splice.copy_len2 = copy_len;
 
