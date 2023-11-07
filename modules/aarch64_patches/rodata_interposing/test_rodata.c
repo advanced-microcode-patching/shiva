@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-const char rodata_string[] = "Arcana Technologies";
+const char my_string[] = "Arcana Technologies";
 
 int main(void)
 {
-	printf("rodata_string: %s\n", rodata_string);
+	printf("%s\n", my_string);
 	exit(0);
 }

@@ -1,11 +1,13 @@
-
+/*
+ * shiva_module.h contains the transform macros and other
+ * helper code that is used by shiva modules.
+ */
 #include <stdint.h>
 
 /*
- * In the future we will use clang/gcc plugin to create custom attributes
- * to generate the ptd data.
+ * These are the mnemonics for identifying the function
+ * name, and the patch start/end address.
  */
-
 #define SHIVA_T_SPLICE_FUNC_ID "__shiva_splice_fn_name_"
 #define SHIVA_T_SPLICE_INSERT_ID "__shiva_splice_insert_"
 #define SHIVA_T_SPLICE_EXTEND_ID "__shiva_splice_extend_"
@@ -23,6 +25,29 @@
 #define SHIVA_T_PAIR_X5(var) register int64_t var asm("x5");
 #define SHIVA_T_PAIR_X6(var) register int64_t var asm("x6");
 #define SHIVA_T_PAIR_X7(var) register int64_t var asm("x7");
+
+#define SHIVA_T_PAIR_X8(var) register int64_t var asm("x8");
+#define SHIVA_T_PAIR_X9(var) register int64_t var asm("x9");
+#define SHIVA_T_PAIR_X10(var) register int64_t var asm("x10");
+#define SHIVA_T_PAIR_X11(var) register int64_t var asm("x11");
+#define SHIVA_T_PAIR_X12(var) register int64_t var asm("x12");
+#define SHIVA_T_PAIR_X13(var) register int64_t var asm("x13");
+#define SHIVA_T_PAIR_X14(var) register int64_t var asm("x14");
+#define SHIVA_T_PAIR_X15(var) register int64_t var asm("x15");
+#define SHIVA_T_PAIR_X16(var) register int64_t var asm("x16");
+#define SHIVA_T_PAIR_X17(var) register int64_t var asm("x17");
+#define SHIVA_T_PAIR_X18(var) register int64_t var asm("x18");
+#define SHIVA_T_PAIR_X19(var) register int64_t var asm("x19");
+#define SHIVA_T_PAIR_X20(var) register int64_t var asm("x20");
+#define SHIVA_T_PAIR_X21(var) register int64_t var asm("x21");
+#define SHIVA_T_PAIR_X22(var) register int64_t var asm("x22");
+#define SHIVA_T_PAIR_X23(var) register int64_t var asm("x23");
+#define SHIVA_T_PAIR_X24(var) register int64_t var asm("x24");
+#define SHIVA_T_PAIR_X25(var) register int64_t var asm("x25");
+#define SHIVA_T_PAIR_X26(var) register int64_t var asm("x26");
+#define SHIVA_T_PAIR_X27(var) register int64_t var asm("x27");
+#define SHIVA_T_PAIR_X28(var) register int64_t var asm("x28");
+
 
 #define SHIVA_T_PAIR_W0(var) register int64_t var asm("w0");
 #define SHIVA_T_PAIR_W1(var) register int64_t var asm("w1");
@@ -93,6 +118,93 @@
 #define SHIVA_T_LEA_BP_96(var) asm volatile ("mov x9, x29\n"   \
 					     "add x9, x9, #96"); \
 				  register int64_t var asm("x9");
+
+#define SHIVA_T_PUSH64_X0	asm volatile ("str x0, [sp, #-8]!");
+#define SHIVA_T_POP64_X0	asm volatile ("ldr x0, [sp], #8");
+
+#define SHIVA_T_PUSH64_X1       asm volatile ("str x1, [sp, #-8]!");
+#define SHIVA_T_POP64_X1        asm volatile ("ldr x1, [sp], #8");
+
+#define SHIVA_T_PUSH64_X2       asm volatile ("str x2, [sp, #-8]!");
+#define SHIVA_T_POP64_X2        asm volatile ("ldr x2, [sp], #8");
+
+#define SHIVA_T_PUSH64_X3       asm volatile ("str x3, [sp, #-8]!");
+#define SHIVA_T_POP64_X3        asm volatile ("ldr x3, [sp], #8");
+
+#define SHIVA_T_PUSH64_X4       asm volatile ("str x4, [sp, #-8]!");
+#define SHIVA_T_POP64_X4        asm volatile ("ldr x4, [sp], #8");
+
+#define SHIVA_T_PUSH64_X5       asm volatile ("str x5, [sp, #-8]!");
+#define SHIVA_T_POP64_X5        asm volatile ("ldr x5, [sp], #8");
+
+#define SHIVA_T_PUSH64_X6       asm volatile ("str x6, [sp, #-8]!");
+#define SHIVA_T_POP64_X6        asm volatile ("ldr x6, [sp], #8");
+
+#define SHIVA_T_PUSH64_X7       asm volatile ("str x7, [sp, #-8]!");
+#define SHIVA_T_POP64_X7        asm volatile ("ldr x7, [sp], #8");
+
+#define SHIVA_T_PUSH64_X8       asm volatile ("str x8, [sp, #-8]!");
+#define SHIVA_T_POP64_X8        asm volatile ("ldr x8, [sp], #8");
+
+#define SHIVA_T_PUSH64_X9       asm volatile ("str x9, [sp, #-8]!");
+#define SHIVA_T_POP64_X9        asm volatile ("ldr x9, [sp], #8");
+
+#define SHIVA_T_PUSH64_X10       asm volatile ("str x10, [sp, #-8]!");
+#define SHIVA_T_POP64_X10        asm volatile ("ldr x10, [sp], #8");
+
+#define SHIVA_T_PUSH64_X11       asm volatile ("str x11, [sp, #-8]!");
+#define SHIVA_T_POP64_X11        asm volatile ("ldr x11, [sp], #8");
+
+#define SHIVA_T_PUSH64_X12       asm volatile ("str x12, [sp, #-8]!");
+#define SHIVA_T_POP64_X12        asm volatile ("ldr x12, [sp], #8");
+
+#define SHIVA_T_PUSH64_X13       asm volatile ("str x13, [sp, #-8]!");
+#define SHIVA_T_POP64_X13        asm volatile ("ldr x13, [sp], #8");
+
+#define SHIVA_T_PUSH64_X14       asm volatile ("str x14, [sp, #-8]!");
+#define SHIVA_T_POP64_X14        asm volatile ("ldr x14, [sp], #8");
+
+#define SHIVA_T_PUSH64_X15       asm volatile ("str x15, [sp, #-8]!");
+#define SHIVA_T_POP64_X15        asm volatile ("ldr x15, [sp], #8");
+
+#define SHIVA_T_PUSH64_X16       asm volatile ("str x16, [sp, #-8]!");
+#define SHIVA_T_POP64_X16        asm volatile ("ldr x16, [sp], #8");
+
+#define SHIVA_T_PUSH64_X17       asm volatile ("str x17, [sp, #-8]!");
+#define SHIVA_T_POP64_X17        asm volatile ("ldr x17, [sp], #8");
+
+#define SHIVA_T_PUSH64_X18       asm volatile ("str x18, [sp, #-8]!");
+#define SHIVA_T_POP64_X18        asm volatile ("ldr x18, [sp], #8");
+
+#define SHIVA_T_PUSH64_X19       asm volatile ("str x19, [sp, #-8]!");
+#define SHIVA_T_POP64_X19        asm volatile ("ldr x19, [sp], #8");
+
+#define SHIVA_T_PUSH64_X20       asm volatile ("str x20, [sp, #-8]!");
+#define SHIVA_T_POP64_X20        asm volatile ("ldr x20, [sp], #8");
+
+#define SHIVA_T_PUSH64_X21       asm volatile ("str x21, [sp, #-8]!");
+#define SHIVA_T_POP64_X21        asm volatile ("ldr x21, [sp], #8");
+
+#define SHIVA_T_PUSH64_X22       asm volatile ("str x22, [sp, #-8]!");
+#define SHIVA_T_POP64_X22        asm volatile ("ldr x22, [sp], #8");
+
+#define SHIVA_T_PUSH64_X23       asm volatile ("str x23, [sp, #-8]!");
+#define SHIVA_T_POP64_X23        asm volatile ("ldr x23, [sp], #8");
+
+#define SHIVA_T_PUSH64_X24       asm volatile ("str x24, [sp, #-8]!");
+#define SHIVA_T_POP64_X24        asm volatile ("ldr x24, [sp], #8");
+
+#define SHIVA_T_PUSH64_X25       asm volatile ("str x25, [sp, #-8]!");
+#define SHIVA_T_POP64_X25        asm volatile ("ldr x25, [sp], #8");
+
+#define SHIVA_T_PUSH64_X26       asm volatile ("str x26, [sp, #-8]!");
+#define SHIVA_T_POP64_X26        asm volatile ("ldr x26, [sp], #8");
+
+#define SHIVA_T_PUSH64_X27       asm volatile ("str x27, [sp, #-8]!");
+#define SHIVA_T_POP64_X27        asm volatile ("ldr x27, [sp], #8");
+
+#define SHIVA_T_PUSH64_X28       asm volatile ("str x28, [sp, #-8]!");
+#define SHIVA_T_POP64_X28        asm volatile ("ldr x28, [sp], #8");
 
 #define SHIVA_HELPER_CALL_EXTERNAL_ID "__shiva_helper_orig_func_"
 

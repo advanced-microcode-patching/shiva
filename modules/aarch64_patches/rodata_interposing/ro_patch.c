@@ -1,4 +1,4 @@
 
-const char rodata_string[] = "The Great Arcanum";
+const char my_string[] = "The Great Arcanum";
 
 

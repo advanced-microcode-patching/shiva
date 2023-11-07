@@ -22,14 +22,8 @@
 uint8_t plt_stub[6] = "\xff\x25\x00\x00\x00\x00";
 #elif __aarch64__
 /*
- * Our PLT stub requires more bytes in ARM64 assembly.
+ * Our PLT stub requires 8 bytes in ARM64 assembly.
  */
-#if 0
-uint8_t plt_stub[32] = "\x10\x00\x00\x90" \ /* adrp	x16, 0		*/
-		       "\x11\x02\x40\xf9" \ /* ldr	x17, [x16]	*/
-		       "\x10\x02\x00\x91" \ /* add	x16, x16, #0x0	*/
-		       "\x20\x02\x1f\xd6";  /* br x17			*/
-#endif
 uint8_t plt_stub[8] = "\x11\x00\x00\x58"  /* ldr	x17, got_entry_mem */
 		      "\x20\x02\x1f\xd6"; /* br x17			   */
 #endif
@@ -388,7 +382,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 				continue;
 #if __aarch64__
 			shiva_debug("Installing patch offset on target at %#lx for %s. Transform: %p\n",
-			    be.branch_site, symbol.name, tfptr);
+			    be.branch_site + ctx->ulexec.base_vaddr, symbol.name, tfptr);
 			res = install_aarch64_call26_patch(ctx, linker, &be, &symbol, tfptr);
 			if (res == false) {
 				fprintf(stderr, "external linkage failure: "
@@ -722,17 +716,6 @@ patch_plt_stubs(struct shiva_module *linker)
 #ifdef __x86_64__
 		*(uint32_t *)&stub[2] = gotoff;
 #elif __aarch64__
-		/*
-		 * We patch the Shiva module PLT stub, one 4-byte word at a time. Our
-		 * stub is 16 bytes in total.
-		 */
-#if 0
-		uint32_t rval = (ELF_PAGESTART(gotaddr) - ELF_PAGESTART(pltaddr - sizeof(plt_stub))) >> 12;
-		uint32_t insn_bytes = *(uint32_t *)&stub[0];
-		insn_bytes = (insn_bytes & ~((RELOC_MASK (2) << 29) | (RELOC_MASK(19) << 5)))
-		    | ((rval & RELOC_MASK(2)) << 29) | ((rval & (RELOC_MASK(19) << 2)) << 3);
-		*(uint32_t *)&stub[0] = insn_bytes;
-#endif
 		shiva_debug("got_addr: %#lx\n", gotaddr);
 		uint32_t rval = ((gotaddr - pltaddr) >> 2);
 		uint32_t insn_bytes = *(uint32_t *)&stub[0];
@@ -913,8 +896,8 @@ is_text_encoding_reloc(struct shiva_module *linker, uint64_t r_offset)
 	shiva_debug("r_offset: %#lx\n", r_offset);
 
 	assert(elf_section_by_name(&linker->elfobj, ".text", &shdr) == true);
-	if (r_offset < shdr.offset || r_offset > shdr.offset + shdr.size)
-		return false;
+	shiva_debug("r_offset: %#lx shdr.offset: %#lx shdr.size: %#lx\n", r_offset, shdr.offset,
+	    shdr.size);
 	elf_symtab_iterator_init(&linker->elfobj, &sym_iter);
 	while (elf_symtab_iterator_next(&sym_iter, &symbol) == ELF_ITER_OK) {
 		if (symbol.type != STT_FUNC)
@@ -2350,6 +2333,8 @@ validate_helpers(struct shiva_ctx *ctx, struct shiva_module *linker)
  * If there are any transformations, make internal transformation
  * records.
  */
+#define ARM_INSN_LEN 4
+
 static bool
 validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 {
@@ -2628,17 +2613,27 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			 * REPLACE: we are replacing B bytes of code with B bytes code.
 			 * NOP_PAD: the patch code is smaller than the target, so pad it with nops.
 			 * EXTEND: the patch code is larger than the target, so extend the function size.
-			 * INJECT: Can be set alongside extend and nop_pad, and is probably superlfuous.
-			 * XXX We may remove INJECT flag, let me see if it comes in handy.
+			 * INJECT: (Coupled with extend) signifies an extension between two contiguous addresses;
+			 * in other words we are not overwriting any code, just adding new code.
 			 */
 			if (transform->new_len == transform->old_len) {
 				transform->flags |= SHIVA_TRANSFORM_F_REPLACE;
 			} else if (transform->new_len < transform->old_len) {
 				transform->flags |=
-				    (SHIVA_TRANSFORM_F_NOP_PAD|SHIVA_TRANSFORM_F_INJECT);
-			} else if (transform->new_len > transform->old_len) {
+				    (SHIVA_TRANSFORM_F_NOP_PAD | SHIVA_TRANSFORM_F_REPLACE);
+			} else if ((transform->new_len > transform->old_len) &&
+				    transform->old_len > ARM_INSN_LEN) {
 				transform->flags |=
-				    (SHIVA_TRANSFORM_F_EXTEND|SHIVA_TRANSFORM_F_INJECT);
+				    (SHIVA_TRANSFORM_F_EXTEND);
+			} else if (transform->old_len == ARM_INSN_LEN && transform->new_len > 0) {
+				transform->flags |=
+				    (SHIVA_TRANSFORM_F_EXTEND | SHIVA_TRANSFORM_F_INJECT);
+				transform->offset += ARM_INSN_LEN;
+				transform->old_len = 0;
+			} else if (transform->old_len == 0 && transform->new_len == 0) {
+				fprintf(stderr, "Invalid patch lengths. Length of patch: %zu,"
+				    " Length of patch area: %zu\n", transform->new_len, transform->old_len);
+				return false;
 			}
 			memset(tmp, 0, sizeof(tmp));
 			strcpy(tmp, SHIVA_T_SPLICE_FUNC_ID);
