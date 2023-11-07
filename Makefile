@@ -46,8 +46,8 @@ install:
 	mkdir -p /opt/shiva/modules
 	cp $(PATCH_PATH)/*interposing*/*.o /opt/shiva/modules
 	cp $(PATCH_PATH)/cfs_patch1/*.o /opt/shiva/modules
-	cp $(PATCH_PATH)/bss_overflow/*.o /opt/shiva/modules
 	cat shiva.ansi
 clean:
 	make -C tools/shiva-ld clean
+	make -C modules/aarch64_patches clean
 	rm -f *.o shiva
