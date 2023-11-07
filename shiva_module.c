@@ -22,14 +22,8 @@
 uint8_t plt_stub[6] = "\xff\x25\x00\x00\x00\x00";
 #elif __aarch64__
 /*
- * Our PLT stub requires more bytes in ARM64 assembly.
+ * Our PLT stub requires 8 bytes in ARM64 assembly.
  */
-#if 0
-uint8_t plt_stub[32] = "\x10\x00\x00\x90" \ /* adrp	x16, 0		*/
-		       "\x11\x02\x40\xf9" \ /* ldr	x17, [x16]	*/
-		       "\x10\x02\x00\x91" \ /* add	x16, x16, #0x0	*/
-		       "\x20\x02\x1f\xd6";  /* br x17			*/
-#endif
 uint8_t plt_stub[8] = "\x11\x00\x00\x58"  /* ldr	x17, got_entry_mem */
 		      "\x20\x02\x1f\xd6"; /* br x17			   */
 #endif
@@ -722,17 +716,6 @@ patch_plt_stubs(struct shiva_module *linker)
 #ifdef __x86_64__
 		*(uint32_t *)&stub[2] = gotoff;
 #elif __aarch64__
-		/*
-		 * We patch the Shiva module PLT stub, one 4-byte word at a time. Our
-		 * stub is 16 bytes in total.
-		 */
-#if 0
-		uint32_t rval = (ELF_PAGESTART(gotaddr) - ELF_PAGESTART(pltaddr - sizeof(plt_stub))) >> 12;
-		uint32_t insn_bytes = *(uint32_t *)&stub[0];
-		insn_bytes = (insn_bytes & ~((RELOC_MASK (2) << 29) | (RELOC_MASK(19) << 5)))
-		    | ((rval & RELOC_MASK(2)) << 29) | ((rval & (RELOC_MASK(19) << 2)) << 3);
-		*(uint32_t *)&stub[0] = insn_bytes;
-#endif
 		shiva_debug("got_addr: %#lx\n", gotaddr);
 		uint32_t rval = ((gotaddr - pltaddr) >> 2);
 		uint32_t insn_bytes = *(uint32_t *)&stub[0];
