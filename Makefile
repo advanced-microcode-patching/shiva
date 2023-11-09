@@ -9,7 +9,7 @@ STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a libcapstone.a
 CC=gcc
 MUSL=musl-gcc
 
-all: interp
+all: interp shiva-ld patches
 interp:
 	[ -d $(BUILD_DIR) ] || mkdir -p $(BUILD_DIR)
 	$(CC) $(GCC_OPTS) shiva.c -o		shiva.o
