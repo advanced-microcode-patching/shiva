@@ -86,14 +86,18 @@ shiva_analyze_build_aarch64_jmp(struct shiva_ctx *ctx, uint64_t pc_vaddr)
 	return true;
 }
 
-bool shiva_analyze_branches_aarch64(struct shiva_ctx, *ctx, struct elf_section section)
+static bool
+shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 {
+	size_t c = ctx->disas.c;
+
+	shiva_debug("Mnemonic: %s\n", ctx->disas.insn->mnemonic);
 
 	if (strcmp(ctx->disas.insn->mnemonic, "b") == 0) {
-		if (shiva_analyze_build_aarch64_jmp(ctx, section.address + c)
+		if (shiva_analyze_build_aarch64_jmp(ctx, text.address + c)
 		    == false) {
 			fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
-			    ctx, section.address + c);
+			    ctx, text.address + c);
 			return false;
 		}
 	}
@@ -103,10 +107,10 @@ bool shiva_analyze_branches_aarch64(struct shiva_ctx, *ctx, struct elf_section s
 		 * b.eq, b.ne, b.gt, b.ge, b.lt, b.le, b.ls, b.hi,
 		 * b.cc, b.cs, b.cond
 		 */
-		if (shiva_analyze_build_aarch64_jmp(ctx, section.address + c)
+		if (shiva_analyze_build_aarch64_jmp(ctx, text.address + c)
 		    == false) {
 			fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
-			    ctx, section.address + c);
+			    ctx, text.address + c);
 			return false;
 		}
 	} else if (strncmp(ctx->disas.insn->mnemonic, "cb", 2) == 0) {
@@ -114,10 +118,10 @@ bool shiva_analyze_branches_aarch64(struct shiva_ctx, *ctx, struct elf_section s
 		 * Compare and branch
 		 * cbnz, cbz
 		 */
-		if (shiva_analyze_build_aarch64_jmp(ctx, section.address + c)
+		if (shiva_analyze_build_aarch64_jmp(ctx, text.address + c)
 	    == false) {
 			fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
-			    ctx, section.address + c);
+			    ctx, text.address + c);
 			return false;
 		}
 
@@ -126,95 +130,37 @@ bool shiva_analyze_branches_aarch64(struct shiva_ctx, *ctx, struct elf_section s
 		 * Test bit and branch
 		 * tbz, tbnz
 		 */
-		if (shiva_analyze_build_aarch64_jmp(ctx, section.address + c)
+		if (shiva_analyze_build_aarch64_jmp(ctx, text.address + c)
 		    == false) {
 			fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
-			    ctx, section.address + c);
+			    ctx, text.address + c);
 			return false;
 		}
 	}
 	return true;
 }
 
-bool shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section section)
+static bool
+shiva_analyze_xrefs_x86_64(void)
+{
+	return true;
+}
+
+static bool
+shiva_analyze_xrefs_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 {
 
-	if (strcmp(ctx->disas.insn->mnemonic, "bl") == 0) {
-		struct shiva_branch_site *tmp;
-		uint64_t addr;
-		struct elf_symbol tmp_sym;
-		char *p = strchr(ctx->disas.insn->op_str, '#');
+	size_t c = ctx->disas.c;
+	size_t code_len = ctx->disas.code_len;
+	uint64_t code_vaddr = ctx->disas.code_vaddr;
+	uint8_t *code_ptr = ctx->disas.code_ptr;
 
-		if (p == NULL) {
-			/*
-			 * NOTE: If there is no instruction with what we're
-			 * looking for (The # character) then simply return.
-			 */
-			return true;
-		}
-		call_site = section.address + c;
-		call_addr = strtoul((p + 1), NULL, 16);
-		retaddr = call_site + ARM_INSN_LEN;
-		memset(&symbol, 0, sizeof(symbol));
-		tmp = calloc(1, sizeof(*tmp));
-		if (tmp == NULL) {
-			perror("calloc");
-			return false;
-		}
-
-		if (elf_symbol_by_value_lookup(&ctx->elfobj, call_addr,
-		    &symbol) == false) {
-			struct elf_plt plt_entry;
-			elf_plt_iterator_t plt_iter;
-
-			symbol.name = NULL;
-
-			elf_plt_iterator_init(&ctx->elfobj, &plt_iter);
-			while (elf_plt_iterator_next(&plt_iter, &plt_entry) == ELF_ITER_OK) {
-				if (plt_entry.addr == call_addr) {
-					symbol.name = shiva_xfmtstrdup("%s@plt", plt_entry.symname);
-					symbol.type = STT_FUNC;
-					symbol.bind = STB_GLOBAL;
-					symbol.size = 0;
-					tmp->branch_flags |= SHIVA_BRANCH_F_PLTCALL;
-				}
-			}
-			if (symbol.name == NULL) {
-				symbol.name = shiva_xfmtstrdup("fn_%#lx", call_addr);
-				if (symbol.name == NULL) {
-					perror("strdup");
-					return false;
-				}
-				symbol.value = call_addr;
-				symbol.type = STT_FUNC;
-				symbol.size = symbol.size;
-				symbol.bind = STB_GLOBAL;
-			}
-		}
-		tmp->retaddr = retaddr;
-		tmp->target_vaddr = call_addr;
-		memcpy(&tmp->o_insn, tmp_ptr + c, ARM_INSN_LEN);
-		memcpy(&tmp->symbol, &symbol, sizeof(symbol));
-		tmp->branch_type = SHIVA_BRANCH_CALL;
-		tmp->branch_site = call_site;
-		tmp->branch_flags |= SHIVA_BRANCH_F_DST_SYMINFO;
-		tmp->insn_string = shiva_xfmtstrdup("%s %s",
-		    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
-
-		if (elf_symbol_by_range(&ctx->elfobj, code_vaddr - 4,
-		    &tmp_sym) == true) {
-			tmp->branch_flags |= SHIVA_BRANCH_F_SRC_SYMINFO;
-			memcpy(&tmp->current_function, &tmp_sym, sizeof(tmp_sym));
-			shiva_debug("Source symbol included: %s\n", tmp_sym.name);
-		}
-		shiva_debug("Inserting branch for symbol %s callsite: %#lx\n", tmp->symbol.name, tmp->branch_site);
-		TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
-		shiva_debug("Done inserting it\n");
-	} else if (strcmp(ctx->disas.insn->mnemonic, "adrp") == 0) {
+	if (strcmp(ctx->disas.insn->mnemonic, "adrp") == 0) {
 		uint64_t adrp_imm, adrp_site;
 		uint32_t adrp_o_bytes = *(uint32_t *)ctx->disas.insn->bytes;
 		uint32_t next_o_bytes;
 
+		shiva_debug("ADRP found\n");
 		/*
 		 * We're looking for several combinations that could be
 		 * used to reference/access global data.
@@ -228,16 +174,19 @@ bool shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section secti
 		struct shiva_xref_site *xref;
 		struct elf_symbol symbol;
 		uint64_t xref_site, xref_addr, target_page;
+		int xref_type;
+		bool res;
+
 		char *p = strchr(ctx->disas.insn->op_str, '#');
 
 		if (p == NULL) {
 			return true;
 		}
-		adrp_site = section.address + c;
+		adrp_site = text.address + c;
 		adrp_imm = strtoul((p + 1), NULL, 16);
 		target_page = (adrp_site & ~0xfff) + adrp_imm;
-		res = cs_disasm_iter(ctx->disas.handle, (void *)&code_ptr, &code_len,
-		    &code_vaddr, ctx->disas.insn);
+		res = cs_disasm_iter(ctx->disas.handle, (void *)&ctx->disas.code_ptr, 
+		    &ctx->disas.code_len, &ctx->disas.code_vaddr, ctx->disas.insn);
 		if (res == false) {
 			fprintf(stderr, "cs_disasm_iter() failed\n");
 			return false;
@@ -267,7 +216,7 @@ bool shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section secti
 			 * We don't know this combination of instructions for
 			 * forming an XREF.
 			 */
-			continue;
+			return true;
 		}
 
 		uint32_t tmp_imm;
@@ -301,8 +250,8 @@ bool shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section secti
 		if (elf_read_address(&ctx->elfobj, target_page + tmp_imm,
 		    &qword, ELF_QWORD) == false) {
 			shiva_debug("Failed to read address %#lx\n", target_page + tmp_imm);
-			continue;
-			}
+			return true;
+		}
 		/*
 		 * Create a symbol to represent the location represented by adrp.
 		 * We have not found one, so we create one because it will be used
@@ -368,30 +317,138 @@ bool shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section secti
 	return true;
 }
 
+bool shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text)
+{
+
+	struct shiva_branch_site *tmp;
+	int xref_type;
+	size_t c, i, j;
+	size_t code_len = ctx->disas.code_len;
+	uint64_t code_vaddr = ctx->disas.code_vaddr;
+	uint8_t *code_ptr = ctx->disas.code_ptr;
+	uint8_t *tmp_ptr = code_ptr;
+	elf_symtab_iterator_t symtab_iter;
+
+	c = ctx->disas.c;
+
+	shiva_debug("Mnemonic: %s\n", ctx->disas.insn->mnemonic);
+
+	if (strcmp(ctx->disas.insn->mnemonic, "bl") == 0) {
+		struct shiva_branch_site *tmp;
+		uint64_t addr, call_addr, call_site, retaddr;
+		struct elf_symbol tmp_sym, symbol;
+		char *p = strchr(ctx->disas.insn->op_str, '#');
+
+		if (p == NULL) {
+			/*
+			 * NOTE: If there is no instruction with what we're
+			 * looking for (The # character) then simply return.
+			 */
+			return true;
+		}
+		call_site = text.address + ctx->disas.c;
+		call_addr = strtoul((p + 1), NULL, 16);
+		retaddr = call_site + ARM_INSN_LEN;
+		memset(&symbol, 0, sizeof(symbol));
+		tmp = calloc(1, sizeof(*tmp));
+		if (tmp == NULL) {
+			perror("calloc");
+			return false;
+		}
+
+		if (elf_symbol_by_value_lookup(&ctx->elfobj, call_addr,
+		    &symbol) == false) {
+			struct elf_plt plt_entry;
+			elf_plt_iterator_t plt_iter;
+
+			symbol.name = NULL;
+
+			elf_plt_iterator_init(&ctx->elfobj, &plt_iter);
+			while (elf_plt_iterator_next(&plt_iter, &plt_entry) == ELF_ITER_OK) {
+				if (plt_entry.addr == call_addr) {
+					symbol.name = shiva_xfmtstrdup("%s@plt", plt_entry.symname);
+					symbol.type = STT_FUNC;
+					symbol.bind = STB_GLOBAL;
+					symbol.size = 0;
+					tmp->branch_flags |= SHIVA_BRANCH_F_PLTCALL;
+				}
+			}
+			if (symbol.name == NULL) {
+				symbol.name = shiva_xfmtstrdup("fn_%#lx", call_addr);
+				if (symbol.name == NULL) {
+					perror("strdup");
+					return false;
+				}
+				symbol.value = call_addr;
+				symbol.type = STT_FUNC;
+				symbol.size = symbol.size;
+				symbol.bind = STB_GLOBAL;
+			}
+		}
+		tmp->retaddr = retaddr;
+		tmp->target_vaddr = call_addr;
+		memcpy(&tmp->o_insn, tmp_ptr + c, ARM_INSN_LEN);
+		memcpy(&tmp->symbol, &symbol, sizeof(symbol));
+		tmp->branch_type = SHIVA_BRANCH_CALL;
+		tmp->branch_site = call_site;
+		tmp->branch_flags |= SHIVA_BRANCH_F_DST_SYMINFO;
+		tmp->insn_string = shiva_xfmtstrdup("%s %s",
+		    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
+
+		if (elf_symbol_by_range(&ctx->elfobj, code_vaddr - 4,
+		    &tmp_sym) == true) {
+			tmp->branch_flags |= SHIVA_BRANCH_F_SRC_SYMINFO;
+			memcpy(&tmp->current_function, &tmp_sym, sizeof(tmp_sym));
+			shiva_debug("Source symbol included: %s\n", tmp_sym.name);
+		}
+		shiva_debug("Inserting branch for symbol %s callsite: %#lx\n", tmp->symbol.name, tmp->branch_site);
+		TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
+		shiva_debug("Done inserting it\n");
+	}
+	return true;
+}
+
 bool
-shiva_analyze_branches_x86_64(struct shiva_ctx *ctx, struct elf_section section)
+shiva_analyze_branches_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 {
 	return true;
 }
 
 bool
-shiva_analyze_calls(struct shiva_ctx *ctx, struct elf_section section)
+shiva_analyze_calls(struct shiva_ctx *ctx, struct elf_section text)
 {
+	bool res;
+
 #ifdef __aarch64__
-	res = shiva_analyze_calls_aarch64(ctx, section);
+	res = shiva_analyze_calls_aarch64(ctx, text);
 #elif __x86_64__
-	res = shiva_analyze_calls_x86_64(ctx, section);
+	res = shiva_analyze_calls_x86_64(ctx, text);
 #endif
 	return res;
 }
 
 bool
-shiva_analyze_branches(struct shiva_ctx *ctx, struct elf_section section)
+shiva_analyze_branches(struct shiva_ctx *ctx, struct elf_section text)
 {
+	bool res;
+
 #ifdef __aarch64__
-	res = shiva_analyze_branches_aarch64(ctx, section);
+	res = shiva_analyze_branches_aarch64(ctx, text);
 #elif __x86_64__
-	res = shiva_analyze_branches_x86_64(ctx, section);
+	res = shiva_analyze_branches_x86_64(ctx, text);
+#endif
+	return res;
+}
+
+bool
+shiva_analyze_xrefs(struct shiva_ctx *ctx, struct elf_section text)
+{
+	bool res;
+#ifdef __aarch64__
+	shiva_debug("Calling shiva_analyze_xrefs_aarch64\n");
+	res = shiva_analyze_xrefs_aarch64(ctx, text);
+#elif __x86_64__
+	res = shiva_analyze_xrefs_x86_64(ctx, text);
 #endif
 	return res;
 }
@@ -410,7 +467,7 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 	if (elf_section_by_name(&ctx->elfobj, ".text", &section) == false) {
 		fprintf(stderr, "elf_section_by_name() failed\n");
 		return false;
-	
+
 	}
 
 	struct shiva_branch_site *tmp;
@@ -424,13 +481,18 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 	cs_detail insnack_detail = {{0}};
 	cs_insn insnack = {0};
 	ctx->disas.insn = &insnack;
+	ctx->disas.code_vaddr = code_vaddr;
+	ctx->disas.code_ptr = code_ptr;
+	ctx->disas.code_len = code_len;
 
+	/*
+	 * TODO handle opening correct architecture.
+	 */
 	if (cs_open(CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN,
 	    &ctx->disas.handle) != CS_ERR_OK) {
 		fprintf(stderr, "cs_open failed\n");
 		return false;
 	}
-
 	/*
 	 * TODO:
 	 * Look into cs_skipdata_cb_t to setup a callback for bytes that
@@ -439,12 +501,12 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 	 * and continue back to the beginning of the loop.
 	 */
 	shiva_debug("disassembling text(%#lx), %d bytes\n", section.address, section.size);
-	for (c = 0 ;; c += ctx->disas.insn->size) {
+	for (ctx->disas.c = 0 ;; ctx->disas.c += ctx->disas.insn->size) {
 		bool res;
 
-		shiva_debug("Address: %#lx\n", section.address + c);
+		shiva_debug("Address: %#lx\n", section.address + ctx->disas.c);
 		shiva_debug("(uint32_t)textptr: %#x\n", *(uint32_t *)code_ptr);
-		if (c >= section.size)
+		if (ctx->disas.c >= section.size)
 			break;
 
 		shiva_debug("code_ptr: %p\n", code_ptr);
@@ -462,14 +524,24 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 
 		shiva_debug("0x%"PRIx64":\t%s\t\t%s\n", ctx->disas.insn->address,
 		    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
-
+		shiva_debug("Running shiva_analyze_branches()\n");
 		res = shiva_analyze_branches(ctx, section);
 		if (res == false) {
 			fprintf(stderr, "shiva_analyze_branches() failed\n");
 			return false;
 		}
+		shiva_debug("Running shiva_analyze_calls()\n");
 		res = shiva_analyze_calls(ctx, section);
-
+		if (res == false) {
+			fprintf(stderr, "shiva_analyze_branches() failed\n");
+			return false;
+		}
+		shiva_debug("Running shiva_analyze_xrefs()\n");
+		res = shiva_analyze_xrefs(ctx, section);
+		if (res == false) {
+			fprintf(stderr, "shiva_analyze_xrefs() failed\n");
+			return false;
+		}
 	}
 	return true;
 }

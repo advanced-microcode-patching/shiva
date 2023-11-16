@@ -236,7 +236,7 @@ struct shiva_xref_site {
 	int type;
 	uint64_t flags;
 	uint64_t *got; // indirect xrefs use a .got to hold a symbol value.
-#ifdef __arch64__
+#ifdef __aarch64__
 	uint64_t adrp_imm; /* imm value of adrp */
 	uint64_t adrp_site; /* site address of adrp */
 	uint64_t adrp_o_insn; /* original instruction bytes of adrp */
@@ -489,10 +489,15 @@ typedef struct shiva_ctx {
 		size_t jmprel_count;
 	} altrelocs;
 	struct {
+
+		uint8_t *code_ptr;
+		uint64_t code_vaddr;
+		size_t code_len;
 		csh handle;
 		cs_insn *insn;
 		uint8_t *textptr;
 		uint64_t base;
+		size_t c; /* counter */
 	} disas;
 	struct {
 		uint64_t base;
