@@ -87,9 +87,11 @@ shiva_analyze_build_aarch64_jmp(struct shiva_ctx *ctx, uint64_t pc_vaddr)
 }
 
 static bool
-shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text)
+shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 {
-	size_t c = ctx->disas.c;
+	size_t c = ctx->disas.insn_offset;
+	
+	*res = false;
 
 	shiva_debug("Mnemonic: %s\n", ctx->disas.insn->mnemonic);
 
@@ -100,6 +102,7 @@ shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 			    ctx, text.address + c);
 			return false;
 		}
+		*res = true;
 	}
 	if (strncmp(ctx->disas.insn->mnemonic, "b.", 2) == 0) {
 		/*
@@ -113,6 +116,7 @@ shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 			    ctx, text.address + c);
 			return false;
 		}
+		*res = true;
 	} else if (strncmp(ctx->disas.insn->mnemonic, "cb", 2) == 0) {
 		/*
 		 * Compare and branch
@@ -124,6 +128,7 @@ shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 			    ctx, text.address + c);
 			return false;
 		}
+		*res = true;
 
 	} else if (strncmp(ctx->disas.insn->mnemonic, "tb", 2) == 0) {
 		/*
@@ -136,6 +141,7 @@ shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 			    ctx, text.address + c);
 			return false;
 		}
+		*res = true;
 	}
 	return true;
 }
@@ -150,7 +156,6 @@ static bool
 shiva_analyze_xrefs_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 {
 
-	size_t c = ctx->disas.c;
 	size_t code_len = ctx->disas.code_len;
 	uint64_t code_vaddr = ctx->disas.code_vaddr;
 	uint8_t *code_ptr = ctx->disas.code_ptr;
@@ -182,7 +187,7 @@ shiva_analyze_xrefs_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 		if (p == NULL) {
 			return true;
 		}
-		adrp_site = text.address + c;
+		adrp_site = text.address + ctx->disas.c;
 		adrp_imm = strtoul((p + 1), NULL, 16);
 		target_page = (adrp_site & ~0xfff) + adrp_imm;
 		res = cs_disasm_iter(ctx->disas.handle, (void *)&ctx->disas.code_ptr, 
@@ -192,7 +197,7 @@ shiva_analyze_xrefs_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 			return false;
 		}
 		next_o_bytes = *(uint32_t *)ctx->disas.insn->bytes;
-		c += ARM_INSN_LEN;
+		ctx->disas.c += ARM_INSN_LEN;
 		xref = calloc(1, sizeof(*xref));
 		if (xref == NULL) {
 			perror("calloc");
@@ -291,7 +296,7 @@ shiva_analyze_xrefs_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 		struct elf_symbol tmp_sym, deref_symbol;
 		struct elf_symbol *src_func = NULL;
 
-		if (elf_symbol_by_range(&ctx->elfobj, code_vaddr - 4,
+		if (elf_symbol_by_range(&ctx->elfobj, ctx->disas.code_vaddr - 4,
 		    &tmp_sym) == true) {
 			xref_flags |= SHIVA_XREF_F_SRC_SYMINFO;
 			src_func = shiva_malloc(sizeof(*src_func));
@@ -317,19 +322,14 @@ shiva_analyze_xrefs_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 	return true;
 }
 
-bool shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text)
+bool 
+shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 {
 
 	struct shiva_branch_site *tmp;
 	int xref_type;
-	size_t c, i, j;
-	size_t code_len = ctx->disas.code_len;
-	uint64_t code_vaddr = ctx->disas.code_vaddr;
-	uint8_t *code_ptr = ctx->disas.code_ptr;
-	uint8_t *tmp_ptr = code_ptr;
+	size_t i, j;
 	elf_symtab_iterator_t symtab_iter;
-
-	c = ctx->disas.c;
 
 	shiva_debug("Mnemonic: %s\n", ctx->disas.insn->mnemonic);
 
@@ -338,6 +338,7 @@ bool shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 		uint64_t addr, call_addr, call_site, retaddr;
 		struct elf_symbol tmp_sym, symbol;
 		char *p = strchr(ctx->disas.insn->op_str, '#');
+		*res = true;
 
 		if (p == NULL) {
 			/*
@@ -387,7 +388,9 @@ bool shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 		}
 		tmp->retaddr = retaddr;
 		tmp->target_vaddr = call_addr;
-		memcpy(&tmp->o_insn, tmp_ptr + c, ARM_INSN_LEN);
+		shiva_debug("CODE_PTR(%p): %x at insn-offset %d\n",
+		    ctx->disas.code_ptr, *(uint32_t *)(ctx->disas.code_ptr - 4), ctx->disas.insn_offset);
+		memcpy(&tmp->o_insn, ctx->disas.code_ptr - 4, ARM_INSN_LEN);
 		memcpy(&tmp->symbol, &symbol, sizeof(symbol));
 		tmp->branch_type = SHIVA_BRANCH_CALL;
 		tmp->branch_site = call_site;
@@ -395,7 +398,7 @@ bool shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 		tmp->insn_string = shiva_xfmtstrdup("%s %s",
 		    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
 
-		if (elf_symbol_by_range(&ctx->elfobj, code_vaddr - 4,
+		if (elf_symbol_by_range(&ctx->elfobj, ctx->disas.code_vaddr - 4,
 		    &tmp_sym) == true) {
 			tmp->branch_flags |= SHIVA_BRANCH_F_SRC_SYMINFO;
 			memcpy(&tmp->current_function, &tmp_sym, sizeof(tmp_sym));
@@ -403,45 +406,44 @@ bool shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 		}
 		shiva_debug("Inserting branch for symbol %s callsite: %#lx\n", tmp->symbol.name, tmp->branch_site);
 		TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
-		shiva_debug("Done inserting it\n");
 	}
 	return true;
 }
 
-bool
-shiva_analyze_branches_x86_64(struct shiva_ctx *ctx, struct elf_section text)
+static bool
+shiva_analyze_branches_x86_64(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 {
 	return true;
 }
 
 bool
-shiva_analyze_calls(struct shiva_ctx *ctx, struct elf_section text)
+shiva_analyze_call(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 {
-	bool res;
+	bool retval;
 
 #ifdef __aarch64__
-	res = shiva_analyze_calls_aarch64(ctx, text);
+	retval = shiva_analyze_calls_aarch64(ctx, text, res);
 #elif __x86_64__
-	res = shiva_analyze_calls_x86_64(ctx, text);
+	retval = shiva_analyze_calls_x86_64(ctx, text, res);
 #endif
-	return res;
+	return retval;
 }
 
 bool
-shiva_analyze_branches(struct shiva_ctx *ctx, struct elf_section text)
+shiva_analyze_branch(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 {
-	bool res;
+	bool retval;
 
 #ifdef __aarch64__
-	res = shiva_analyze_branches_aarch64(ctx, text);
+	retval = shiva_analyze_branches_aarch64(ctx, text, res);
 #elif __x86_64__
-	res = shiva_analyze_branches_x86_64(ctx, text);
+	retval = shiva_analyze_branches_x86_64(ctx, text, res);
 #endif
-	return res;
+	return retval;
 }
 
 bool
-shiva_analyze_xrefs(struct shiva_ctx *ctx, struct elf_section text)
+shiva_analyze_xref(struct shiva_ctx *ctx, struct elf_section text)
 {
 	bool res;
 #ifdef __aarch64__
@@ -472,19 +474,17 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 
 	struct shiva_branch_site *tmp;
 	int xref_type;
-	size_t c, i, j;
-	size_t code_len = section.size - 1;
-	uint64_t code_vaddr = section.address; /* Points to .text */
-	uint8_t *code_ptr = ctx->disas.textptr;
-	uint8_t *tmp_ptr = code_ptr;
+	size_t i, j;
 	elf_symtab_iterator_t symtab_iter;
 	cs_detail insnack_detail = {{0}};
 	cs_insn insnack = {0};
 	ctx->disas.insn = &insnack;
-	ctx->disas.code_vaddr = code_vaddr;
-	ctx->disas.code_ptr = code_ptr;
-	ctx->disas.code_len = code_len;
+	ctx->disas.code_vaddr = section.address; /* points to .text */
+	ctx->disas.code_ptr = ctx->disas.textptr;
+	ctx->disas.code_len = section.size - 1;
+	uint8_t *tmp_ptr = ctx->disas.code_ptr;
 
+	shiva_debug("CODE_PTR initially is: %x\n", *(uint32_t *)&ctx->disas.code_ptr[0]);
 	/*
 	 * TODO handle opening correct architecture.
 	 */
@@ -501,43 +501,63 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 	 * and continue back to the beginning of the loop.
 	 */
 	shiva_debug("disassembling text(%#lx), %d bytes\n", section.address, section.size);
-	for (ctx->disas.c = 0 ;; ctx->disas.c += ctx->disas.insn->size) {
-		bool res;
+	for (ctx->disas.c = 0 ;; ctx->disas.c += ARM_INSN_LEN) {
+		bool res, found;
 
 		shiva_debug("Address: %#lx\n", section.address + ctx->disas.c);
-		shiva_debug("(uint32_t)textptr: %#x\n", *(uint32_t *)code_ptr);
 		if (ctx->disas.c >= section.size)
 			break;
 
-		shiva_debug("code_ptr: %p\n", code_ptr);
-
-		res = cs_disasm_iter(ctx->disas.handle, (void *)&code_ptr, &code_len,
-		    &code_vaddr, ctx->disas.insn);
+		shiva_debug("code_ptr: %p\n", ctx->disas.code_ptr);
+		shiva_debug("Counter offset: %d\n", ctx->disas.c);
+		res = cs_disasm_iter(ctx->disas.handle, (void *)&ctx->disas.code_ptr, &ctx->disas.code_len,
+		    &ctx->disas.code_vaddr, ctx->disas.insn);
 		if (res == false) {
-			shiva_debug("code_ptr after fail: %p\n", code_ptr);
-			shiva_debug("code_vaddr after fail: %lx\n", code_vaddr);
+			shiva_debug("code_ptr after fail: %p\n", ctx->disas.code_ptr);
+			shiva_debug("code_vaddr after fail: %lx\n", ctx->disas.code_vaddr);
 			shiva_debug("current insn len: %d\n", ctx->disas.insn->size);
-			code_vaddr += ctx->disas.insn->size;
-			code_ptr += ctx->disas.insn->size;
+			ctx->disas.code_vaddr += ctx->disas.insn->size;
+			ctx->disas.code_ptr += ctx->disas.insn->size;
 			continue;
 		}
 
+		shiva_debug("INSN SIZE: %d\n", ctx->disas.insn->size);
 		shiva_debug("0x%"PRIx64":\t%s\t\t%s\n", ctx->disas.insn->address,
 		    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
 		shiva_debug("Running shiva_analyze_branches()\n");
-		res = shiva_analyze_branches(ctx, section);
+	
+		shiva_debug("ctx->disas.c = %d\n", ctx->disas.c);
+		shiva_debug("CODE_PTR(%p) contains: %#x\n", ctx->disas.code_ptr, *(uint32_t *)(ctx->disas.code_ptr - 4));
+		shiva_debug("INSN_BYTES   contains: %x\n", ctx->disas.insn->bytes);
+		/*
+		 * NOTE:
+		 * Shiva_analyze_branches updates ctx->disas.c internally so we
+		 * should instead rely on "size_t insn_offset" which will remain
+		 * the same offset between all three of these next 'shiva_analyze'
+		 * functions. Otherwise the offset of ctx->disas.c will change from
+		 * the call to shiva_analyze_branches to shiva_analyze_calls.
+		 */
+		ctx->disas.insn_offset = ctx->disas.c;
+
+		res = shiva_analyze_branch(ctx, section, &found);
 		if (res == false) {
 			fprintf(stderr, "shiva_analyze_branches() failed\n");
 			return false;
 		}
+		if (found == true)
+			continue;
+
 		shiva_debug("Running shiva_analyze_calls()\n");
-		res = shiva_analyze_calls(ctx, section);
+		res = shiva_analyze_call(ctx, section, &found);
 		if (res == false) {
 			fprintf(stderr, "shiva_analyze_branches() failed\n");
 			return false;
 		}
+		if (found == true)
+			continue;
+
 		shiva_debug("Running shiva_analyze_xrefs()\n");
-		res = shiva_analyze_xrefs(ctx, section);
+		res = shiva_analyze_xref(ctx, section);
 		if (res == false) {
 			fprintf(stderr, "shiva_analyze_xrefs() failed\n");
 			return false;

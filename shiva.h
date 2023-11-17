@@ -497,7 +497,8 @@ typedef struct shiva_ctx {
 		cs_insn *insn;
 		uint8_t *textptr;
 		uint64_t base;
-		size_t c; /* counter */
+		size_t c; /* counter (Don't access directly) */
+		size_t insn_offset;
 	} disas;
 	struct {
 		uint64_t base;
