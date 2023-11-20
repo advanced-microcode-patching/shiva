@@ -184,7 +184,7 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 {
 	return true;
 }
-#elif
+#elif __aarch64__
 static bool
 shiva_analyze_xrefs_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 {
