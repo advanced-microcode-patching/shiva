@@ -5,11 +5,11 @@ GCC_OPTS= -fPIC -ggdb -c -DDEBUG
 OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \
     shiva_callsite.o shiva_target.o shiva_xref.o shiva_transform.o shiva_so.o shiva_post_linker.o
-STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a libcapstone.a
+STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a libcapstone_x86_64.a
 CC=gcc
 MUSL=musl-gcc
 
-all: interp shiva-ld patches
+all: interp shiva-ld
 interp:
 	[ -d $(BUILD_DIR) ] || mkdir -p $(BUILD_DIR)
 	$(CC) $(GCC_OPTS) shiva.c -o		shiva.o
@@ -44,10 +44,12 @@ install:
 	cp build/shiva /usr/bin
 	cp tools/shiva-ld/shiva-ld /usr/bin
 	mkdir -p /opt/shiva/modules
-	cp $(PATCH_PATH)/*interposing*/*.o /opt/shiva/modules
-	cp $(PATCH_PATH)/cfs_patch1/*.o /opt/shiva/modules
-	cat shiva.ansi
+
+#	cp $(PATCH_PATH)/*interposing*/*.o /opt/shiva/modules
+#	cp $(PATCH_PATH)/cfs_patch1/*.o /opt/shiva/modules
+#	cat shiva.ansia
+#
 clean:
 	make -C tools/shiva-ld clean
-	make -C modules/aarch64_patches clean
+	#make -C modules/aarch64_patches clean
 	rm -f *.o shiva

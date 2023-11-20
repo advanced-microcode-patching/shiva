@@ -194,22 +194,17 @@ shiva_tf_splice_function(struct shiva_module *linker, struct shiva_transform *tr
 #define sbits(obj,st,fn) \
   ((long) (bits(obj,st,fn) | ((long) bit(obj,fn) * ~ submask (fn - st))))
 
-/*
- * XXX SECURITY ISSUES XXX
- * Due to earlier design decisions, it's not clean to have 'shiva_ctx *ctx' passed
- * to this function, therefore we are using 'struct shiva_ctx *ctx_global' which is
- * a data segment variable that always points to the shiva ctx towards the top of
- * the stack.
- *
- * We should probably remove ctx_global all together, atleast in this version of
- * Shiva. It has some uses in the x86 version, but its dangerous and gives attackers
- * a pointer to damn near the top of the stack. If /lib/shiva was PIE on aarch64
- * it wouldn't matter so much, but its an ET_EXEC, so this ctx_global variable
- * is predictable, and therefore makes the stack predictable.
- *
- */
+
+#ifdef __x86_64__
 static bool
-shiva_tf_relink_xref(struct shiva_module *linker, struct shiva_transform *transform,
+shiva_tf_relink_xref_x86_64(struct shiva_module *linker, struct shiva_transform *transform,
+    struct shiva_xref_site *xref)
+{
+
+}
+#elif __aarch64__
+static bool
+shiva_tf_relink_xref_aarch64(struct shiva_module *linker, struct shiva_transform *transform,
     struct shiva_xref_site *xref)
 {
 	bool res;
@@ -256,77 +251,22 @@ shiva_tf_relink_xref(struct shiva_module *linker, struct shiva_transform *transf
 	rel_unit = (uint8_t *)rel_addr;
 	memcpy(rel_unit, &n_adrp_insn, 4);
 
-	/*
-	 * We are relinking a transformed function's adrp
-	 * It is not necessarily to update the offset in the
-	 * subsequent add/ldr/str instruction, because the
-	 * target address lives in the executable, and the
-	 * add/ldr/str offset will be fixed from there.
-	 *
-	 * In other scenarios, where we are relinking an
-	 * adrp to a completely new variable, we do have
-	 * to update the offset for the subsequent add/ldr/str.
-	 */
-#if 0
-	switch(xref->type) {
-	case SHIVA_XREF_TYPE_UNKNOWN:
-		return false;
-	case SHIVA_XREF_TYPE_ADRP_ADD:
-		rel_unit = (uint8_t *)rel_addr;
-		shiva_debug("Installing SHIVA_XREF_TYPE_ADRP_ADD patch at %#lx to link symbol %s\n",
-		    rel_addr, xref->symbol.name);
-		memcpy(rel_unit, &n_adrp_insn, 4);
-#if 0
-		shiva_trace_write() cannot work here because it relies on shiva_maps_prot_by_addr()
-		which cannot find the memory mapping entry for the address we need to write
-		at: (void *)rel_unit. In the future I will fix this so that shiva_trace_write()
-		can work. Meanwhile, we will do this manually.
-
-		res = shiva_trace_write(ctx_global, 0, (void *)rel_unit,
-		    (void *)&n_adrp_insn, 4, &error);
-		if (res == false) {
-			fprintf(stderr, "shiva_trace_write failed: %s\n", shiva_error_msg(&error));
-			return false;
-		}
-#endif
-		rel_val = xref->symbol.value;
-		shiva_debug("Add offset: %#lx\n", rel_val);
-		n_add_insn = xref->next_o_insn;
-		n_add_insn = (n_add_insn & ~(RELOC_MASK(12) << 10)) | ((rel_val & RELOC_MASK(12)) << 10);
-
-		rel_unit += sizeof(uint32_t);
-#if 0
-XXX TODO
-		This function cannot work here because it relies on shiva_maps_prot_by_addr()
-		which cannot find the memory mapping entry for the address we need to write
-		at: (void *)rel_unit. In the future I will fix this so that shiva_trace_write()
-		can work. Meanwhile, we will do this manually.
-
-		res = shiva_trace_write(ctx_global, 0, (void *)rel_unit,
-		    (void *)&n_add_insn, 4, &error);
-		if (res == false) {
-			fprintf(stderr, "shiva_trace_write failed: %s\n", shiva_error_msg(&error));
-			return false;
-		}
-#endif
-		memcpy(rel_unit, &n_add_insn, sizeof(uint32_t));
-		break;
-	case SHIVA_XREF_TYPE_ADRP_LDR:
-		//rel_unit = (uint8_t *)rel_addr;
-		//rel_val = transform->target_symbol.value;
-		shiva_debug("Installing SHIVA_XREF_TYPE_ADRP_LDR patch at %#lx\n",
-		    xref->adrp_site + linker->target_base);
-		shiva_debug("SHIVA_XREF_TYPE_ADRP_LDR not yet supported\n");
-		assert(true);
-		break;
-	}
-#endif
 	return true;
 
 }
+#endif
 
+#ifdef __x86_64__
 static bool
-shiva_tf_relink_global_branch(struct shiva_module *linker, struct shiva_transform *transform,
+shiva_tf_relink_global_branch_x86_64(struct shiva_module *linker, struct shiva_transform *transform,
+    struct shiva_branch_site *branch)
+{
+
+	return true;
+}
+#elif __aarch64__
+static bool
+shiva_tf_relink_global_branch_aarch64(struct shiva_module *linker, struct shiva_transform *transform,
     struct shiva_branch_site *branch)
 {
 	/*
@@ -375,9 +315,20 @@ shiva_tf_relink_global_branch(struct shiva_module *linker, struct shiva_transfor
 	shiva_debug("No bl instruction found\n");
 	return false;
 }
+#endif
 
+#ifdef __x86_64__
 static bool
-shiva_tf_relink_local_branch(struct shiva_module *linker, struct shiva_transform *transform,
+shiva_tf_relink_local_branch_x86_64(struct shiva_module *linker, struct shiva_transform *transform,
+    struct shiva_branch_site *branch, ssize_t delta)
+{
+
+	return true;
+}
+
+#elif __aarch64__
+static bool
+shiva_tf_relink_local_branch_aarch64(struct shiva_module *linker, struct shiva_transform *transform,
     struct shiva_branch_site *branch, ssize_t delta)
 {
 	/*
@@ -495,6 +446,41 @@ shiva_tf_relink_local_branch(struct shiva_module *linker, struct shiva_transform
 	shiva_debug("Returning true\n");
 	return true;
 }
+#endif
+
+bool
+shiva_tf_relink_global_branch(struct shiva_module *linker, struct shiva_transform *transform,
+    struct shiva_branch_site *branch)
+{
+#ifdef __x86_64__
+	return shiva_tf_relink_global_branch_x86_64(linker, transform, branch);
+#elif __aarch64__
+	return shiva_tf_relink_global_branch_aarch64(linker, transform, branch);
+#endif
+
+}
+
+bool
+shiva_tf_relink_xref(struct shiva_module *linker, struct shiva_transform *transform,
+    struct shiva_xref_site *xref)
+{
+#ifdef __x86_64__
+	return shiva_tf_relink_xref_x86_64(linker, transform, xref);
+#elif __aarch64__
+	return shiva_tf_relink_xref_aarch64(linker, transform, xref);
+#endif
+}
+
+bool
+shiva_tf_relink_local_branch(struct shiva_module *linker, struct shiva_transform *transform,
+    struct shiva_branch_site *branch, ssize_t delta)
+{
+#ifdef __x86_64__
+	return shiva_tf_relink_local_branch_x86_64(linker, transform, branch, delta);
+#elif __arch64__
+	return shiva_tf_relink_local_branch_aarch64(linker, transform, branch, delta);
+#endif
+}
 
 static bool
 shiva_tf_relink_new_func(struct shiva_module *linker,
@@ -583,6 +569,8 @@ shiva_tf_relink_new_func(struct shiva_module *linker,
 	}
 	return true;
 }
+
+
 /*
  * NOTE to self! Don't forget to update the modules relocation entries
  * for code and data that has been shifted forward due to splicing.

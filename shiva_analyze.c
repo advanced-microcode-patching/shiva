@@ -4,9 +4,7 @@
 #include "shiva.h"
 
 #define BIT_MASK(n)	((1U << n) - 1)
-#ifdef __aarch64__
 #define ARM_INSN_LEN 4
-#endif
 
 /*
  * Way to many args, turn this into a macro.
@@ -51,7 +49,7 @@ shiva_analyze_make_xref(struct shiva_ctx *ctx, struct elf_symbol *symbol, struct
 }
 
 static bool
-shiva_analyze_build_aarch64_jmp(struct shiva_ctx *ctx, uint64_t pc_vaddr)
+shiva_analyze_build_jmp(struct shiva_ctx *ctx, uint64_t pc_vaddr)
 {
 	struct shiva_branch_site *tmp;
 	struct elf_symbol tmp_sym;
@@ -86,6 +84,39 @@ shiva_analyze_build_aarch64_jmp(struct shiva_ctx *ctx, uint64_t pc_vaddr)
 	return true;
 }
 
+#ifdef __x86_64__
+static bool
+shiva_analyze_branches_x86_64(struct shiva_ctx *ctx, struct elf_section text, bool *res)
+{
+	size_t c = ctx->disas.insn_offset;
+
+	*res = false;
+
+	shiva_debug("Mnemonic: %s\n", ctx->disas.insn->mnemonic);
+
+	/*
+	 * Only branch instructions begin with b at all (Except for jmp and calls)
+	 */
+	if (strncmp(ctx->disas.insn->mnemonic, "b", 1) == 0) {
+		if (shiva_analyze_build_jmp(ctx, text.address + c)
+		    == false) {
+			fprintf(stderr, "shiva_analyze_branches_x86_64(%p, %#lx) failed\n",
+			    ctx, text.address + c);
+			return false;
+		}
+		*res = true;
+	} else if (strcmp(ctx->disas.insn->mnemonic, "jmp") == 0) {
+		if (shiva_analyze_build_jmp(ctx, text.address + c)
+		    == false) {
+			fprintf(stderr, "shiva_analyze_branches_x86_64(%p, %#lx) failed\n",
+			    ctx, text.address + c);
+			return false;
+		}
+	}
+	return true;
+}
+
+#elif __aarch64__
 static bool
 shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 {
@@ -123,7 +154,7 @@ shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text, b
 		 * cbnz, cbz
 		 */
 		if (shiva_analyze_build_aarch64_jmp(ctx, text.address + c)
-	    == false) {
+		    == false) {
 			fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
 			    ctx, text.address + c);
 			return false;
@@ -145,13 +176,15 @@ shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text, b
 	}
 	return true;
 }
+#endif
 
+#ifdef __x86_64__
 static bool
-shiva_analyze_xrefs_x86_64(void)
+shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 {
 	return true;
 }
-
+#elif
 static bool
 shiva_analyze_xrefs_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 {
@@ -321,6 +354,7 @@ shiva_analyze_xrefs_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 	}
 	return true;
 }
+#endif
 
 bool 
 shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text, bool *res)
@@ -411,7 +445,7 @@ shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text, bool
 }
 
 static bool
-shiva_analyze_branches_x86_64(struct shiva_ctx *ctx, struct elf_section text, bool *res)
+shiva_analyze_calls_x86_64(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 {
 	return true;
 }

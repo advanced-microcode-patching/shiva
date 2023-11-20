@@ -65,8 +65,9 @@ shiva_post_linker(void)
 		perror("mprotect");
 		exit(EXIT_FAILURE);
 	}
-
+#if __arch64__
 	__asm__ __volatile__ ("mov x21, %0" :: "r"(ctx_global->ulexec.entry_point));
+#endif
 	return;
 }
 

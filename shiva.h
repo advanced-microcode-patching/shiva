@@ -236,20 +236,18 @@ struct shiva_xref_site {
 	int type;
 	uint64_t flags;
 	uint64_t *got; // indirect xrefs use a .got to hold a symbol value.
-#ifdef __aarch64__
 	uint64_t adrp_imm; /* imm value of adrp */
 	uint64_t adrp_site; /* site address of adrp */
 	uint64_t adrp_o_insn; /* original instruction bytes of adrp */
 	uint64_t next_imm; /* imm value of the add/str/ldr instruction */
 	uint64_t next_site; /* site address of the add/str/ldr instruction */
 	uint64_t next_o_insn; /* original instruction bytes of instruction after adrp */
-#endif
 	uint64_t target_vaddr; /* addr that is being xref'd. add to base_vaddr at runtime */
 	struct elf_symbol deref_symbol; /* Indirect symbol value pointed to by symbol.value */
 	struct elf_symbol symbol; /* symbol info for the symbol the xref goes to */
 	struct elf_symbol current_function; /* syminfo for src function if syminfo flag is set */
 	TAILQ_ENTRY(shiva_xref_site) _linkage;
-} shiva_xref_site_t;
+}; // shiva_xref_site_t;
 /*
  * TODO: Change naming convention, LP_ may be
  * left over from the original linker I made
@@ -381,7 +379,7 @@ struct shiva_module_delayed_reloc {
 	char *symname;
 	char so_path[PATH_MAX];
 	TAILQ_ENTRY(shiva_module_delayed_reloc) _linkage;
-} shiva_module_delayed_reloc_t;
+};
 
 struct shiva_module {
 	int fd;
