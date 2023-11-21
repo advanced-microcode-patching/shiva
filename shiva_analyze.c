@@ -127,7 +127,7 @@ shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text, b
 	shiva_debug("Mnemonic: %s\n", ctx->disas.insn->mnemonic);
 
 	if (strcmp(ctx->disas.insn->mnemonic, "b") == 0) {
-		if (shiva_analyze_build_aarch64_jmp(ctx, text.address + c)
+		if (shiva_analyze_build_jmp(ctx, text.address + c)
 		    == false) {
 			fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
 			    ctx, text.address + c);
@@ -141,7 +141,7 @@ shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text, b
 		 * b.eq, b.ne, b.gt, b.ge, b.lt, b.le, b.ls, b.hi,
 		 * b.cc, b.cs, b.cond
 		 */
-		if (shiva_analyze_build_aarch64_jmp(ctx, text.address + c)
+		if (shiva_analyze_build_jmp(ctx, text.address + c)
 		    == false) {
 			fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
 			    ctx, text.address + c);
@@ -153,7 +153,7 @@ shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text, b
 		 * Compare and branch
 		 * cbnz, cbz
 		 */
-		if (shiva_analyze_build_aarch64_jmp(ctx, text.address + c)
+		if (shiva_analyze_build_jmp(ctx, text.address + c)
 		    == false) {
 			fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
 			    ctx, text.address + c);
@@ -166,7 +166,7 @@ shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text, b
 		 * Test bit and branch
 		 * tbz, tbnz
 		 */
-		if (shiva_analyze_build_aarch64_jmp(ctx, text.address + c)
+		if (shiva_analyze_build_jmp(ctx, text.address + c)
 		    == false) {
 			fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
 			    ctx, text.address + c);
@@ -518,11 +518,13 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 	ctx->disas.code_len = section.size - 1;
 	uint8_t *tmp_ptr = ctx->disas.code_ptr;
 
-	shiva_debug("CODE_PTR initially is: %x\n", *(uint32_t *)&ctx->disas.code_ptr[0]);
-	/*
-	 * TODO handle opening correct architecture.
-	 */
-	if (cs_open(CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN,
+#ifdef __x86_64__
+	cs_arch target_arch = CS_ARCH_X86;
+#elif __aarch64__
+	cs_arch target_arch = CS_ARCH_ARM64;
+#endif
+
+	if (cs_open(target_arch, CS_MODE_LITTLE_ENDIAN,
 	    &ctx->disas.handle) != CS_ERR_OK) {
 		fprintf(stderr, "cs_open failed\n");
 		return false;
