@@ -327,11 +327,6 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 	bool res;
 	const char *symname = NULL;
 
-#if __x86_64__
-	fprintf(stderr, "Cannot apply external patch links on x86_64. Unsupported\n");
-	return false;
-#endif
-
 	shiva_callsite_iterator_init(ctx, &callsites);
 	while (shiva_callsite_iterator_next(&callsites, &be) == SHIVA_ITER_OK) {
 		if (be.branch_flags & SHIVA_BRANCH_F_PLTCALL) // TODO handle this scenario instead which
@@ -354,7 +349,8 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 		 * for it by the correct name.
 		 */
 		shiva_debug("tfptr: %p\n", tfptr);
-		shiva_debug("Callsite %#lx branches to %#lx\n", be.branch_site, be.target_vaddr);
+		shiva_debug("Callsite %#lx branches to %#lx\n",
+		    be.branch_site, be.target_vaddr);
 		symname = be.symbol.name;
 		if (module_has_transforms(linker) == true) {
 			TAILQ_FOREACH(transform, &linker->tailq.transform_list, _linkage) {

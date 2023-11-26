@@ -357,7 +357,7 @@ shiva_analyze_xrefs_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 #endif
 
 bool 
-shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text, bool *res)
+shiva_analyze_call(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 {
 
 	struct shiva_branch_site *tmp;
@@ -367,10 +367,15 @@ shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text, bool
 
 	shiva_debug("Mnemonic: %s\n", ctx->disas.insn->mnemonic);
 
+#ifdef __aarch64__
 	if (strcmp(ctx->disas.insn->mnemonic, "bl") == 0) {
+#elif __x86_64__
+	if (strcmp(ctx->disas.insn->mnemonic, "call") == 0) {
+#endif
 		struct shiva_branch_site *tmp;
 		uint64_t addr, call_addr, call_site, retaddr;
 		struct elf_symbol tmp_sym, symbol;
+		shiva_debug("op_str: %s\n", ctx->disas.insn->op_str);
 		char *p = strchr(ctx->disas.insn->op_str, '#');
 		*res = true;
 
@@ -383,7 +388,7 @@ shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text, bool
 		}
 		call_site = text.address + ctx->disas.c;
 		call_addr = strtoul((p + 1), NULL, 16);
-		retaddr = call_site + ARM_INSN_LEN;
+		retaddr = call_site + ctx->disas.insn->size;
 		memset(&symbol, 0, sizeof(symbol));
 		tmp = calloc(1, sizeof(*tmp));
 		if (tmp == NULL) {
@@ -395,7 +400,7 @@ shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text, bool
 		    &symbol) == false) {
 			struct elf_plt plt_entry;
 			elf_plt_iterator_t plt_iter;
-
+ 
 			symbol.name = NULL;
 
 			elf_plt_iterator_init(&ctx->elfobj, &plt_iter);
@@ -424,7 +429,7 @@ shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text, bool
 		tmp->target_vaddr = call_addr;
 		shiva_debug("CODE_PTR(%p): %x at insn-offset %d\n",
 		    ctx->disas.code_ptr, *(uint32_t *)(ctx->disas.code_ptr - 4), ctx->disas.insn_offset);
-		memcpy(&tmp->o_insn, ctx->disas.code_ptr - 4, ARM_INSN_LEN);
+		memcpy(&tmp->o_insn, ctx->disas.code_ptr - ctx->disas.insn->size, ctx->disas.insn->size);
 		memcpy(&tmp->symbol, &symbol, sizeof(symbol));
 		tmp->branch_type = SHIVA_BRANCH_CALL;
 		tmp->branch_site = call_site;
@@ -444,6 +449,7 @@ shiva_analyze_calls_aarch64(struct shiva_ctx *ctx, struct elf_section text, bool
 	return true;
 }
 
+#if 0
 static bool
 shiva_analyze_calls_x86_64(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 {
@@ -462,7 +468,7 @@ shiva_analyze_call(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 #endif
 	return retval;
 }
-
+#endif
 bool
 shiva_analyze_branch(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 {
@@ -519,16 +525,34 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 	uint8_t *tmp_ptr = ctx->disas.code_ptr;
 
 #ifdef __x86_64__
+	shiva_debug("CS_ARCH: CS_ARCH_X86\n");
+	shiva_debug("CS_MODE: CS_MODE_64\n");
 	cs_arch target_arch = CS_ARCH_X86;
+	cs_mode mode = CS_MODE_64;
 #elif __aarch64__
 	cs_arch target_arch = CS_ARCH_ARM64;
+	cs_mode mode = CS_MODE_LITTLE_ENDIAN;
 #endif
 
-	if (cs_open(target_arch, CS_MODE_LITTLE_ENDIAN,
+	if (cs_open(target_arch, mode,
 	    &ctx->disas.handle) != CS_ERR_OK) {
 		fprintf(stderr, "cs_open failed\n");
 		return false;
 	}
+	size_t count = cs_disasm(ctx->disas.handle, ctx->disas.code_ptr, ctx->disas.code_len, section.address, 0, &ctx->disas.insn);
+	if (count) {
+		size_t j;
+		cs_insn *insn = ctx->disas.insn;
+
+		for (j = 0; j < count; j++) {
+			  printf("0x%" PRIx64 ":\t%s\t%s\n", insn[j].address, insn[j].mnemonic, insn[j].op_str);
+                        }
+	} else {
+		printf("ERROR fialed to dsiasm code\n");
+		return false;
+	}
+
+
 	/*
 	 * TODO:
 	 * Look into cs_skipdata_cb_t to setup a callback for bytes that
@@ -537,7 +561,7 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 	 * and continue back to the beginning of the loop.
 	 */
 	shiva_debug("disassembling text(%#lx), %d bytes\n", section.address, section.size);
-	for (ctx->disas.c = 0 ;; ctx->disas.c += ARM_INSN_LEN) {
+	for (ctx->disas.c = 0 ;; ctx->disas.c += ctx->disas.insn->size) {
 		bool res, found;
 
 		shiva_debug("Address: %#lx\n", section.address + ctx->disas.c);
@@ -546,6 +570,7 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 
 		shiva_debug("code_ptr: %p\n", ctx->disas.code_ptr);
 		shiva_debug("Counter offset: %d\n", ctx->disas.c);
+
 		res = cs_disasm_iter(ctx->disas.handle, (void *)&ctx->disas.code_ptr, &ctx->disas.code_len,
 		    &ctx->disas.code_vaddr, ctx->disas.insn);
 		if (res == false) {
@@ -556,15 +581,12 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 			ctx->disas.code_ptr += ctx->disas.insn->size;
 			continue;
 		}
-
+		shiva_debug("Mnemonic: %s\n", ctx->disas.insn->mnemonic);
 		shiva_debug("INSN SIZE: %d\n", ctx->disas.insn->size);
-		shiva_debug("0x%"PRIx64":\t%s\t\t%s\n", ctx->disas.insn->address,
+		shiva_debug("0x%" PRIx64 ":\t%s\t\t%s\n", ctx->disas.insn->address,
 		    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
-		shiva_debug("Running shiva_analyze_branches()\n");
-	
+
 		shiva_debug("ctx->disas.c = %d\n", ctx->disas.c);
-		shiva_debug("CODE_PTR(%p) contains: %#x\n", ctx->disas.code_ptr, *(uint32_t *)(ctx->disas.code_ptr - 4));
-		shiva_debug("INSN_BYTES   contains: %x\n", ctx->disas.insn->bytes);
 		/*
 		 * NOTE:
 		 * Shiva_analyze_branches updates ctx->disas.c internally so we
