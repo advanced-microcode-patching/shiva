@@ -1060,7 +1060,7 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 	cs_insn insnack = {0};
 	ctx->disas.insn = &insnack;
 
-	if (cs_open(CS_ARCH_AARCH64, CS_MODE_LITTLE_ENDIAN,
+	if (cs_open(CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN,
 	    &ctx->disas.handle) != CS_ERR_OK) {
 		fprintf(stderr, "cs_open failed\n");
 		return false;

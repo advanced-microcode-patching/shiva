@@ -505,6 +505,12 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 
 	}
 
+	ctx->disas.textptr = elf_address_pointer(&ctx->elfobj, section.address);
+	uint8_t *tptr = ctx->disas.textptr;
+	while (tptr < ctx->disas.textptr + section.size) {
+		printf("%02x ", *tptr);
+		tptr++;
+	}
 	struct shiva_branch_site *tmp;
 	int xref_type;
 	size_t i, j;
@@ -532,19 +538,6 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 		fprintf(stderr, "cs_open failed\n");
 		return false;
 	}
-	size_t count = cs_disasm(ctx->disas.handle, ctx->disas.code_ptr, ctx->disas.code_len, section.address, 0, &ctx->disas.insn);
-	if (count) {
-		size_t j;
-		cs_insn *insn = ctx->disas.insn;
-
-		for (j = 0; j < count; j++) {
-			  printf("0x%" PRIx64 ":\t%s\t%s\n", insn[j].address, insn[j].mnemonic, insn[j].op_str);
-			}
-	} else {
-		printf("ERROR fialed to dsiasm code\n");
-		return false;
-	}
-
 
 	/*
 	 * TODO:
