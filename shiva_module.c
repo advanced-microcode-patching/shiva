@@ -62,7 +62,7 @@ transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
 
 	return fn(ctx);
 }
-
+#ifdef __aarch64__
 static bool
 install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
     struct shiva_branch_site *e, struct elf_symbol *patch_symbol,
@@ -126,12 +126,13 @@ install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	}
 	return true;
 }
-
+#endif
 /*
  * XXX does not properly handle xrefs from target executable
  * to fully transformed function.
  * TODO
  */
+#ifdef __aarch64__
 static bool
 install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
     struct shiva_xref_site *e, struct elf_symbol *patch_symbol)
@@ -313,6 +314,8 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	return true;
 
 }
+#endif
+
 static bool
 apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 {
@@ -394,6 +397,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 	shiva_xref_iterator_init(ctx, &xrefs);
 
 	shiva_debug("iterating over xrefs\n");
+#ifdef __aarch64__
 	while (shiva_xref_iterator_next(&xrefs, &xe) == SHIVA_ITER_OK) {
 		switch(xe.type) {
 		case SHIVA_XREF_TYPE_UNKNOWN:
@@ -427,7 +431,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 			break;
 		}
 	}
-
+#endif
 	return true;
 }
 /*

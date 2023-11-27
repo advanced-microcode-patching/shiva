@@ -557,8 +557,13 @@ shiva_tf_relink_new_func(struct shiva_module *linker,
 	 * correct offsets, etc.
 	 */
 	TAILQ_FOREACH(xref, &transform->xref_list, _linkage) {
+#ifdef __aarch64__
 		if ((xref->adrp_site < transform->target_symbol.value + transform->offset) ||
 		    (xref->adrp_site >= transform->target_symbol.value + transform->offset + transform->old_len)) {
+#elif __x86_64__
+		if ((xref->rip_rel_site < transform->target_symbol.value + transform->offset) ||
+		    (xref->rip_rel_site >= transform->target_symbol.value + transform->offset + transform->old_len)) {
+#endif
 			res = shiva_tf_relink_xref(linker, transform, xref);
 			if (res == false) {
 				fprintf(stderr,

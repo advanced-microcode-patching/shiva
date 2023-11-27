@@ -221,10 +221,16 @@ struct shiva_branch_site {
  * adrp x0, #data_segment_offset
  * add x0, x0, #variable_offset
  */
+#ifdef __aarch64__
 #define SHIVA_XREF_TYPE_ADRP_LDR 1
 #define SHIVA_XREF_TYPE_ADRP_STR 2
 #define SHIVA_XREF_TYPE_ADRP_ADD 3
 #define SHIVA_XREF_TYPE_UNKNOWN 4
+#elif __x86_64__
+#define SHIVA_IP_RELATIVE_LEA	1
+#define SHIVA_IP_RELATIVE_MOV	2
+#define SHIVA_IP_RELATIVE_UNKNOWN 3
+#endif
 
 #define SHIVA_XREF_F_INDIRECT	(1UL << 0) /* i.e. got[entry] holds address to .bss variable */
 #define SHIVA_XREF_F_SRC_SYMINFO	(1UL << 1) /* we have src func symbol of xref */
@@ -236,12 +242,23 @@ struct shiva_xref_site {
 	int type;
 	uint64_t flags;
 	uint64_t *got; // indirect xrefs use a .got to hold a symbol value.
+#ifdef __aarch64__
 	uint64_t adrp_imm; /* imm value of adrp */
 	uint64_t adrp_site; /* site address of adrp */
 	uint64_t adrp_o_insn; /* original instruction bytes of adrp */
 	uint64_t next_imm; /* imm value of the add/str/ldr instruction */
 	uint64_t next_site; /* site address of the add/str/ldr instruction */
 	uint64_t next_o_insn; /* original instruction bytes of instruction after adrp */
+#elif __x86_64__
+	/*
+	 * IP relative instructions for loading/storing, getting pointer values etc.
+	 * i.e.
+	 * lea reg, qword ptr [rip + offset]
+	 * mov qword ptr [rip + offset], reg
+	 */
+	uint64_t rip_rel_imm; /* imm value of: <insn> <reg>, qword ptr [rip + <offset>] */
+	uint64_t rip_rel_site; /* site address of ip relative instruction */
+#endif	
 	uint64_t target_vaddr; /* addr that is being xref'd. add to base_vaddr at runtime */
 	struct elf_symbol deref_symbol; /* Indirect symbol value pointed to by symbol.value */
 	struct elf_symbol symbol; /* symbol info for the symbol the xref goes to */

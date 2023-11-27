@@ -6,6 +6,7 @@
 #define BIT_MASK(n)	((1U << n) - 1)
 #define ARM_INSN_LEN 4
 
+#ifdef __aarch64__
 /*
  * Way to many args, turn this into a macro.
  */
@@ -47,25 +48,32 @@ shiva_analyze_make_xref(struct shiva_ctx *ctx, struct elf_symbol *symbol, struct
 	TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref, _linkage);
 	return true;
 }
+#endif
 
 static bool
 shiva_analyze_build_jmp(struct shiva_ctx *ctx, uint64_t pc_vaddr)
 {
 	struct shiva_branch_site *tmp;
 	struct elf_symbol tmp_sym;
+#ifdef __aarch64__
 	char *p = strchr(ctx->disas.insn->op_str, '#');
-
 	if (p == NULL) {
 		fprintf(stderr,
-		    "Unforseen parsing error in shiva_analyze_build_aarch64_jmp\n");
+		    "Unforseen parsing error in shiva_analyze_build_jmp\n");
 		return false;
 	}
+#endif
 	tmp = calloc(1, sizeof(*tmp));
 	if (tmp == NULL) {
 		perror("calloc");
 		return false;
 	}
+#ifdef __aarch64__
 	tmp->target_vaddr = strtoul((p + 1), NULL, 16);
+#elif __x86_64__
+	tmp->target_vaddr = strtoul(ctx->disas.insn->op_str, NULL, 16);
+#endif
+	shiva_debug("Stored target address: %#lx\n", tmp->target_vaddr);
 	tmp->branch_site = pc_vaddr;
 	tmp->branch_type = SHIVA_BRANCH_JMP;
 	tmp->insn_string = shiva_xfmtstrdup("%s %s",
@@ -94,10 +102,7 @@ shiva_analyze_branches_x86_64(struct shiva_ctx *ctx, struct elf_section text, bo
 
 	shiva_debug("Mnemonic: %s\n", ctx->disas.insn->mnemonic);
 
-	/*
-	 * Only branch instructions begin with b at all (Except for jmp and calls)
-	 */
-	if (strncmp(ctx->disas.insn->mnemonic, "b", 1) == 0) {
+	if (strncmp(ctx->disas.insn->mnemonic, "j", 1) == 0) {
 		if (shiva_analyze_build_jmp(ctx, text.address + c)
 		    == false) {
 			fprintf(stderr, "shiva_analyze_branches_x86_64(%p, %#lx) failed\n",
@@ -182,6 +187,13 @@ shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text, b
 static bool
 shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 {
+	size_t code_len = ctx->disas.code_len;
+	uint64_t code_vaddr = ctx->disas.code_vaddr;
+	uint8_t *code_ptr = ctx->disas.code_ptr;
+
+	if (strcmp(ctx->disas.insn->mnemonic, "mov") == 0) {
+	
+	}
 	return true;
 }
 #elif __aarch64__
@@ -305,7 +317,7 @@ shiva_analyze_xrefs_aarch64(struct shiva_ctx *ctx, struct elf_section text)
 			    target_page + tmp_imm);
 				return false;
 			}
-		     shiva_debug("%#lx - section.address:%#lx = %#lx\n", target_page + tmp_imm, shdr.address,
+			shiva_debug("%#lx - section.address:%#lx = %#lx\n", target_page + tmp_imm, shdr.address,
 			    target_page + tmp_imm - shdr.address);
 			symbol.name = shiva_xfmtstrdup("%s+%lx", shdr.name,
 			    target_page + tmp_imm - shdr.address);
@@ -376,18 +388,19 @@ shiva_analyze_call(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 		uint64_t addr, call_addr, call_site, retaddr;
 		struct elf_symbol tmp_sym, symbol;
 		shiva_debug("op_str: %s\n", ctx->disas.insn->op_str);
+#ifdef __aarch64__
 		char *p = strchr(ctx->disas.insn->op_str, '#');
+		if (p == NULL)
+			return true;
+#endif
 		*res = true;
 
-		if (p == NULL) {
-			/*
-			 * NOTE: If there is no instruction with what we're
-			 * looking for (The # character) then simply return.
-			 */
-			return true;
-		}
 		call_site = text.address + ctx->disas.c;
+#ifdef __aarch64__
 		call_addr = strtoul((p + 1), NULL, 16);
+#elif __x86_64__
+		call_addr = strtoul(ctx->disas.insn->op_str, NULL, 16);
+#endif		
 		retaddr = call_site + ctx->disas.insn->size;
 		memset(&symbol, 0, sizeof(symbol));
 		tmp = calloc(1, sizeof(*tmp));
@@ -449,26 +462,6 @@ shiva_analyze_call(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 	return true;
 }
 
-#if 0
-static bool
-shiva_analyze_calls_x86_64(struct shiva_ctx *ctx, struct elf_section text, bool *res)
-{
-	return true;
-}
-
-bool
-shiva_analyze_call(struct shiva_ctx *ctx, struct elf_section text, bool *res)
-{
-	bool retval;
-
-#ifdef __aarch64__
-	retval = shiva_analyze_calls_aarch64(ctx, text, res);
-#elif __x86_64__
-	retval = shiva_analyze_calls_x86_64(ctx, text, res);
-#endif
-	return retval;
-}
-#endif
 bool
 shiva_analyze_branch(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 {
@@ -546,7 +539,7 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 
 		for (j = 0; j < count; j++) {
 			  printf("0x%" PRIx64 ":\t%s\t%s\n", insn[j].address, insn[j].mnemonic, insn[j].op_str);
-                        }
+			}
 	} else {
 		printf("ERROR fialed to dsiasm code\n");
 		return false;
@@ -589,7 +582,7 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 		shiva_debug("ctx->disas.c = %d\n", ctx->disas.c);
 		/*
 		 * NOTE:
-		 * Shiva_analyze_branches updates ctx->disas.c internally so we
+		 * Shiva_analyze_branch updates ctx->disas.c internally so we
 		 * should instead rely on "size_t insn_offset" which will remain
 		 * the same offset between all three of these next 'shiva_analyze'
 		 * functions. Otherwise the offset of ctx->disas.c will change from
