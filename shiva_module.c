@@ -1563,6 +1563,7 @@ elf_section_map(struct shiva_module *linker, elfobj_t *elfobj, uint8_t *dst,
 		 * Handle any transformations for the .text section, such
 		 * as function splicing.
 		 */
+		shiva_debug("section address: %p\n", section);
 		res = shiva_tf_process_transforms(linker, dst, section, segment_offset);
 		if (res == false) {
 			fprintf(stderr, "shiva_tf_process_transforms() failed\n");

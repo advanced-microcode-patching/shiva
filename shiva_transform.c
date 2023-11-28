@@ -477,7 +477,7 @@ shiva_tf_relink_local_branch(struct shiva_module *linker, struct shiva_transform
 {
 #ifdef __x86_64__
 	return shiva_tf_relink_local_branch_x86_64(linker, transform, branch, delta);
-#elif __arch64__
+#elif __aarch64__
 	return shiva_tf_relink_local_branch_aarch64(linker, transform, branch, delta);
 #endif
 }
