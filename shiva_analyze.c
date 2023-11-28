@@ -190,9 +190,59 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 	size_t code_len = ctx->disas.code_len;
 	uint64_t code_vaddr = ctx->disas.code_vaddr;
 	uint8_t *code_ptr = ctx->disas.code_ptr;
+	cs_x86 *x86 = &ctx->disas.insn->detail->x86;
+	int i;
+
+	struct shiva_xref_site *xref = calloc(1, sizeof(*xref));
+	if (xref == NULL) {
+		perror("calloc");
+		return false;
+	}
+	shiva_debug("x86: %p\n", x86);
+
+	xref->type = SHIVA_XREF_IP_RELATIVE_UNKNOWN;
 
 	if (strcmp(ctx->disas.insn->mnemonic, "mov") == 0) {
+		cs_insn *insn = ctx->disas.insn;
+		char *p, *op2, *op1;
+		char op_str[160]; /* from capstone.h */
+
+		strncpy(op_str, insn->op_str, sizeof(op_str));
+		op_str[sizeof(op_str) - 1] = '\0';
 	
+		op1 = op_str;
+		op2 = strchr(op_str, ',') + 2;
+
+		if (strncmp(op1, "qword ptr [rip +", 16) == 0) {
+			xref->type = SHIVA_XREF_IP_RELATIVE_MOV_STR;
+			xref->rip_rel_site = code_vaddr;
+			p = strchr(op1, '+') + 2;
+			*(char *)strchr(p, ']') = '\0';
+			xref->rip_rel_disp = strtoul(p, NULL, 16);
+			
+		} else if (strncmp(op2, "qword ptr [rip +", 16) == 0) {
+			xref->type = SHIVA_XREF_IP_RELATIVE_MOV_LDR;
+			xref->rip_rel_site = code_vaddr;
+			p = strchr(op2, '+') + 2;
+			*(char *)strchr(p, ']') = '\0';
+			xref->rip_rel_disp = strtoul(p, NULL, 16);
+		}
+	} else if (strcmp(ctx->disas.insn->mnemonic, "lea") == 0) {
+		cs_insn *insn = ctx->disas.insn;
+		char *p, *op2;
+		char op_str[160]; /* from capstone.h */
+
+		strncpy(op_str, insn->op_str, sizeof(op_str));
+		op_str[sizeof(op_str) - 1] = '\0';
+
+		op2 = strchr(op_str, ',') + 2;
+		if (strncmp(op2, "qword ptr [rip +", 16) == 0) {
+			xref->type = SHIVA_XREF_IP_RELATIVE_LEA;
+			xref->rip_rel_site = code_vaddr;
+			p = strchr(op2, '+') + 2;
+			*(char *)strchr(p, ']') = '\0';
+			xref->rip_rel_disp = strtoul(p, NULL, 16);
+		}
 	}
 	return true;
 }
@@ -504,7 +554,6 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 		return false;
 
 	}
-
 	ctx->disas.textptr = elf_address_pointer(&ctx->elfobj, section.address);
 	uint8_t *tptr = ctx->disas.textptr;
 	while (tptr < ctx->disas.textptr + section.size) {
@@ -515,9 +564,6 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 	int xref_type;
 	size_t i, j;
 	elf_symtab_iterator_t symtab_iter;
-	cs_detail insnack_detail = {{0}};
-	cs_insn insnack = {0};
-	ctx->disas.insn = &insnack;
 	ctx->disas.code_vaddr = section.address; /* points to .text */
 	ctx->disas.code_ptr = ctx->disas.textptr;
 	ctx->disas.code_len = section.size - 1;
@@ -538,14 +584,14 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 		fprintf(stderr, "cs_open failed\n");
 		return false;
 	}
-
+	ctx->disas.insn = cs_malloc(ctx->disas.handle);
 	/*
-	 * TODO:
-	 * Look into cs_skipdata_cb_t to setup a callback for bytes that
-	 * we fail to disassemble. Currently we handle it by checking if
-	 * cs_disasm_iter fails, and if so we update code_vaddr and code_ptr
-	 * and continue back to the beginning of the loop.
+	 * For some reason CS_OPT_DETAIL is breaking
+	 * cs_disasm_itercs_option(ctx->disas.handle, CS_OPT_DETAIL, CS_OPT_ON);
+	 * -- We may alternatively parse the mnemonic and op strings
+	 * cs_option(ctx->disas.handle, CS_OPT_DETAIL, CS_OPT_ON);
 	 */
+
 	shiva_debug("disassembling text(%#lx), %d bytes\n", section.address, section.size);
 	for (ctx->disas.c = 0 ;; ctx->disas.c += ctx->disas.insn->size) {
 		bool res, found;
@@ -556,6 +602,8 @@ shiva_analyze_control_flow(struct shiva_ctx *ctx)
 
 		shiva_debug("code_ptr: %p\n", ctx->disas.code_ptr);
 		shiva_debug("Counter offset: %d\n", ctx->disas.c);
+
+		shiva_debug("insn->detail: %p\n", ctx->disas.insn->detail);
 
 		res = cs_disasm_iter(ctx->disas.handle, (void *)&ctx->disas.code_ptr, &ctx->disas.code_len,
 		    &ctx->disas.code_vaddr, ctx->disas.insn);
