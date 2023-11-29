@@ -517,6 +517,7 @@ typedef struct shiva_ctx {
 		uint64_t base;
 		size_t c; /* counter (Don't access directly) */
 		size_t insn_offset;
+		size_t prev_insn_size;
 	} disas;
 	struct {
 		uint64_t base;

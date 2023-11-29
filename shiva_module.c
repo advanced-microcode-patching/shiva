@@ -212,6 +212,11 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	 * to influence the behavior of ld-linux.so. The ld-linux.so rtld will parse the
 	 * R_AARCH64_RELATIVE relocations and apply the new offset for the patched version
 	 * of the .bss variable.
+	 *
+	 * TODO: We are assuming that the indirection here is specifically related to
+	 * a RELATIVE relocation. !!! In the future we should check to see whether the offset/address
+	 * of this xref instruction exists as an r_offset within the .rela.dyn section and if it
+	 * does check to see what it's relocation type is, it could be R_GLOB_DAT, R_COPY , etc.
 	 */
 	if (e->flags & SHIVA_XREF_F_INDIRECT) {
 		int i;
