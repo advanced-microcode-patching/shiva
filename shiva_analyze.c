@@ -191,7 +191,14 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 	uint64_t code_vaddr = ctx->disas.code_vaddr;
 	uint8_t *code_ptr = ctx->disas.code_ptr;
 	cs_x86 *x86 = &ctx->disas.insn->detail->x86;
+	struct elf_symbol tmp_sym, deref_symbol;
+	struct elf_symbol *src_func = NULL;
+	struct elf_symbol symbol;
+	uint64_t qword;
+	uint64_t xref_flags = 0;
+	bool found_symbol = false;
 	int i;
+	bool res;
 
 	struct shiva_xref_site *xref = calloc(1, sizeof(*xref));
 	if (xref == NULL) {
@@ -202,6 +209,13 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 
 	xref->type = SHIVA_XREF_IP_RELATIVE_UNKNOWN;
 
+	/*
+	 * TODO: Figure out why the cs_option for detail
+	 * doesn't work. It crashes cs_disasm_iter() due to
+	 * not initializing and setting up detail. Therefore
+	 * we parse the instructions the less elegant way
+	 * by parsing the mnemonic and operator strings.
+	 */
 	if (strcmp(ctx->disas.insn->mnemonic, "mov") == 0) {
 		cs_insn *insn = ctx->disas.insn;
 		char *p, *op2, *op1;
@@ -219,7 +233,7 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			p = strchr(op1, '+') + 2;
 			*(char *)strchr(p, ']') = '\0';
 			xref->rip_rel_disp = strtoul(p, NULL, 16);
-			
+
 		} else if (strncmp(op2, "qword ptr [rip +", 16) == 0) {
 			xref->type = SHIVA_XREF_IP_RELATIVE_MOV_LDR;
 			xref->rip_rel_site = code_vaddr;
@@ -244,6 +258,37 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			xref->rip_rel_disp = strtoul(p, NULL, 16);
 		}
 	}
+
+	xref->target_vaddr = xref->rip_rel_site + xref->rip_rel_disp + ctx->disas.insn->size;
+	shiva_debug("Searching for symbol associated with address: %#lx\n" xref->target_vaddr);
+	if (elf_symbol_by_value_lookup(&ctx->elfobj, xref->target_vaddr,
+	    &symbol) == true) {
+		shiva_debug("Target xref symbol '%s'\n", symbol.name);
+		found_symbol = true;
+	}
+
+	if (elf_read_address(&ctx->elfobj, xref->target_vaddr, &qword,
+	    ELF_QWORD) == false) {
+		shiva_debug("Failed to read address %#lx\n", xref->target_vaddr);
+		return false;
+	}
+
+	if (elf_symbol_by_range(&ctx->elfobj,
+	    ctx->disas.code_vaddr, &tmp_sym) == true) {
+		xref_flags |= SHIVA_XREF_F_SRC_SYMINFO;
+		src_func = shiva_malloc(sizeof(*src_func));
+		memcpy(src_func, &tmp_sym, sizeof(*src_func));
+		shiva_debug("Source symbol included: %s\n", tmp_sym.name);
+	}
+	shiva_debug("Looking up value %#lx found at %#lx\n", qword, xref->target_vaddr);
+	res = elf_symbol_by_value_lookup(&ctx->elfobj, qword, &deref_symbol);
+	if (res == true) {
+		xref_flags |= SHIVA_XREF_F_INDIRECT;
+		shiva_debug("XREF (Indirect via GOT): Site: %#lx Target: %s (Deref)-> %s(%#lx)\n",
+		    xref->rip_rel_site, symbol.name ? symbol.name : "<unknown>",
+		    deref_symbol.name, deref_symbol.value);
+	}
+
 	return true;
 }
 #elif __aarch64__
