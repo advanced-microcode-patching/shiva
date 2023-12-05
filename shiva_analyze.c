@@ -86,8 +86,9 @@ shiva_analyze_build_jmp(struct shiva_ctx *ctx, uint64_t pc_vaddr)
 		shiva_debug("Source function found: %s\n", tmp_sym.name);
 	}
 	/*
-	 * Unconditional branch at a PC-relative offset
+	 * unconditional branch at a PC-relative offset
 	 */
+	shiva_debug("Inserting branch entry. Branch:%#lx:%s\n", tmp->insn_string);
 	shiva_debug("Found branch: %#lx:%s\n", pc_vaddr, tmp->insn_string);
 	TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 	return true;
@@ -188,14 +189,11 @@ shiva_analyze_branches_aarch64(struct shiva_ctx *ctx, struct elf_section text, b
 static bool
 shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 {
-	size_t code_len = ctx->disas.code_len;
-	uint8_t *code_ptr = ctx->disas.code_ptr;
 	cs_x86 *x86 = &ctx->disas.insn->detail->x86;
 	struct elf_symbol tmp_sym, deref_symbol;
 	struct elf_symbol *src_func = NULL;
 	struct elf_symbol symbol;
 	uint64_t qword;
-	uint64_t xref_flags = 0;
 	bool found_symbol = false;
 	int i;
 	bool res, found_insn = false;
@@ -206,9 +204,9 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 		return false;
 	}
 
-	xref->type = SHIVA_XREF_IP_RELATIVE_UNKNOWN;
+	xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_UNKNOWN;
+	
 	uint64_t current_vaddr = ctx->disas.base + ctx->disas.c;
-	shiva_debug("REAL CURRENT ADDR: %#lx\n", current_vaddr);
 	/*
 	 * TODO: Figure out why the cs_option for detail
 	 * doesn't work. It crashes cs_disasm_iter() due to
@@ -216,7 +214,6 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 	 * we parse the instructions the less elegant way
 	 * by parsing the mnemonic and operator strings.
 	 */
-	shiva_debug("Mnemonic: %s\n", ctx->disas.insn->mnemonic);
 	if (strcmp(ctx->disas.insn->mnemonic, "mov") == 0) {
 		cs_insn *insn = ctx->disas.insn;
 		char *p, *op2, *op1;
@@ -229,19 +226,21 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 		op2 = strchr(op_str, ',') + 2;
 
 		if (strncmp(op1, "qword ptr [rip +", 16) == 0) {
-			xref->type = SHIVA_XREF_IP_RELATIVE_MOV_STR;
+			xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR;
 			xref->rip_rel_site = current_vaddr;
 			p = strchr(op1, '+') + 2;
 			*(char *)strchr(p, ']') = '\0';
 			xref->rip_rel_disp = strtoul(p, NULL, 16);
 			found_insn = true;
+			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR\n");
 		} else if (strncmp(op2, "qword ptr [rip +", 16) == 0) {
-			xref->type = SHIVA_XREF_IP_RELATIVE_MOV_LDR;
+			xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR;
 			xref->rip_rel_site = current_vaddr;
 			p = strchr(op2, '+') + 2;
 			*(char *)strchr(p, ']') = '\0';
 			xref->rip_rel_disp = strtoul(p, NULL, 16);
 			found_insn = true;
+			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR\n");
 		}
 	} else if (strcmp(ctx->disas.insn->mnemonic, "lea") == 0) {
 		cs_insn *insn = ctx->disas.insn;
@@ -252,24 +251,46 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 		op_str[sizeof(op_str) - 1] = '\0';
 
 		op2 = strchr(op_str, ',') + 2;
-		if (strncmp(op2, "qword ptr [rip +", 16) == 0) {
-			xref->type = SHIVA_XREF_IP_RELATIVE_LEA;
+		if (strncmp(op2, "[rip +", 6) == 0) {
+			xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_LEA;
 			xref->rip_rel_site = current_vaddr;
 			p = strchr(op2, '+') + 2;
 			*(char *)strchr(p, ']') = '\0';
 			xref->rip_rel_disp = strtoul(p, NULL, 16);
 			found_insn = true;
+			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA\n");
 		}
 	}
 
 	if (found_insn == false)
 		return true;
-
 	xref->target_vaddr = xref->rip_rel_site + xref->rip_rel_disp + ctx->disas.insn->size;
 	shiva_debug("Searching for symbol associated with address: %#lx\n", xref->target_vaddr);
 
+	xref->insn_len = ctx->disas.insn->size;
+	shiva_debug("Instruction len: %zu\n", xref->insn_len);
+	/*
+	 * Here we copy the x86_64 instruction byte sequence
+	 * into xref->rip_rel_o_insn[16]
+	 */
+	for (i = 0; i < xref->insn_len; i++) {
+		uint64_t b;
+
+		if (elf_read_address(&ctx->elfobj, xref->rip_rel_site + i,
+		    &b, ELF_BYTE) == false) {
+			fprintf(stderr, "elf_read_address() failed reading addr %#lx\n",
+			    xref->rip_rel_site);
+			return false;
+		}
+		xref->rip_rel_o_insn[i] = (uint8_t)b;
+		fprintf(stdout, "%02x ", (uint8_t)b);
+	}
+	fprintf(stdout, "\n");
 	memset(&symbol, 0, sizeof(symbol));
 
+	/*
+	 * Search, find, build symbolic information for XREF
+	 */
 	if (elf_symbol_by_value_lookup(&ctx->elfobj, xref->target_vaddr,
 	    &symbol) == true) {
 		shiva_debug("Target xref symbol '%s'\n", symbol.name);
@@ -297,7 +318,9 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			    shdr.name, elf_pathname(&ctx->elfobj));
 			return true;
 		}
-       }
+		shiva_debug("Created custom symbol name: %s\n", symbol.name);
+	}
+	memcpy(&xref->symbol, &symbol, sizeof(symbol));
 
 	struct elf_relocation rel;
 	elf_relocation_iterator_t rel_iter;
@@ -312,7 +335,7 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 		case R_X86_64_RELATIVE:
 			if (elf_read_address(&ctx->elfobj, xref->target_vaddr, &qword,
 			    ELF_QWORD) == false) {
-				fprintf("elf_read_address() failed to read %#lx\n", xref->target_vaddr);
+				fprintf(stderr, "elf_read_address() failed to read %#lx\n", xref->target_vaddr);
 				return false;
 			}
 			/*
@@ -323,20 +346,23 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			 */
 			res = elf_symbol_by_value_lookup(&ctx->elfobj, qword, &deref_symbol);
 			if (res == true) {
-				xref_flags |= SHIVA_XREF_F_INDIRECT;
+				xref->flags |= SHIVA_XREF_F_INDIRECT;
 				shiva_debug("XREF (Indirect via GOT): Site: %#lx Target: %s (Deref)-> %s(%#lx)\n",
 				    xref->rip_rel_site, symbol.name ? symbol.name : "<unknown>",
 				    deref_symbol.name, deref_symbol.value);
+				memcpy(&xref->deref_symbol, &deref_symbol, sizeof(struct elf_symbol));
 			}
 			break;
 		case R_X86_64_COPY:
 		case R_X86_64_GLOB_DAT:
 			if (elf_symbol_by_name(&ctx->elfobj, rel.symname, &deref_symbol) == true) {
-				xref_flags |= SHIVA_XREF_F_INDIRECT;
+				xref->flags |= SHIVA_XREF_F_INDIRECT;
 				shiva_debug("XREF (Indirect via GOT): Site: %#lx Target: %s (Deref)-> %s(%#lx)\n",
 				    xref->rip_rel_site, symbol.name ? symbol.name : "<unknown>",
 				    deref_symbol.name, deref_symbol.value);
+				memcpy(&xref->deref_symbol, &deref_symbol, sizeof(struct elf_symbol));
 			}
+			break;
 		default:
 			break;
 		}
@@ -344,12 +370,18 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 
 	if (elf_symbol_by_range(&ctx->elfobj,
 	    current_vaddr, &tmp_sym) == true) {
-		xref_flags |= SHIVA_XREF_F_SRC_SYMINFO;
-		src_func = shiva_malloc(sizeof(*src_func));
-		memcpy(src_func, &tmp_sym, sizeof(*src_func));
+		xref->flags |= SHIVA_XREF_F_SRC_SYMINFO;
+		memcpy(&xref->current_function, &tmp_sym, sizeof(tmp_sym));
 		shiva_debug("Source symbol included: %s\n", tmp_sym.name);
 	}
 
+	/*
+	 * Insert xref entry
+	 */
+	shiva_debug("Inserting xref type: %d\n", xref->type);
+	shiva_debug("Site: %#lx\n", xref->rip_rel_site);
+	shiva_debug("Target: %s\n", symbol.name);
+	TAILQ_INSERT_TAIL(&ctx->tailq.xref_tqlist, xref, _linkage);
 	return true;
 }
 #elif __aarch64__

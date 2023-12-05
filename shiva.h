@@ -227,10 +227,10 @@ struct shiva_branch_site {
 #define SHIVA_XREF_TYPE_ADRP_ADD 3
 #define SHIVA_XREF_TYPE_UNKNOWN 4
 #elif __x86_64__
-#define SHIVA_XREF_IP_RELATIVE_LEA	1
-#define SHIVA_XREF_IP_RELATIVE_MOV_LDR 2
-#define SHIVA_XREF_IP_RELATIVE_MOV_STR 3
-#define SHIVA_XREF_IP_RELATIVE_UNKNOWN 3
+#define SHIVA_XREF_TYPE_IP_RELATIVE_LEA	1
+#define SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR 2
+#define SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR 3
+#define SHIVA_XREF_TYPE_IP_RELATIVE_UNKNOWN 3
 #endif
 
 #define SHIVA_XREF_F_INDIRECT		(1UL << 0) /* i.e. got[entry] holds address to .bss variable */
@@ -240,7 +240,7 @@ struct shiva_branch_site {
 #define SHIVA_XREF_F_TO_SECTION		(1UL << 4) /* xref to a section (i.e. .rodata) with no syminfo */
 
 struct shiva_xref_site {
-	int type;
+	uint32_t type;
 	uint64_t flags;
 	uint64_t *got; // indirect xrefs use a .got to hold a symbol value.
 #ifdef __aarch64__
@@ -260,6 +260,7 @@ struct shiva_xref_site {
 	uint64_t rip_rel_disp; /* imm value of: <insn> <reg>, qword ptr [rip + <offset>] */
 	uint64_t rip_rel_site; /* site address of ip relative instruction */
 	uint8_t  rip_rel_o_insn[16]; /* original instruction bytes */
+	size_t insn_len;
 	uint32_t addr_size; 	/* width of address being written/read */
 #endif	
 	uint64_t target_vaddr; /* addr that is being xref'd. add to base_vaddr at runtime */
