@@ -266,7 +266,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	rsp = (uint64_t *)n_stack;
 	shiva_debug("Target entry point: %#lx\n", entry_point);
 	shiva_debug("LDSO entry point: %#lx\n", ctx->ulexec.ldso.entry_point);
-
+	shiva_debug("RSP: %lx\n", rsp);
 #if 0
 	/*
 	 * OLD SOLUTION-- DOESN'T work.
@@ -489,6 +489,7 @@ transfer_control:
 	test_mark();
 	shiva_debug("Passing control to entry point: %#lx\n", ctx.ulexec.entry_point);
 	shiva_debug("LDSO entry point: %#lx\n", ctx.ulexec.ldso.entry_point);
+	shiva_debug("new RSP: %#lx\n", ctx.ulexec.rsp_start);
 	SHIVA_ULEXEC_LDSO_TRANSFER(ctx.ulexec.rsp_start, ctx.ulexec.ldso.entry_point,
 	    ctx.ulexec.entry_point);
 

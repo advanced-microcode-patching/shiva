@@ -1,0 +1,1409 @@
+[shiva.c:main:372] ctx_global: 0x7ffdb681e0e0 &ctx_global: 0x891848
+[shiva_ulexec.c:shiva_ulexec_prep:473] Interp path: /lib64/ld-linux-x86-64.so.2
+[shiva_ulexec.c:shiva_ulexec_prep:483] Loading ELF binary: ./test_bss
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:315] PROT_READ
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:324] base map address: 0x40000000
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:365] Mapping 0x40000000
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:315] PROT_READ
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:319] PROT_EXEC
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:324] base map address: 0x40000000
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:315] PROT_READ
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:324] base map address: 0x40000000
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:315] PROT_READ
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:317] PROT_WRITE
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:324] base map address: 0x40000000
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:428] Setting entry point for target: 0x40001080
+[shiva_ulexec.c:shiva_ulexec_prep:490] Loading LDSO: /lib64/ld-linux-x86-64.so.2
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:315] PROT_READ
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:324] base map address: 0x1000000
+[shiva_ulexec.c:shiva_ulexec_total_segment_len:256] Total mapping size: 242392
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:346] total_segment_len of RTLD: 245760
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:356] Mapped interpreter base: 0x1000000
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:315] PROT_READ
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:319] PROT_EXEC
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:324] base map address: 0x1000000
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:315] PROT_READ
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:324] base map address: 0x1000000
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:315] PROT_READ
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:317] PROT_WRITE
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:324] base map address: 0x1000000
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:433] base_vaddr: 0x1000000
+[shiva_ulexec.c:shiva_ulexec_load_elf_binary:434] Setting entry point for ldso: 0x1020290
+[shiva_ulexec.c:shiva_ulexec_prep:497] Saving stack data from &argc foward
+[shiva_ulexec.c:shiva_ulexec_save_stack:157] Copying bytes from ./test_bss
+[shiva_ulexec.c:shiva_ulexec_prep:503] Building auxiliary vector
+[shiva_ulexec.c:shiva_ulexec_allocstack:11] STACK: 0x7f8b0db4c000 - 0x7f8b0df34000
+[shiva_ulexec.c:shiva_ulexec_build_auxv_stack:49] STACK: 0x7f8b0df34000
+[shiva_auxv.c:shiva_auxv_iterator_init:31] Setting iter->auxv to envp[1]
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x400000
+[shiva_maps.c:shiva_maps_build_list:153] Debug mapping found: 0x400000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x400000 - 0x401000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x401000
+[shiva_maps.c:shiva_maps_build_list:153] Debug mapping found: 0x401000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x401000 - 0x570000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x570000
+[shiva_maps.c:shiva_maps_build_list:153] Debug mapping found: 0x570000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x570000 - 0x7d2000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x7d3000
+[shiva_maps.c:shiva_maps_build_list:153] Debug mapping found: 0x7d3000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x7d3000 - 0x892000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x892000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x892000 - 0x993000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x1000000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x1000000 - 0x1002000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x1002000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x1002000 - 0x102c000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x102c000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x102c000 - 0x1038000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x1038000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x1038000 - 0x103c000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x2577000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x2577000 - 0x2578000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x2578000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x2578000 - 0x2579000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x40000000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x40000000 - 0x40001000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x40001000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x40001000 - 0x40002000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x40002000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x40002000 - 0x40003000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x40003000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x40003000 - 0x40005000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x7f8b0db4c000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x7f8b0db4c000 - 0x7f8b0df34000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x7f8b0df34000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x7f8b0df34000 - 0x7f8b0df38000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x7f8b0df38000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x7f8b0df38000 - 0x7f8b0df73000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x7f8b0df73000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x7f8b0df73000 - 0x7f8b0df76000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x7f8b0df76000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x7f8b0df76000 - 0x7f8b0df7a000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x7f8b0df7a000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x7f8b0df7a000 - 0x7f8b0df7b000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x7ffdb6801000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x7ffdb6801000 - 0x7ffdb6822000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x7ffdb69f7000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x7ffdb69f7000 - 0x7ffdb69fb000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0x7ffdb69fb000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0x7ffdb69fb000 - 0x7ffdb69fd000
+[shiva_maps.c:shiva_maps_build_list:150] base: 0xffffffffff600000
+[shiva_maps.c:shiva_maps_build_list:181] Inserted mapping for 0xffffffffff600000 - 0xffffffffff601000
+[shiva_analyze.c:shiva_analyze_run:816] Running shiva_analyze_find_calls
+[shiva_analyze.c:shiva_analyze_control_flow:701] CS_ARCH: CS_ARCH_X86
+[shiva_analyze.c:shiva_analyze_control_flow:702] CS_MODE: CS_MODE_64
+[shiva_analyze.c:shiva_analyze_control_flow:723] disassembling text(0x1080), 384 bytes
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1080
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77080
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 0
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 4
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1080:	endbr64		
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 0
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1084
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77084
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 4
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: xor
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 2
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1084:	xor		ebp, ebp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 4
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: xor
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: xor
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1086
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77086
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 6
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1086:	mov		r9, rdx
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 6
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1089
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77089
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 9
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1089:	pop		rsi
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 9
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x108a
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7708a
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 10
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x108a:	mov		rdx, rsp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 10
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x108d
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7708d
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 13
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: and
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 4
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x108d:	and		rsp, 0xfffffffffffffff0
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 13
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: and
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: and
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1091
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77091
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 17
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1091:	push		rax
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 17
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1092
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77092
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 18
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1092:	push		rsp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 18
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1093
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77093
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 19
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: xor
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1093:	xor		r8d, r8d
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 19
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: xor
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: xor
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1096
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77096
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 22
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: xor
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 2
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1096:	xor		ecx, ecx
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 22
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: xor
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: xor
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1098
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77098
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 24
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1098:	lea		rdi, [rip + 0x148]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 24
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:254] OP2: [rip + 0x148]
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:262] xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:269] Searching for symbol associated with address: 0x11e7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:273] Instruction len: 7
+48 8d 3d 48 01 00 00 
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:291] Target xref symbol 'main'
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:370] Source symbol included: _start
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:376] Inserting xref type: 1
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:377] Site: 0x1098
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:378] Target: main
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x109f
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7709f
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 31
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 6
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x109f:	call		qword ptr [rip + 0x2f33]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 31
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_call:573] op_str: qword ptr [rip + 0x2f33]
+[shiva_analyze.c:shiva_analyze_call:626] CODE_PTR(0x7f8b0df770a5): 2f33 at insn-offset 31
+[shiva_analyze.c:shiva_analyze_call:640] Source symbol included: _start
+[shiva_analyze.c:shiva_analyze_call:642] Inserting branch for symbol __cxa_finalize callsite: 0x109f
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10a5
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770a5
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 37
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: hlt
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10a5:	hlt		
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 37
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: hlt
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: hlt
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10a6
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770a6
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 38
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 10
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10a6:	nop		word ptr cs:[rax + rax]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 38
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10b0
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770b0
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 48
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10b0:	lea		rdi, [rip + 0x2f59]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 48
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:254] OP2: [rip + 0x2f59]
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:262] xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:269] Searching for symbol associated with address: 0x4010
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:273] Instruction len: 7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:291] Target xref symbol '__TMC_END__'
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:376] Inserting xref type: 1
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:377] Site: 0x10b0
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:378] Target: __TMC_END__
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10b7
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770b7
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 55
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10b7:	lea		rax, [rip + 0x2f52]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 55
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:254] OP2: [rip + 0x2f52]
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:262] xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:269] Searching for symbol associated with address: 0x4010
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:273] Instruction len: 7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:291] Target xref symbol '__TMC_END__'
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:376] Inserting xref type: 1
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:377] Site: 0x10b7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:378] Target: __TMC_END__
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10be
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770be
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 62
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: cmp
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10be:	cmp		rax, rdi
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 62
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: cmp
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: cmp
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10c1
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770c1
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 65
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: je
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 2
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10c1:	je		0x10d8
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 65
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: je
+[shiva_analyze.c:shiva_analyze_build_jmp:77] Stored target address: 0x10d8
+[shiva_analyze.c:shiva_analyze_build_jmp:91] Inserting branch entry. Branch:0x7f8b0df73b30:Inserting branch entry. Branch:%#lx:%s
+
+[shiva_analyze.c:shiva_analyze_build_jmp:92] Found branch: 0x10c1:je 0x10d8
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10c3
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770c3
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 67
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10c3:	mov		rax, qword ptr [rip + 0x2f16]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 67
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:243] xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:269] Searching for symbol associated with address: 0x3fe0
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:273] Instruction len: 7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:316] Created custom symbol name: .got+30
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:355] XREF (Indirect via GOT): Site: 0x10c3 Target: .got+30 (Deref)-> __abi_tag(0x38c)
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:376] Inserting xref type: 2
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:377] Site: 0x10c3
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:378] Target: .got+30
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10ca
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770ca
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 74
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: test
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10ca:	test		rax, rax
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 74
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: test
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: test
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10cd
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770cd
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 77
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: je
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 2
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10cd:	je		0x10d8
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 77
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: je
+[shiva_analyze.c:shiva_analyze_build_jmp:77] Stored target address: 0x10d8
+[shiva_analyze.c:shiva_analyze_build_jmp:91] Inserting branch entry. Branch:0x7f8b0df73b50:Inserting branch entry. Branch:%#lx:%s
+
+[shiva_analyze.c:shiva_analyze_build_jmp:92] Found branch: 0x10cd:je 0x10d8
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10cf
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770cf
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 79
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: jmp
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 2
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10cf:	jmp		rax
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 79
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: jmp
+[shiva_analyze.c:shiva_analyze_build_jmp:77] Stored target address: 0
+[shiva_analyze.c:shiva_analyze_build_jmp:91] Inserting branch entry. Branch:0x7f8b0df73b60:Inserting branch entry. Branch:%#lx:%s
+
+[shiva_analyze.c:shiva_analyze_build_jmp:92] Found branch: 0x10cf:jmp rax
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10d1
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770d1
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 81
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10d1:	nop		dword ptr [rax]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 81
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10d8
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770d8
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 88
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10d8:	ret		
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 88
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10d9
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770d9
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 89
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10d9:	nop		dword ptr [rax]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 89
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10e0
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770e0
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 96
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10e0:	lea		rdi, [rip + 0x2f29]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 96
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:254] OP2: [rip + 0x2f29]
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:262] xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:269] Searching for symbol associated with address: 0x4010
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:273] Instruction len: 7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:291] Target xref symbol '__TMC_END__'
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:376] Inserting xref type: 1
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:377] Site: 0x10e0
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:378] Target: __TMC_END__
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10e7
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770e7
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 103
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10e7:	lea		rsi, [rip + 0x2f22]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 103
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:254] OP2: [rip + 0x2f22]
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:262] xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:269] Searching for symbol associated with address: 0x4010
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:273] Instruction len: 7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:291] Target xref symbol '__TMC_END__'
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:376] Inserting xref type: 1
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:377] Site: 0x10e7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:378] Target: __TMC_END__
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10ee
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770ee
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 110
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: sub
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10ee:	sub		rsi, rdi
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 110
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: sub
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: sub
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10f1
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770f1
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 113
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10f1:	mov		rax, rsi
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 113
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10f4
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770f4
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 116
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: shr
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 4
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10f4:	shr		rsi, 0x3f
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 116
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: shr
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: shr
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10f8
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770f8
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 120
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: sar
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 4
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10f8:	sar		rax, 3
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 120
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: sar
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: sar
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10fc
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770fc
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 124
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: add
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10fc:	add		rsi, rax
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 124
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: add
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: add
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x10ff
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df770ff
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 127
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: sar
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x10ff:	sar		rsi, 1
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 127
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: sar
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: sar
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1102
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77102
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 130
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: je
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 2
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1102:	je		0x1118
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 130
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: je
+[shiva_analyze.c:shiva_analyze_build_jmp:77] Stored target address: 0x1118
+[shiva_analyze.c:shiva_analyze_build_jmp:91] Inserting branch entry. Branch:0x7f8b0df73b70:Inserting branch entry. Branch:%#lx:%s
+
+[shiva_analyze.c:shiva_analyze_build_jmp:92] Found branch: 0x1102:je 0x1118
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1104
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77104
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 132
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1104:	mov		rax, qword ptr [rip + 0x2ee5]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 132
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:243] xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:269] Searching for symbol associated with address: 0x3ff0
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:273] Instruction len: 7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:316] Created custom symbol name: .got+40
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:355] XREF (Indirect via GOT): Site: 0x1104 Target: .got+40 (Deref)-> __do_global_dtors_aux(0x1120)
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:376] Inserting xref type: 2
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:377] Site: 0x1104
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:378] Target: .got+40
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x110b
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7710b
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 139
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: test
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x110b:	test		rax, rax
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 139
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: test
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: test
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x110e
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7710e
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 142
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: je
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 2
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x110e:	je		0x1118
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 142
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: je
+[shiva_analyze.c:shiva_analyze_build_jmp:77] Stored target address: 0x1118
+[shiva_analyze.c:shiva_analyze_build_jmp:91] Inserting branch entry. Branch:0x7f8b0df73b90:Inserting branch entry. Branch:%#lx:%s
+
+[shiva_analyze.c:shiva_analyze_build_jmp:92] Found branch: 0x110e:je 0x1118
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1110
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77110
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 144
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: jmp
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 2
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1110:	jmp		rax
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 144
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: jmp
+[shiva_analyze.c:shiva_analyze_build_jmp:77] Stored target address: 0
+[shiva_analyze.c:shiva_analyze_build_jmp:91] Inserting branch entry. Branch:0x7f8b0df73ba0:Inserting branch entry. Branch:%#lx:%s
+
+[shiva_analyze.c:shiva_analyze_build_jmp:92] Found branch: 0x1110:jmp rax
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1112
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77112
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 146
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 6
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1112:	nop		word ptr [rax + rax]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 146
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1118
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77118
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 152
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1118:	ret		
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 152
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1119
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77119
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 153
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1119:	nop		dword ptr [rax]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 153
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1120
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77120
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 160
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 4
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1120:	endbr64		
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 160
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1124
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77124
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 164
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: cmp
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1124:	cmp		byte ptr [rip + 0x2ee5], 0
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 164
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: cmp
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: cmp
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x112b
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7712b
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 171
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: jne
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 2
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x112b:	jne		0x1158
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 171
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: jne
+[shiva_analyze.c:shiva_analyze_build_jmp:77] Stored target address: 0x1158
+[shiva_analyze.c:shiva_analyze_build_jmp:91] Inserting branch entry. Branch:0x7f8b0df73bb0:Inserting branch entry. Branch:%#lx:%s
+
+[shiva_analyze.c:shiva_analyze_build_jmp:92] Found branch: 0x112b:jne 0x1158
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x112d
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7712d
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 173
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x112d:	push		rbp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 173
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x112e
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7712e
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 174
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: cmp
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 8
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x112e:	cmp		qword ptr [rip + 0x2ec2], 0
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 174
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: cmp
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: cmp
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1136
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77136
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 182
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1136:	mov		rbp, rsp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 182
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1139
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77139
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 185
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: je
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 2
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1139:	je		0x1147
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 185
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: je
+[shiva_analyze.c:shiva_analyze_build_jmp:77] Stored target address: 0x1147
+[shiva_analyze.c:shiva_analyze_build_jmp:91] Inserting branch entry. Branch:0x7f8b0df73bc0:Inserting branch entry. Branch:%#lx:%s
+
+[shiva_analyze.c:shiva_analyze_build_jmp:92] Found branch: 0x1139:je 0x1147
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x113b
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7713b
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 187
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x113b:	mov		rdi, qword ptr [rip + 0x2ec6]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 187
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:243] xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:269] Searching for symbol associated with address: 0x4008
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:273] Instruction len: 7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:291] Target xref symbol '__dso_handle'
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:345] XREF (Indirect via GOT): Site: 0x113b Target: __dso_handle (Deref)-> __dso_handle(0x4008)
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:376] Inserting xref type: 2
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:377] Site: 0x113b
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:378] Target: __dso_handle
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1142
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77142
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 194
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1142:	call		0x1050
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 194
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_call:573] op_str: 0x1050
+[shiva_analyze.c:shiva_analyze_call:626] CODE_PTR(0x7f8b0df77147): ffffff09 at insn-offset 194
+[shiva_analyze.c:shiva_analyze_call:642] Inserting branch for symbol fn_0x1050 callsite: 0x1142
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1147
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77147
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 199
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1147:	call		0x10b0
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 199
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_call:573] op_str: 0x10b0
+[shiva_analyze.c:shiva_analyze_call:626] CODE_PTR(0x7f8b0df7714c): ffffff64 at insn-offset 199
+[shiva_analyze.c:shiva_analyze_call:642] Inserting branch for symbol deregister_tm_clones callsite: 0x1147
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x114c
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7714c
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 204
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x114c:	mov		byte ptr [rip + 0x2ebd], 1
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 204
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1153
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77153
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 211
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1153:	pop		rbp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 211
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1154
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77154
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 212
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1154:	ret		
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 212
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1155
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77155
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 213
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1155:	nop		dword ptr [rax]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 213
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1158
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77158
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 216
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1158:	ret		
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 216
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1159
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77159
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 217
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1159:	nop		dword ptr [rax]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 217
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: nop
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1160
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77160
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 224
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 4
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1160:	endbr64		
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 224
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1164
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77164
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 228
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: jmp
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1164:	jmp		0x10e0
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 228
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: jmp
+[shiva_analyze.c:shiva_analyze_build_jmp:77] Stored target address: 0x10e0
+[shiva_analyze.c:shiva_analyze_build_jmp:91] Inserting branch entry. Branch:0x7f8b0da45bd0:Inserting branch entry. Branch:%#lx:%s
+
+[shiva_analyze.c:shiva_analyze_build_jmp:92] Found branch: 0x1164:jmp 0x10e0
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1169
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77169
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 233
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 4
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1169:	endbr64		
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 233
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x116d
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7716d
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 237
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x116d:	push		rbp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 237
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x116e
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7716e
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 238
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x116e:	mov		rbp, rsp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 238
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1171
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77171
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 241
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 10
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1171:	mov		dword ptr [rip + 0x2e99], 5
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 241
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x117b
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7717b
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 251
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x117b:	lea		rax, [rip + 0xe86]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 251
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:254] OP2: [rip + 0xe86]
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:262] xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:269] Searching for symbol associated with address: 0x2008
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:273] Instruction len: 7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:316] Created custom symbol name: .rodata+8
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:370] Source symbol included: foo
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:376] Inserting xref type: 1
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:377] Site: 0x117b
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:378] Target: .rodata+8
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1182
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77182
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 258
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1182:	mov		rdi, rax
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 258
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1185
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77185
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 261
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1185:	call		0x1060
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 261
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_call:573] op_str: 0x1060
+[shiva_analyze.c:shiva_analyze_call:626] CODE_PTR(0x7f8b0df7718a): fffffed6 at insn-offset 261
+[shiva_analyze.c:shiva_analyze_call:640] Source symbol included: foo
+[shiva_analyze.c:shiva_analyze_call:642] Inserting branch for symbol puts@plt callsite: 0x1185
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x118a
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7718a
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 266
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 6
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x118a:	mov		eax, dword ptr [rip + 0x2e84]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 266
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1190
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77190
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 272
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 2
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1190:	mov		esi, eax
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 272
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1192
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77192
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 274
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1192:	lea		rax, [rip + 0xe90]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 274
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:254] OP2: [rip + 0xe90]
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:262] xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:269] Searching for symbol associated with address: 0x2029
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:273] Instruction len: 7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:316] Created custom symbol name: .rodata+29
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:370] Source symbol included: foo
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:376] Inserting xref type: 1
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:377] Site: 0x1192
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:378] Target: .rodata+29
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1199
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df77199
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 281
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x1199:	mov		rdi, rax
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 281
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x119c
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df7719c
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 284
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x119c:	mov		eax, 0
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 284
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11a1
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771a1
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 289
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11a1:	call		0x1070
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 289
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_call:573] op_str: 0x1070
+[shiva_analyze.c:shiva_analyze_call:626] CODE_PTR(0x7f8b0df771a6): fffffeca at insn-offset 289
+[shiva_analyze.c:shiva_analyze_call:640] Source symbol included: foo
+[shiva_analyze.c:shiva_analyze_call:642] Inserting branch for symbol printf@plt callsite: 0x11a1
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11a6
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771a6
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 294
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11a6:	mov		eax, 0
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 294
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11ab
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771ab
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 299
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11ab:	pop		rbp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 299
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11ac
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771ac
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 300
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11ac:	ret		
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 300
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11ad
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771ad
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 301
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 4
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11ad:	endbr64		
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 301
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11b1
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771b1
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 305
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11b1:	push		rbp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 305
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11b2
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771b2
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 306
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11b2:	mov		rbp, rsp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 306
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11b5
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771b5
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 309
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11b5:	lea		rax, [rip + 0xe8c]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 309
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:254] OP2: [rip + 0xe8c]
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:262] xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:269] Searching for symbol associated with address: 0x2048
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:273] Instruction len: 7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:316] Created custom symbol name: .rodata+48
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:370] Source symbol included: bar
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:376] Inserting xref type: 1
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:377] Site: 0x11b5
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:378] Target: .rodata+48
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11bc
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771bc
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 316
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11bc:	mov		rdi, rax
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 316
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11bf
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771bf
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 319
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11bf:	call		0x1060
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 319
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_call:573] op_str: 0x1060
+[shiva_analyze.c:shiva_analyze_call:626] CODE_PTR(0x7f8b0df771c4): fffffe9c at insn-offset 319
+[shiva_analyze.c:shiva_analyze_call:640] Source symbol included: bar
+[shiva_analyze.c:shiva_analyze_call:642] Inserting branch for symbol puts@plt callsite: 0x11bf
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11c4
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771c4
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 324
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 6
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11c4:	mov		eax, dword ptr [rip + 0x2e4a]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 324
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11ca
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771ca
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 330
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 2
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11ca:	mov		esi, eax
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 330
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11cc
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771cc
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 332
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 7
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11cc:	lea		rax, [rip + 0xe9d]
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 332
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: lea
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:254] OP2: [rip + 0xe9d]
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:262] xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:269] Searching for symbol associated with address: 0x2070
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:273] Instruction len: 7
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:316] Created custom symbol name: .rodata+70
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:370] Source symbol included: bar
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:376] Inserting xref type: 1
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:377] Site: 0x11cc
+[shiva_analyze.c:shiva_analyze_xrefs_x86_64:378] Target: .rodata+70
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11d3
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771d3
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 339
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11d3:	mov		rdi, rax
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 339
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11d6
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771d6
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 342
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11d6:	mov		eax, 0
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 342
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11db
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771db
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 347
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11db:	call		0x1070
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 347
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_call:573] op_str: 0x1070
+[shiva_analyze.c:shiva_analyze_call:626] CODE_PTR(0x7f8b0df771e0): fffffe90 at insn-offset 347
+[shiva_analyze.c:shiva_analyze_call:640] Source symbol included: bar
+[shiva_analyze.c:shiva_analyze_call:642] Inserting branch for symbol printf@plt callsite: 0x11db
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11e0
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771e0
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 352
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11e0:	mov		eax, 0
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 352
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11e5
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771e5
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 357
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11e5:	pop		rbp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 357
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11e6
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771e6
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 358
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11e6:	ret		
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 358
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: ret
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11e7
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771e7
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 359
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 4
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11e7:	endbr64		
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 359
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: endbr64
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11eb
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771eb
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 363
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11eb:	push		rbp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 363
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: push
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11ec
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771ec
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 364
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 3
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11ec:	mov		rbp, rsp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 364
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11ef
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771ef
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 367
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11ef:	call		0x1169
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 367
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_call:573] op_str: 0x1169
+[shiva_analyze.c:shiva_analyze_call:626] CODE_PTR(0x7f8b0df771f4): ffffff75 at insn-offset 367
+[shiva_analyze.c:shiva_analyze_call:640] Source symbol included: main
+[shiva_analyze.c:shiva_analyze_call:642] Inserting branch for symbol foo callsite: 0x11ef
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11f4
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771f4
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 372
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11f4:	call		0x11ad
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 372
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: call
+[shiva_analyze.c:shiva_analyze_call:573] op_str: 0x11ad
+[shiva_analyze.c:shiva_analyze_call:626] CODE_PTR(0x7f8b0df771f9): ffffffb4 at insn-offset 372
+[shiva_analyze.c:shiva_analyze_call:640] Source symbol included: main
+[shiva_analyze.c:shiva_analyze_call:642] Inserting branch for symbol bar callsite: 0x11f4
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11f9
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771f9
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 377
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 5
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11f9:	mov		eax, 0
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 377
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: mov
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11fe
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771fe
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 382
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:745] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:746] INSN SIZE: 1
+[shiva_analyze.c:shiva_analyze_control_flow:747] 0x11fe:	pop		rbp
+[shiva_analyze.c:shiva_analyze_control_flow:750] ctx->disas.c = 382
+[shiva_analyze.c:shiva_analyze_branches_x86_64:105] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:769] Running shiva_analyze_calls()
+[shiva_analyze.c:shiva_analyze_call:563] Mnemonic: pop
+[shiva_analyze.c:shiva_analyze_control_flow:778] Running shiva_analyze_xrefs()
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x11ff
+[shiva_analyze.c:shiva_analyze_control_flow:731] code_ptr: 0x7f8b0df771ff
+[shiva_analyze.c:shiva_analyze_control_flow:732] Counter offset: 383
+[shiva_analyze.c:shiva_analyze_control_flow:734] insn->detail: 0
+[shiva_analyze.c:shiva_analyze_control_flow:738] code_ptr after fail: 0x7f8b0df771ff
+[shiva_analyze.c:shiva_analyze_control_flow:739] code_vaddr after fail: 11ff
+[shiva_analyze.c:shiva_analyze_control_flow:740] current insn len: 1
+[shiva_analyze.c:shiva_analyze_control_flow:727] Address: 0x1200
+[shiva.c:main:490] Passing control to entry point: 0x40001080
+[shiva.c:main:491] LDSO entry point: 0x1020290
+I'm the original foo() function!
+The value of bss_var is 5
+I am a function that won't be patched
+I'm accessing bss_var and its value is 0x5

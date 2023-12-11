@@ -40,11 +40,28 @@ shiva_maps_get_so_base(struct shiva_ctx *ctx, char *so_path,
 		perror("fopen");
 		return false;
 	}
+
 	while (fgets(buf, sizeof(buf), fp) != NULL) {
 		if (strstr(buf, so_path) == NULL)
 			continue;
+#if __x86_64__ /* TODO: We are Making a presumption that x86_64 generally has
+		* binaries linked with -Wl,separate-code feature.  Although
+		* this may work much of the time.... in the future we need to
+		* open the library in question with elf_open_object and check
+		* the elf flags to see if ELF_SCOP_F is enabled.
+		*/
+		if (strstr(buf, "r--p") == NULL)
+			continue;
+		/*
+		 * In aarch64 the general linking environment still
+		 * uses just two PT_LOAD segments. One R-X and one RW
+		 * again we must follow the TODO comment from
+		 * above.
+		 */
+#elif __aarch64__
 		if (strstr(buf, "r-xp") == NULL)
 			continue;
+#endif
 		p = strchr(buf, '-');
 		*p = '\0';
 		*out = strtoul(buf, NULL, 16);

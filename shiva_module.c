@@ -784,23 +784,6 @@ internal_symresolve(struct shiva_module *linker, char *symname,
 			shiva_debug("Found symbol '%s' in target, but it's NOTYPE\n", symname);
 			shiva_debug("Undefined linking behavior\n");
 			return false;
-#if 0
-			switch (linker->mode) {
-			case SHIVA_LINKING_MICROCODE_PATCH:
-				*e_type = elf_type(&linker->self);
-				*type = RESOLVER_TARGET_SHIVA_SELF;
-				res = elf_symbol_by_name(&linker->self, symname, &tmp);
-				if (res == true) {
-					memcpy(symbol, &tmp, sizeof(*symbol));
-					return true;
-				}
-				break;
-			case SHIVA_LINKING_MODULE:
-			default:
-				shiva_debug("Found no symbol '%s' in shiva binary\n", symname);
-				return false;
-			}
-#endif
 		case STT_FUNC:
 		case STT_OBJECT:
 			shiva_debug("Found symbol '%s' in %s\n", symname, linker->mode == SHIVA_LINKING_MODULE ?
@@ -880,6 +863,9 @@ enable_post_linker(struct shiva_module *linker)
 			shiva_debug("Enabling post linker, setting AT_ENTRY to %#lx\n",
 			    &shiva_post_linker);
 			entry = (uint64_t)&shiva_post_linker;
+#if __x86_64__
+			entry += 8; // we jump past the first two instructions of shiva_post_linker
+#endif
 			if (shiva_auxv_set_value(&a_iter, entry) == false) {
 				fprintf(stderr, "shiva_auxv_set_value failed (Setting %#lx)\n", entry);
 				return false;
@@ -1060,13 +1046,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
 					char path_out[PATH_MAX];
 					char *so_path;
 					struct elf_symbol tmp;
-#ifdef __x86_64__
-#ifdef SHIVA_STANDALONE
-					symval = symbol.value;
-#else
-					symval = symbol.value + linker->shiva_base;
-#endif
-#elif __aarch64__
+
 					switch(target_type) {
 					case RESOLVER_TARGET_SHIVA_SELF:
 						symval = e_type == ET_EXEC ? symbol.value :
@@ -1114,7 +1094,6 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
 						TAILQ_INSERT_TAIL(&linker->tailq.delayed_reloc_list, delay_rel, _linkage);
 						return true;
 					}
-#endif
 					shiva_debug("Symval: %#lx\n", symval);
 					rel_unit = &linker->text_mem[smap.offset + rel.offset];
 					rel_addr = linker->text_vaddr + smap.offset + rel.offset;
@@ -1281,6 +1260,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
 
 		
 
+shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 
 #if defined(__x86_64__)
 	switch(rel.type) {
@@ -2765,7 +2745,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	res = elf_open_object(path, &linker->elfobj,
 	    ELF_LOAD_F_STRICT, &error);
 	if (res == false) {
-		shiva_debug("elf_open_object(%s, ...) failed\n", path);
+		shiva_debug("1st. elf_open_object(%s, ...) failed: %s\n", path, elf_error_msg(&error));
 		return false;
 	}
 	/*

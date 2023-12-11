@@ -1,5 +1,7 @@
 #include "shiva.h"
 
+#define TRANSFER_TO_X86_64_START(addr) __asm__ __volatile__("push %0\n" \
+							    "ret" :: "g"(addr));
 /*
  * The aarch64 post linker in Shiva works by hooking AT_ENTRY early on (In
  * shiva_module.c:apply_relocation), so that it is set to &shiva_post_linker()
@@ -33,7 +35,7 @@ shiva_post_linker(void)
 	static uint64_t base;
 
 	TAILQ_FOREACH(delay_rel, &ctx_global->module.runtime->tailq.delayed_reloc_list, _linkage) {
-
+		printf("Passing so_path: %s\n", delay_rel->so_path);
 		if (shiva_maps_get_so_base(ctx_global, delay_rel->so_path, &base) == false) {
 			fprintf(stderr, "Failed to locate base address of loaded module '%s'\n",
 			    delay_rel->so_path);
@@ -65,7 +67,10 @@ shiva_post_linker(void)
 		perror("mprotect");
 		exit(EXIT_FAILURE);
 	}
-#if __aarch64__
+#ifdef __x86_64__
+	__asm__ __volatile__("mov %0, %%r12" :: "r"(ctx_global->ulexec.entry_point));
+	TRANSFER_TO_X86_64_START(ctx_global->ulexec.entry_point);
+#elif __aarch64__
 	__asm__ __volatile__ ("mov x21, %0" :: "r"(ctx_global->ulexec.entry_point));
 #endif
 	return;

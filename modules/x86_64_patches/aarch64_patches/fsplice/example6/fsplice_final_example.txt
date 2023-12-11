@@ -1,0 +1,33 @@
+#include <stdio.h>
+
+const char *banner = "ElfMaster";
+char global_buf[255];
+int data_val = 7;
+
+int foo(int num, char *str)
+{
+	if (num == 7)
+		goto done;
+	strcpy(global_buf, banner);
+	if (str != NULL) {
+		fprintf(stdout, "Printing str: %s\n", str);
+	}
+	fprintf(stdout, "global_buf: %s\n", global_buf);
+	bar();
+done:
+	return 0;
+}
+
+int bar(void)
+{
+	data_val = data_val + 1;
+	printf("I am the new bar, and I am here to say data_val = %d\n");
+	return 0;
+}
+
+int main(int argc, char **argv)
+{
+	foo(argc, argv[1]);
+	bar();
+}
+

@@ -1,0 +1,26 @@
+0000000000000000 <shiva_insert_0xc490>:
+   0:   a9bf7bfd        stp     x29, x30, [sp, #-16]!
+   4:   910003fd        mov     x29, sp
+  
+
+/*
+ NOTE: This is relocatable code that hasn't been fixed up yet.
+ */
+
+   8:   90000000        adrp    x0, 0 <shiva_insert_0xc490>
+   c:   91000000        add     x0, x0, #0x0 
+  10:   f9400000        ldr     x0, [x0] ; x0 = num_packets
+  14:   39400000        ldrb    w0, [x0] ; w0 = (uint8_t)num_packets;
+  18:   2a0003e1        mov     w1, w0   ; w1 = (uint8_t)num_packets;
+  1c:   2a0103e0        mov     w0, w1
+  20:   531d7000        lsl     w0, w0, #3 ; w0 = num_packets * 8
+  24:   4b010000        sub     w0, w0, w1 ; w0 = num_packets * 7
+  28:   90000001        adrp    x1, 0 <shiva_insert_0xc490>
+  2c:   91000021        add     x1, x1, #0x0
+  30:   f9400021        ldr     x1, [x1] ; x1 = size
+  34:   79400021        ldrh    w1, [x1] ; w1 = (uin16_t)size;
+  38:   6b01001f        cmp     w0, w1 ; if ((num_packets * 7) == size)
+  3c:   540000e0        b.eq    58 <shiva_insert_0xc490+0x58>  // b.none
+...
+...
+

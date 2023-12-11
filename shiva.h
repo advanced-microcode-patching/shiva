@@ -15,11 +15,12 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/ptrace.h>
-#include <sys/queue.h>
 #include <elf.h>
 #include <errno.h>
 #include <sys/prctl.h>
 #include <sys/wait.h>
+
+#include "sys/queue.h"
 
 #include "include/capstone/capstone.h"
 
