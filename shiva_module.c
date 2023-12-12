@@ -126,7 +126,68 @@ install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	}
 	return true;
 }
+#elif __x86_64__
+static bool
+install_x86_64_call_imm_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
+    struct shiva_branch_site *e, struct elf_symbol *patch_symbol,
+    struct shiva_transform *transform)
+{
+	/*
+	 * The patch_symbol->value will be a symbol value found within the patch
+	 * module, containing an offset into the text section which is the first
+	 * section within a Shiva modules text segment.
+	 */
+	uint64_t target_vaddr = patch_symbol->value + linker->text_vaddr;
+	uint8_t insn_bytes[SHIVA_MAX_INST_LEN];
+	uint32_t call_offset;
+	shiva_error_t error;
+	bool res;
+
+	shiva_debug("patch_symbol->value: %#lx\n", patch_symbol->value);
+	shiva_debug("transform: %p\n", transform);
+	/*
+	 * In the event of a transform, we are re-linking the executable to a function
+	 * that has been transformed with a splice, which requires that we don't use
+	 * the patch_symbol.value (Since it will have been moved), instead we use the
+	 * transform->segment_offset.
+	 */
+	target_vaddr = (transform == NULL) ? patch_symbol->value + linker->text_vaddr :
+	    linker->text_vaddr + transform->segment_offset;
+
+	shiva_debug("target_vaddr is %#lx\n", target_vaddr);
+	if (transform == NULL) {
+		if (module_has_transforms(linker) == true) {
+			shiva_debug("Increasing target vaddr by %zu bytes\n", linker->tf_text_offset);
+			target_vaddr += linker->tf_text_offset;
+		} else {
+			shiva_debug("Module has no transforms\n");
+		}
+	}
+
+	shiva_debug("PATCHING BRANCH SITE: %#lx\n", e->branch_site);
+	memcpy(&insn_bytes, &e->o_insn, sizeof(insn_bytes));
+	call_offset = (target_vaddr - (e->branch_site + ctx->ulexec.base_vaddr));
+	*(uint32_t *)&insn_bytes[1] = call_offset;
+	/*
+	 * XXX
+	 * Technically the shiva_trace API shouldn't be used from within Shiva.
+	 * It's Akin to the Kernel invoking syscalls. Although atleast we aren't
+	 * calling shiva_trace(), but rather one of it's utility functions for
+	 * writing to memory. This won't cause any harm, but it's not congruent
+	 * with the modeled use cases of Shiva trace API which is meant to be invoked
+	 * by modules.
+	 */
+	res = shiva_trace_write(ctx, 0, (void *)e->branch_site + ctx->ulexec.base_vaddr,
+	    (void *)&insn_bytes, 4, &error);
+	if (res == false) {
+		fprintf(stderr, "sihva_trace_write failed: %s\n", shiva_error_msg(&error));
+		return false;
+	}
+	return true;
+
+}
 #endif
+
 /*
  * XXX does not properly handle xrefs from target executable
  * to fully transformed function.
@@ -321,6 +382,11 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 }
 #endif
 
+/*
+ * The following function takes care of installing linkage into the ELF executable
+ * itself so that it is properly linked to the patch code and data that lives
+ * within the patches text and data segment respectively.
+ */
 static bool
 apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 {
@@ -391,6 +457,15 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 			if (res == false) {
 				fprintf(stderr, "external linkage failure: "
 				    "install_aarch64_call26_patch() failed\n");
+				return false;
+			}
+#elif __x86_64__
+			shiva_debug("Installing patch offset on target at %#lx for %s. Transform: %p\n",
+			    be.branch_site + ctx->ulexec.base_vaddr, symbol.name, tfptr);
+			res = install_x86_64_call_imm_patch(ctx, linker, &be, &symbol, tfptr);
+			if (res == false) {
+				fprintf(stderr, "external linkage failure: "
+				    "install_x86_64_call_imm_patch() failed\n");
 				return false;
 			}
 #endif
@@ -2292,18 +2367,18 @@ validate_helpers(struct shiva_ctx *ctx, struct shiva_module *linker)
 			e.key = (char *)symbol.name; /* i.e. __shiva_helper_orig_func */
 			e.data = NULL;
 
-                        if (hsearch_r(e, FIND, &ep, &linker->cache.helpers) != 0)
+			if (hsearch_r(e, FIND, &ep, &linker->cache.helpers) != 0)
 				continue;
 
 			helper = shiva_malloc(sizeof(*helper));
 			helper->type = SHIVA_HELPER_CALL_EXTERNAL;
 			memcpy(&helper->symbol, &target_sym, sizeof(struct elf_symbol));
 
- 			if (hsearch_r(e, ENTER, &ep, &linker->cache.helpers) == 0) {
-                                free(helper);
-                                fprintf(stderr, "Failed to add helper: %s\n", symbol.name);
-                                return false;
-                        }
+			if (hsearch_r(e, ENTER, &ep, &linker->cache.helpers) == 0) {
+				free(helper);
+				fprintf(stderr, "Failed to add helper: %s\n", symbol.name);
+				return false;
+			}
 			shiva_debug("Inserting helper record\n"
 					"Helper type: SHIVA_HEPLER_CALL_EXTERNAL\n"
 					"External symbol value: %#lx\n", target_sym.value);
@@ -2843,5 +2918,3 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	shiva_debug("Successfully executed module\n");
 	return true;
 }
-
-

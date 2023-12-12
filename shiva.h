@@ -171,7 +171,7 @@ typedef struct shiva_error {
 } shiva_error_t;
 
 typedef enum shiva_branch_type {
-	SHIVA_BRANCH_JMP = 0,
+	SHIVA_BRANCH_JMP= 0,
 	SHIVA_BRANCH_CALL,
 	SHIVA_BRANCH_RET
 } shiva_branch_type_t;
