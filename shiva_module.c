@@ -166,7 +166,10 @@ install_x86_64_call_imm_patch(struct shiva_ctx *ctx, struct shiva_module *linker
 
 	shiva_debug("PATCHING BRANCH SITE: %#lx\n", e->branch_site);
 	memcpy(&insn_bytes, &e->o_insn, sizeof(insn_bytes));
+	shiva_debug("call_offset = %#lx - %#lx\n",
+	    target_vaddr, e->branch_site + ctx->ulexec.base_vaddr);
 	call_offset = (target_vaddr - (e->branch_site + ctx->ulexec.base_vaddr));
+	call_offset -= 5; /* subtract length of call instruction */
 	*(uint32_t *)&insn_bytes[1] = call_offset;
 	/*
 	 * XXX
@@ -178,7 +181,7 @@ install_x86_64_call_imm_patch(struct shiva_ctx *ctx, struct shiva_module *linker
 	 * by modules.
 	 */
 	res = shiva_trace_write(ctx, 0, (void *)e->branch_site + ctx->ulexec.base_vaddr,
-	    (void *)&insn_bytes, 4, &error);
+	    (void *)&insn_bytes, 5, &error);
 	if (res == false) {
 		fprintf(stderr, "sihva_trace_write failed: %s\n", shiva_error_msg(&error));
 		return false;
