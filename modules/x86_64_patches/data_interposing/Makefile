@@ -3,6 +3,7 @@ SHIVA-LD_PATH="../../../tools/shiva-ld/shiva-ld"
 all: prog patch prelink
 patch:
 	gcc -mcmodel=large -I ../ -fno-stack-protector -c data_patch.c
+	gcc -mcmodel=large -I ../ -fno-stack-protector -S data_patch.c
 prog:
 	gcc -O0 test_data.c -o test_data
 prelink:

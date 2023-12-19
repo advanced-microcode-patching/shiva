@@ -263,7 +263,8 @@ struct shiva_xref_site {
 	uint8_t  rip_rel_o_insn[16]; /* original instruction bytes */
 	size_t insn_len;
 	uint32_t addr_size; 	/* width of address being written/read */
-#endif	
+#endif
+	uint32_t reloc_type;
 	uint64_t target_vaddr; /* addr that is being xref'd. add to base_vaddr at runtime */
 	struct elf_symbol deref_symbol; /* Indirect symbol value pointed to by symbol.value */
 	struct elf_symbol symbol; /* symbol info for the symbol the xref goes to */

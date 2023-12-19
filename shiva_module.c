@@ -383,8 +383,58 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	return true;
 
 }
-#endif
+#elif __x86_64__
+static bool
+install_x86_64_xref_linkage(struct shiva_ctx *ctx, struct shiva_module *linker,
+    struct shiva_xref_site *e, struct elf_symbol *patch_symbol)
+{
+	uint64_t rel_addr = e->rip_rel_site + ctx->ulexec.base_vaddr;
+        uint64_t var_segment;
+        uint8_t *rel_unit;
+        struct elf_section shdr;
+        struct shiva_module_section_mapping smap;
+        shiva_error_t error;
+        bool res;
+        char *shdr_name = NULL;
 
+	if (patch_symbol->shndx == SHN_COMMON) {
+		shiva_debug("shndx == SHN_COMMON for var: %s. Assuming it's a .bss\n",
+		    patch_symbol->name);
+		shdr_name = ".bss";
+	} else {
+		if (elf_section_by_index(&linker->elfobj, patch_symbol->shndx, &shdr) == false) {
+			fprintf(stderr, "Failed to find section index: %d in module: %s\n",
+			    patch_symbol->shndx, elf_pathname(&linker->elfobj));
+			return false;
+		}
+		shdr_name = shdr.name;
+	}
+
+	if (get_section_mapping(linker, shdr_name, &smap) == false) {
+		fprintf(stderr, "Failed to retrieve section data for %s\n", shdr_name);
+		return false;
+	}
+
+	switch(smap.map_attribute) {
+	case LP_SECTION_TEXTSEGMENT:
+		shiva_debug("VARSEGMENT(Text): %#lx\n", linker->text_vaddr);
+		var_segment = linker->text_vaddr;
+		break;
+	case LP_SECTION_DATASEGMENT:
+		shiva_debug("VARSEGMENT(Data): %#lx\n", linker->data_vaddr);
+		var_segment = linker->data_vaddr;
+		break;
+	case LP_SECTION_BSS_SEGMENT:
+		shiva_debug("VARSEGMENT(Bss): %#lx\n", linker->bss_vaddr);
+		var_segment = linker->bss_vaddr;
+		break;
+	default:
+		fprintf(stderr, "Unknown section attribute for '%s'\n", shdr_name);
+		return false;
+	}
+
+}
+#endif
 /*
  * The following function takes care of installing linkage into the ELF executable
  * itself so that it is properly linked to the patch code and data that lives
@@ -1362,6 +1412,8 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 		rel_unit = &linker->text_mem[smap.offset + rel.offset];
 		rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 		rel_val = (linker->data_vaddr + linker->pltgot_off) - rel_addr + rel.addend;
+		shiva_debug("Subtracting GOT(%lx) from REL_ADDR+REL_ADDEND(%lx)\n", 
+		    (linker->data_vaddr + linker->pltgot_off),rel_addr + rel.addend);
 		*(uint64_t *)&rel_unit[0] = rel_val;
 		return true;
 		break;
@@ -1404,15 +1456,35 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 				 * to the base of '.rodata'
 				 */
 				if (get_section_mapping(linker, ".rodata", &smap_tmp) == false) {
-					shiva_debug("Failed to retrieve section data for %s\n", rel.shdrname);
+					fprintf(stderr, "Failed to retrieve section data for %s\n", rel.shdrname);
 					return false;
 				}
 
 				rel_val = (symbol.value + smap_tmp.vaddr) + rel.addend -
 				    (linker->data_vaddr + linker->pltgot_off);
 			} else {
-				rel_val = (symbol.value + linker->text_vaddr) + rel.addend -
-				    (linker->data_vaddr + linker->pltgot_off);
+				struct elf_section tmpshdr;
+				struct elf_symbol tmpsym;
+
+				if (elf_symbol_by_name(&linker->elfobj, rel.symname, &tmpsym) == false) {
+					fprintf(stderr, "Failed to retrieve symbol: %s\n", rel.symname);
+					return false;
+				}
+				if (elf_section_by_index(&linker->elfobj, tmpsym.shndx, &tmpshdr) == false) {
+					fprintf(stderr, "Failed to retrive section index %d\n", tmpsym.shndx);
+					return false;
+				}
+				if (strcmp(tmpshdr.name, ".data") == 0) {
+					rel_val = (symbol.value + linker->data_vaddr) + rel.addend -
+					    (linker->data_vaddr + linker->pltgot_off);
+				} else if (strcmp(tmpshdr.name, ".text") == 0) {
+					rel_val = (symbol.value + linker->text_vaddr) + rel.addend -
+					    (linker->data_vaddr + linker->pltgot_off);
+				} else {
+					fprintf(stderr, "GOTOFF64 applies to unknown section target %s (fixme)\n",
+					    tmpshdr.name);
+					return false;
+				}
 			}
 			shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
 			*(int64_t *)&rel_unit[0] = rel_val;

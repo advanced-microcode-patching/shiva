@@ -347,6 +347,7 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			res = elf_symbol_by_value_lookup(&ctx->elfobj, qword, &deref_symbol);
 			if (res == true) {
 				xref->flags |= SHIVA_XREF_F_INDIRECT;
+				xref->reloc_type = R_X86_64_RELATIVE;
 				shiva_debug("XREF (Indirect via GOT): Site: %#lx Target: %s (Deref)-> %s(%#lx)\n",
 				    xref->rip_rel_site, symbol.name ? symbol.name : "<unknown>",
 				    deref_symbol.name, deref_symbol.value);
@@ -354,6 +355,15 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			}
 			break;
 		case R_X86_64_COPY:
+			xref->reloc_type = R_X86_64_COPY;
+			if (elf_symbol_by_name(&ctx->elfobj, rel.symname, &deref_symbol) == true) {
+                                xref->flags |= SHIVA_XREF_F_INDIRECT;
+                                shiva_debug("XREF (Indirect via GOT): Site: %#lx Target: %s (Deref)-> %s(%#lx)\n",
+                                    xref->rip_rel_site, symbol.name ? symbol.name : "<unknown>",
+                                    deref_symbol.name, deref_symbol.value);
+				memcpy(&xref->deref_symbol, &deref_symbol, sizeof(struct elf_symbol));
+			}
+			break;
 		case R_X86_64_GLOB_DAT:
 			if (elf_symbol_by_name(&ctx->elfobj, rel.symname, &deref_symbol) == true) {
 				xref->flags |= SHIVA_XREF_F_INDIRECT;
