@@ -385,17 +385,17 @@ install_aarch64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 }
 #elif __x86_64__
 static bool
-install_x86_64_xref_linkage(struct shiva_ctx *ctx, struct shiva_module *linker,
+install_x86_64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
     struct shiva_xref_site *e, struct elf_symbol *patch_symbol)
 {
 	uint64_t rel_addr = e->rip_rel_site + ctx->ulexec.base_vaddr;
-        uint64_t var_segment;
-        uint8_t *rel_unit;
-        struct elf_section shdr;
-        struct shiva_module_section_mapping smap;
-        shiva_error_t error;
-        bool res;
-        char *shdr_name = NULL;
+	uint64_t var_segment, rel_val;
+	uint8_t *rel_unit;
+	struct elf_section shdr;
+	struct shiva_module_section_mapping smap;
+	shiva_error_t error;
+	bool res;
+	char *shdr_name = NULL;
 
 	if (patch_symbol->shndx == SHN_COMMON) {
 		shiva_debug("shndx == SHN_COMMON for var: %s. Assuming it's a .bss\n",
@@ -433,7 +433,97 @@ install_x86_64_xref_linkage(struct shiva_ctx *ctx, struct shiva_module *linker,
 		return false;
 	}
 
+	if (e->flags & SHIVA_XREF_F_INDIRECT) {
+		int i;
+		Elf64_Rela *rela;
+		size_t relasz;
+		uint64_t rela_ptr;
+		uint64_t var_addr = patch_symbol->value + var_segment;
+
+		e->got = (uint64_t *)((uint64_t)e->got + ctx->ulexec.base_vaddr);
+
+		if (shiva_target_dynamic_get(ctx, DT_RELASZ, &relasz) == false) {
+			fprintf(stderr, "shiva_target_dynamic_get(%p, DT_RELASZ, ...) failed\n",
+			    ctx);
+			return false;
+		}
+
+		if (shiva_target_dynamic_get(ctx, DT_RELA, &rela_ptr) == false) {
+			fprintf(stderr, "shiva_target_dynamic_set(%p, DT_RELA, ...) failed\n",
+			    ctx);
+			return false;
+		}
+		rela_ptr += ctx->ulexec.base_vaddr;
+		rela = (void *)rela_ptr;
+		shiva_debug("Iterating over target ELF executable's relocation entries\n");
+		for (i = 0; i < relasz / sizeof(Elf64_Rela); i++) {
+			shiva_debug("Reloc type: %d\n", e->reloc_type);
+			switch(e->reloc_type) {
+			case R_X86_64_RELATIVE:
+				shiva_debug("Relative relocation found, r_addend: %#lx *got: %#lx\n", rela[i].r_addend, *(e->got));
+				if (rela[i].r_addend == *(e->got)) {
+					uint64_t relval = var_addr - ctx->ulexec.base_vaddr;
+
+					shiva_debug("Found RELATIVE rela.dyn relocation entry for %s\n",
+					    patch_symbol->name);
+					shiva_debug("Patching rela[%d].r_addend with %#lx\n", i, relval);
+					res = shiva_trace_write(ctx, 0, (void *)&rela[i].r_addend, (void *)&relval,
+					    8, &error);
+					 if (res == false) {
+						fprintf(stderr, "shiva_trace_write failed: %s\n",
+						    shiva_error_msg(&error));
+						return false;
+					}
+					return true;
+				}
+				break;
+			case R_X86_64_COPY:
+				fprintf(stderr, "Shiva does not yet support cross relocations for R_X86_64_COPY\n");
+				return false;
+			case R_X86_64_GLOB_DAT:
+				fprintf(stderr, "Shiva does not yet support cross relocations for R_X86_64_GLOB_DAT\n");
+				return false;
+			}
+		}
+		return true;
+	}
+	rel_val = patch_symbol->value + var_segment - rel_addr;
+	rel_unit = (uint8_t *)rel_addr + 3;
+
+	switch(e->type) {
+	case SHIVA_XREF_TYPE_IP_RELATIVE_LEA:
+		rel_unit = (uint8_t *)rel_addr + 3;
+		rel_val = (patch_symbol->value + var_segment) - rel_addr - 7;
+		res = shiva_trace_write(ctx, 0, (void *)rel_unit, (void *)&rel_val, 4, &error);
+		if (res == false) {
+			fprintf(stderr, "shiva_trace_write() failed: %s\n", shiva_error_msg(&error));
+			return false;
+		}
+		break;
+	case SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR:
+	case SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR:
+		if (e->addr_size == 8) {
+			rel_unit = (uint8_t *)rel_addr + 3;
+			rel_val = (patch_symbol->value + var_segment) - rel_addr - 7;
+			res = shiva_trace_write(ctx, 0, (void *)rel_unit, (void *)&rel_val, 4, &error);
+			if (res == false) {
+				fprintf(stderr, "shiva_trace_write() failed: %s\n", shiva_error_msg(&error));
+				return false;
+			}
+		} else if (e->addr_size == 4) {
+			rel_unit = (uint8_t *)rel_addr + 2;
+			rel_val = (patch_symbol->value + var_segment) - rel_addr - 6;
+			res = shiva_trace_write(ctx, 0, (void *)rel_unit, (void *)&rel_val, 4, &error);
+			if (res == false) {
+				fprintf(stderr, "shiva_trace_write() failed: %s\n", shiva_error_msg(&error));
+				return false;
+			}
+		}
+		break;
+	}
+	return true;
 }
+
 #endif
 /*
  * The following function takes care of installing linkage into the ELF executable
@@ -562,6 +652,37 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 			break;
 		default:
 			break;
+		}
+	}
+#elif __x86_64__
+	while (shiva_xref_iterator_next(&xrefs, &xe) == SHIVA_ITER_OK) {
+		switch(xe.type) {
+		case SHIVA_XREF_TYPE_UNKNOWN:
+			fprintf(stderr, "External linkage failure: "
+			    "Discovered unknown XREF insn-sequence at %#lx\n",
+			    xe.rip_rel_site);
+			return false;
+		case SHIVA_XREF_TYPE_IP_RELATIVE_LEA:
+		case SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR:
+		case SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR:
+			shiva_debug("Found %s XREF at %#lx for %s\n",
+			    (xe.flags & SHIVA_XREF_F_INDIRECT) ? "indirect" : "", xe.rip_rel_site, xe.symbol.name);
+			if (elf_symbol_by_name(&linker->elfobj,
+			    (xe.flags & SHIVA_XREF_F_INDIRECT) ? xe.deref_symbol.name : xe.symbol.name,
+			    &symbol) == true) {
+				shiva_debug("Found symbol for %s\n", xe.symbol.name);
+				if (symbol.type != STT_OBJECT ||
+				    symbol.bind != STB_GLOBAL)
+					continue;
+				shiva_debug("Installing xref patch at %#lx for symbol %s\n",
+				    xe.rip_rel_site, xe.symbol.name);
+				res = install_x86_64_xref_patch(ctx, linker, &xe, &symbol);
+				if (res == false) {
+					fprintf(stderr, "install_aarch64_xref_patch() for '%s' failed\n",
+					    symbol.name);
+					return false;
+				}
+			}
 		}
 	}
 #endif

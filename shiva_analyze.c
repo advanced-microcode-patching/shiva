@@ -204,8 +204,8 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 		return false;
 	}
 
-	xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_UNKNOWN;
-	
+	xref->type = SHIVA_XREF_TYPE_UNKNOWN;
+
 	uint64_t current_vaddr = ctx->disas.base + ctx->disas.c;
 	/*
 	 * TODO: Figure out why the cs_option for detail
@@ -224,23 +224,32 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 	
 		op1 = op_str;
 		op2 = strchr(op_str, ',') + 2;
-
-		if (strncmp(op1, "qword ptr [rip +", 16) == 0) {
+		
+		/*
+		 * NOTE: We start at &op1[1] (Instead of just op1) to move past
+		 * the 'q' or the 'd', as this operand could be "qword ptr"
+		 * or "dword ptr" in the string we are analyzing.
+		 */
+		if (strncmp(&op1[1], "word ptr [rip +", 15) == 0) {
 			xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR;
 			xref->rip_rel_site = current_vaddr;
 			p = strchr(op1, '+') + 2;
 			*(char *)strchr(p, ']') = '\0';
 			xref->rip_rel_disp = strtoul(p, NULL, 16);
 			found_insn = true;
-			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR\n");
-		} else if (strncmp(op2, "qword ptr [rip +", 16) == 0) {
+			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR at site: %#lx\n",
+			    xref->rip_rel_site);
+			xref->addr_size = (op1[0] == 'q') ? 8 : 4;
+		} else if (strncmp(&op2[1], "word ptr [rip +", 15) == 0) {
 			xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR;
 			xref->rip_rel_site = current_vaddr;
 			p = strchr(op2, '+') + 2;
 			*(char *)strchr(p, ']') = '\0';
 			xref->rip_rel_disp = strtoul(p, NULL, 16);
 			found_insn = true;
-			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR\n");
+			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR at site: %#lx\n",
+			    xref->rip_rel_site);
+			xref->addr_size = (op2[0] == 'q') ? 8 : 4;
 		}
 	} else if (strcmp(ctx->disas.insn->mnemonic, "lea") == 0) {
 		cs_insn *insn = ctx->disas.insn;
@@ -257,6 +266,7 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			p = strchr(op2, '+') + 2;
 			*(char *)strchr(p, ']') = '\0';
 			xref->rip_rel_disp = strtoul(p, NULL, 16);
+			xref->addr_size = 8;
 			found_insn = true;
 			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA\n");
 		}
@@ -333,6 +343,7 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			continue;
 		switch (rel.type) {
 		case R_X86_64_RELATIVE:
+
 			if (elf_read_address(&ctx->elfobj, xref->target_vaddr, &qword,
 			    ELF_QWORD) == false) {
 				fprintf(stderr, "elf_read_address() failed to read %#lx\n", xref->target_vaddr);
@@ -348,6 +359,7 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			if (res == true) {
 				xref->flags |= SHIVA_XREF_F_INDIRECT;
 				xref->reloc_type = R_X86_64_RELATIVE;
+				xref->got = (uint64_t *)xref->target_vaddr;
 				shiva_debug("XREF (Indirect via GOT): Site: %#lx Target: %s (Deref)-> %s(%#lx)\n",
 				    xref->rip_rel_site, symbol.name ? symbol.name : "<unknown>",
 				    deref_symbol.name, deref_symbol.value);
@@ -355,9 +367,10 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			}
 			break;
 		case R_X86_64_COPY:
-			xref->reloc_type = R_X86_64_COPY;
 			if (elf_symbol_by_name(&ctx->elfobj, rel.symname, &deref_symbol) == true) {
                                 xref->flags |= SHIVA_XREF_F_INDIRECT;
+				xref->reloc_type = R_X86_64_COPY;
+				xref->got = (uint64_t *)xref->target_vaddr;
                                 shiva_debug("XREF (Indirect via GOT): Site: %#lx Target: %s (Deref)-> %s(%#lx)\n",
                                     xref->rip_rel_site, symbol.name ? symbol.name : "<unknown>",
                                     deref_symbol.name, deref_symbol.value);
@@ -367,6 +380,8 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 		case R_X86_64_GLOB_DAT:
 			if (elf_symbol_by_name(&ctx->elfobj, rel.symname, &deref_symbol) == true) {
 				xref->flags |= SHIVA_XREF_F_INDIRECT;
+				xref->reloc_type = R_X86_64_GLOB_DAT;
+				xref->got = (uint64_t *)xref->target_vaddr;
 				shiva_debug("XREF (Indirect via GOT): Site: %#lx Target: %s (Deref)-> %s(%#lx)\n",
 				    xref->rip_rel_site, symbol.name ? symbol.name : "<unknown>",
 				    deref_symbol.name, deref_symbol.value);

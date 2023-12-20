@@ -231,7 +231,7 @@ struct shiva_branch_site {
 #define SHIVA_XREF_TYPE_IP_RELATIVE_LEA	1
 #define SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR 2
 #define SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR 3
-#define SHIVA_XREF_TYPE_IP_RELATIVE_UNKNOWN 3
+#define SHIVA_XREF_TYPE_UNKNOWN 4
 #endif
 
 #define SHIVA_XREF_F_INDIRECT		(1UL << 0) /* i.e. got[entry] holds address to .bss variable */
