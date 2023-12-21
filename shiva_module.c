@@ -416,7 +416,7 @@ install_x86_64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	}
 
 	switch(smap.map_attribute) {
-	case LP_SECTION_TEXTSEGMENT:
+	ase LP_SECTION_TEXTSEGMENT:
 		shiva_debug("VARSEGMENT(Text): %#lx\n", linker->text_vaddr);
 		var_segment = linker->text_vaddr;
 		break;
@@ -1601,6 +1601,9 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 				} else if (strcmp(tmpshdr.name, ".text") == 0) {
 					rel_val = (symbol.value + linker->text_vaddr) + rel.addend -
 					    (linker->data_vaddr + linker->pltgot_off);
+				} else if (strcmp(tmpshdr.name, ".bss") == 0) {
+					rel_val = (symbol.value + linker->bss_vaddr) + rel.addend -
+					    (linker->data_vaddr + linker->pltgot_off);
 				} else {
 					fprintf(stderr, "GOTOFF64 applies to unknown section target %s (fixme)\n",
 					    tmpshdr.name);
@@ -1892,13 +1895,22 @@ calculate_bss_size(struct shiva_module *linker, size_t *out)
 	ENTRY e, *ep;
 	uint64_t var_offset = 0;
 	size_t bss_size = 0;
+	char *shdr_name;
 
 	TAILQ_INIT(&linker->tailq.bss_list);
 	(void) hcreate_r(MAX_BSS_COUNT, &linker->cache.bss);
 
 	elf_symtab_iterator_init(elfobj, &symtab_iter);
 	while (elf_symtab_iterator_next(&symtab_iter, &symbol) == ELF_ITER_OK) {
-		if (symbol.shndx == SHN_COMMON) {
+		if (symbol.bind != STT_OBJECT)
+			continue;
+		shdr_name = module_symbol_shndx_str(linker, &symbol);
+		if (shdr_name == NULL) {
+			fprintf(stderr, "Failed to find section associated with symbol"
+			    " index %d\n", symbol.shndx);
+			return false;
+		}
+		if (symbol.shndx == SHN_COMMON || (strcmp(shdr_name, ".bss") == 0)) {
 			e.key = (char *)symbol.name;
 			e.data = NULL;
 
@@ -1979,12 +1991,9 @@ calculate_data_size(struct shiva_module *linker)
 	 * size of 0. We must calculate the size by finding STB_GLOBAL
 	 * symbols that have a symbol index set to SHN_COMMON.
 	 */
-	bss_len = section.size;
-	if (section.size == 0) {
-		if (calculate_bss_size(linker, &bss_len) == false) {
-			fprintf(stderr, "calculate_bss_len() failed\n");
-			return false;
-		}
+	if (calculate_bss_size(linker, &bss_len) == false) {
+		fprintf(stderr, "calculate_bss_len() failed\n");
+		return false;
 	}
 	linker->bss_size = bss_len;
 	/*

@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-int data_var = 5;
+int data_var = 7;
 
 int foo(void)
 {

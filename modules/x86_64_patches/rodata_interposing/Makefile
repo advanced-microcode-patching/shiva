@@ -3,7 +3,7 @@ SHIVA-LD_PATH="../../../tools/shiva-ld/shiva-ld"
 all: patch prog prelink
 patch:
 	# Build the module ro_patch.c with a large code model
-	gcc -mcmodel=large -fno-pic -I ../ -fno-stack-protector -c ro_patch.c
+	gcc -mcmodel=large -I ../ -fno-stack-protector -c ro_patch.c
 prog:
 	# Build the program we are patching
 	gcc -O0 test_rodata.c -o test_rodata
