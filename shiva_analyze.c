@@ -221,10 +221,10 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 
 		strncpy(op_str, insn->op_str, sizeof(op_str));
 		op_str[sizeof(op_str) - 1] = '\0';
-	
+
 		op1 = op_str;
 		op2 = strchr(op_str, ',') + 2;
-		
+
 		/*
 		 * NOTE: We start at &op1[1] (Instead of just op1) to move past
 		 * the 'q' or the 'd', as this operand could be "qword ptr"
@@ -368,12 +368,12 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			break;
 		case R_X86_64_COPY:
 			if (elf_symbol_by_name(&ctx->elfobj, rel.symname, &deref_symbol) == true) {
-                                xref->flags |= SHIVA_XREF_F_INDIRECT;
+				xref->flags |= SHIVA_XREF_F_INDIRECT;
 				xref->reloc_type = R_X86_64_COPY;
 				xref->got = (uint64_t *)xref->target_vaddr;
-                                shiva_debug("XREF (Indirect via GOT): Site: %#lx Target: %s (Deref)-> %s(%#lx)\n",
-                                    xref->rip_rel_site, symbol.name ? symbol.name : "<unknown>",
-                                    deref_symbol.name, deref_symbol.value);
+				shiva_debug("XREF (Indirect via GOT): Site: %#lx Target: %s (Deref)-> %s(%#lx)\n",
+				    xref->rip_rel_site, symbol.name ? symbol.name : "<unknown>",
+				    deref_symbol.name, deref_symbol.value);
 				memcpy(&xref->deref_symbol, &deref_symbol, sizeof(struct elf_symbol));
 			}
 			break;

@@ -33,7 +33,11 @@ shiva_post_linker(void)
 {
 	static struct shiva_module_delayed_reloc *delay_rel;
 	static uint64_t base;
+	static uint64_t dl_fini_addr;
 
+#ifdef __x86_64__
+	__asm__ __volatile__("mov %%rdx, %0" : "=g"(dl_fini_addr));
+#endif
 	TAILQ_FOREACH(delay_rel, &ctx_global->module.runtime->tailq.delayed_reloc_list, _linkage) {
 		printf("Passing so_path: %s\n", delay_rel->so_path);
 		if (shiva_maps_get_so_base(ctx_global, delay_rel->so_path, &base) == false) {
@@ -68,8 +72,10 @@ shiva_post_linker(void)
 		exit(EXIT_FAILURE);
 	}
 #ifdef __x86_64__
+	__asm__ __volatile__("mov %0, %%rdx" :: "g"(dl_fini_addr));
 	__asm__ __volatile__("mov %0, %%r12" :: "r"(ctx_global->ulexec.entry_point));
-	TRANSFER_TO_X86_64_START(ctx_global->ulexec.entry_point);
+	__asm__ __volatile__("jmp *%r12");
+	//TRANSFER_TO_X86_64_START(ctx_global->ulexec.entry_point);
 #elif __aarch64__
 	__asm__ __volatile__ ("mov x21, %0" :: "r"(ctx_global->ulexec.entry_point));
 #endif

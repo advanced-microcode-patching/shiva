@@ -416,7 +416,7 @@ install_x86_64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 	}
 
 	switch(smap.map_attribute) {
-	ase LP_SECTION_TEXTSEGMENT:
+	case LP_SECTION_TEXTSEGMENT:
 		shiva_debug("VARSEGMENT(Text): %#lx\n", linker->text_vaddr);
 		var_segment = linker->text_vaddr;
 		break;
