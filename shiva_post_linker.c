@@ -36,6 +36,16 @@ shiva_post_linker(void)
 	static uint64_t dl_fini_addr;
 
 #ifdef __x86_64__
+	/*
+	 * On x86_64 the ld-linux.so:_dl_start_user() function has the pointer
+	 * to dl_fini() stored in rdx, just before jumping to _start().  The
+	 * _start() function that moves rdx into r9 as it's 6th argument to
+	 * __libc_start_main.
+	 *
+	 * Since shiva_post_linker() is invoked before _start() via an AT_ENTRY
+	 * hook, we must preserve and restore rdx before jumping to _start() at
+	 * the end of this function.
+	 */
 	__asm__ __volatile__("mov %%rdx, %0" : "=g"(dl_fini_addr));
 #endif
 	TAILQ_FOREACH(delay_rel, &ctx_global->module.runtime->tailq.delayed_reloc_list, _linkage) {
@@ -72,10 +82,14 @@ shiva_post_linker(void)
 		exit(EXIT_FAILURE);
 	}
 #ifdef __x86_64__
+	/*
+	 * For x86_64:
+	 * Restore rdx with address of dl_fini_addr
+	 * Copy the entry point address into r12 and jmp
+	 */
 	__asm__ __volatile__("mov %0, %%rdx" :: "g"(dl_fini_addr));
 	__asm__ __volatile__("mov %0, %%r12" :: "r"(ctx_global->ulexec.entry_point));
 	__asm__ __volatile__("jmp *%r12");
-	//TRANSFER_TO_X86_64_START(ctx_global->ulexec.entry_point);
 #elif __aarch64__
 	__asm__ __volatile__ ("mov x21, %0" :: "r"(ctx_global->ulexec.entry_point));
 #endif

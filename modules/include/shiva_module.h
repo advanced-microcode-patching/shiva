@@ -17,6 +17,32 @@
 	static uint64_t __shiva_splice_extend_##fn_name __attribute__((section(".shiva.transform"))) = extend; \
 	void * __shiva_splice_fn_name_##fn_name(void)
 
+#ifdef __x86_64__
+
+#define SHIVA_T_PAIR_RAX(var) register int64_t var asm("rax");
+#define SHIVA_T_PAIR_RBX(var) register int64_t var asm("rbx");
+#define SHIVA_T_PAIR_RDI(var) register int64_t var asm("rdi");
+#define SHIVA_T_PAIR_RSI(var) register int64_t var asm("rsi");
+#define SHIVA_T_PAIR_RCX(var) register int64_t var asm("rcx");
+#define SHIVA_T_PAIR_RDX(var) register int64_t var asm("rdx");
+#define SHIVA_T_PAIR_R8(var)  register int64_t var asm("r8");
+#define SHIVA_T_PAIR_R9(var)  register int64_t var asm("r9");
+#define SHIVA_T_PAIR_R10(var) register int64_t var asm("r10");
+#define SHIVA_T_PAIR_R11(var) register int64_t var asm("r11");
+#define SHIVA_T_PAIR_R12(var) register int64_t var asm("r12");
+
+#define SHIVA_T_LEA_BP_16(var)	register int64_t var;	\
+				asm volatile ("lea 16(%%rbp), %0" : "=g"(var));
+#define SHIVA_T_LEA_BP_24(var)  register int64_t var;   \
+                                asm volatile ("lea 24(%%rbp), %0" : "=g"(var));
+#define SHIVA_T_LEA_BP_32(var)  register int64_t var;   \
+                                asm volatile ("lea 32(%%rbp), %0" : "=g"(var));
+
+
+
+
+#elif __aarch64__
+
 #define SHIVA_T_PAIR_X0(var) register int64_t var asm("x0");
 #define SHIVA_T_PAIR_X1(var) register int64_t var asm("x1");
 #define SHIVA_T_PAIR_X2(var) register int64_t var asm("x2");
@@ -206,6 +232,13 @@
 #define SHIVA_T_PUSH64_X28       asm volatile ("str x28, [sp, #-8]!");
 #define SHIVA_T_POP64_X28        asm volatile ("ldr x28, [sp], #8");
 
+#endif
+
+/*
+ * Macros for various shiva helpers, namely the CALL_EXTERNAL
+ * helper which allows a patched function, say 'foo()' to call
+ * the original version of itself: foo(), from the original binary.
+ */
 #define SHIVA_HELPER_CALL_EXTERNAL_ID "__shiva_helper_orig_func_"
 
 #define SHIVA_HELPER_CALL_EXTERNAL(name)	\

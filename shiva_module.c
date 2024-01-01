@@ -1150,6 +1150,83 @@ is_text_encoding_reloc(struct shiva_module *linker, uint64_t r_offset)
 }
 
 bool
+update_relocs_with_transforms(struct shiva_module *linker,
+    struct elf_relocation *rel, struct shiva_transform *transform,
+    char *shdrname)
+{
+
+	if (module_has_transforms(linker) == true &&
+	    strcmp(shdrname, ".text") == 0 && transform != NULL) {
+		bool text_on_text_reloc = false;
+		bool text_encoding = false;
+		/*
+		 * We are relocating code that has been spliced into a target
+		 * function, via transformation.
+		 * Relocation offset equals offset of function we are transforming (segment_offset)
+		 * plus the splice offset (transform->offset) plus the original relocation offset.
+		 */
+		shiva_debug("Transform splice relocation: segment_offset %#lx transform_offset %#lx\n",
+		    transform->segment_offset, transform->offset);
+		shiva_debug("Rel type: %d\n", rel->type);
+#if __aarch64__
+		if (rel->type == R_AARCH64_ADR_PREL_PG_HI21 ||
+		    rel->type == R_AARCH64_ADD_ABS_LO12_NC) {
+			shiva_debug("Testing rel.symname: %s with .text\n",
+			    rel->symname);
+			if (strcmp(rel->symname, ".text") == 0) {
+				shiva_debug("Found text on text relocation\n");
+				shiva_debug("Increasing r_addend by %zu bytes\n",
+				    transform->splice.copy_len3 +
+				    transform->segment_offset + transform->offset);
+				rel->addend += transform->segment_offset + transform->offset;
+				rel->addend += transform->splice.copy_len3;
+			}
+		}
+#endif
+		/*
+		 * XXX In the future maybe just check to see if this is
+		 * an R_AARCH64_ABS64 relocation.
+		 */
+#if __aarch64__
+		if (is_text_encoding_reloc(linker, rel->offset) == true) {
+			shiva_debug("Text encoding is true! Increasing r_offset by %zu\n",
+			    transform->splice.copy_len3);
+			/*
+			 * See transformation specification on handling
+			 * relocations that apply to .text encoded data.
+		 	 */
+			shiva_debug("Increasing r_offset(%#lx) to %#lx\n", rel->offset,
+			    rel->offset + transform->splice.copy_len3);
+			rel->offset += transform->splice.copy_len3;
+			text_encoding = true;
+		}
+#endif
+		/*
+		 * In the event of relocating a spliced function we must always increase
+		 * the rel.offset to match the new location.
+		 */
+		rel->offset = transform->segment_offset + transform->offset + rel->offset;
+	} else {
+		shiva_debug("Transforms exist. rel_offset = rel->offset(%#lx)"
+		    " + linker->tf_text_offset(%#lx) = %#lx\n", rel->offset,
+		    linker->tf_text_offset, rel->offset + linker->tf_text_offset);
+
+		/*
+		 * We are relocating code that exists after all splices in our modules
+		 * process image.
+		 * We update rel.offset with the updated .text offset
+		 * based on transformations.
+		 */
+		rel->offset = linker->tf_text_offset + rel->offset;
+		if (strcmp(rel->symname, ".text") == 0) {
+			rel->addend += linker->tf_text_offset;
+		}
+	}
+	return true;
+}
+
+
+bool
 apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
     struct shiva_transform *transform)
 {
@@ -1182,72 +1259,16 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
 	shiva_debug("linker->data_vaddr: %#lx\n", linker->data_vaddr);
 	shiva_debug("smap.offset: %#lx\n", smap.offset);
 
-#if defined (__aarch64__)
 	if (module_has_transforms(linker) == true &&
-	    strcmp(shdrname, ".text") == 0) {
-		if (transform != NULL) {
-			bool text_on_text_reloc = false;
-			bool text_encoding = false;
-			/*
-			 * We are relocating code that has been spliced into a target
-			 * function, via transformation.
-			 * Relocation offset equals offset of function we are transforming (segment_offset)
-			 * plus the splice offset (transform->offset) plus the original relocation offset.
-			 */
-			shiva_debug("Transform splice relocation: segment_offset %#lx transform_offset %#lx\n",
-			    transform->segment_offset, transform->offset);
-			shiva_debug("Rel type: %d\n", rel.type);
-			if (rel.type == R_AARCH64_ADR_PREL_PG_HI21 ||
-			    rel.type == R_AARCH64_ADD_ABS_LO12_NC) {
-				shiva_debug("Testing rel.symname: %s with .text\n",
-				    rel.symname);
-				if (strcmp(rel.symname, ".text") == 0) {
-					shiva_debug("Found text on text relocation\n");
-					shiva_debug("Increasing r_addend by %zu bytes\n",
-					    transform->splice.copy_len3 +
-					    transform->segment_offset + transform->offset);
-					rel.addend += transform->segment_offset + transform->offset;
-					rel.addend += transform->splice.copy_len3;
-				}
-			}
-			/*
-			 * XXX In the future maybe just check to see if this is
-			 * an R_AARCH64_ABS64 relocation.
-			 */
-			if (is_text_encoding_reloc(linker, rel.offset) == true) {
-				shiva_debug("Text encoding is true! Increasing r_offset by %zu\n",
-				    transform->splice.copy_len3);
-				/*
-				 * See transformation specification on handling
-				 * relocations that apply to .text encoded data.
-				 */
-				shiva_debug("Increasing r_offset(%#lx) to %#lx\n", rel.offset,
-				    rel.offset + transform->splice.copy_len3);
-				rel.offset += transform->splice.copy_len3;
-				text_encoding = true;
-			}
-			/*
-			 * In the event of relocating a spliced function we must always increase
-			 * the rel.offset to match the new location.
-			 */
-			rel.offset = transform->segment_offset + transform->offset + rel.offset;
-		} else {
-			shiva_debug("Transforms exist. rel_offset = rel.offset(%#lx)"
-			    " + linker->tf_text_offset(%#lx) = %#lx\n", rel.offset,
-			    linker->tf_text_offset, rel.offset + linker->tf_text_offset);
-
-			/*
-			 * We are relocating code that exists after all splices in our modules
-			 * process image.
-			 * We update rel.offset with the updated .text offset
-			 * based on transformations.
-			 */
-			rel.offset = linker->tf_text_offset + rel.offset;
-			if (strcmp(rel.symname, ".text") == 0) {
-				rel.addend += linker->tf_text_offset;
-			}
+	    strcmp(shdrname, ".text") == 0 && transform != NULL) {
+		if (update_relocs_with_transforms(linker, &rel,
+		    transform, shdrname) == false) {
+			fprintf(stderr, "Failed to apply transform offsets "
+			    "to the relocation records\n");
+			return false;
 		}
 	}
+#if defined (__aarch64__)
 	switch(rel.type) {
 		/* R_AARCH64_ABS64: computation S + A */
 		/* This relocation can reference both a symbol and a section
