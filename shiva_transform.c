@@ -10,6 +10,11 @@
 #define ARM_INSN_LEN 4
 #define AARCH64_NOP 0xd503201f
 
+#define X86_64_ENDBR64 0xfa1e0ff3
+#define X86_64_UD2 0x00000b0f
+#define X86_64_NOP 0x90
+#define X86_64_IMM_CALL 0xe8
+
 /*
  * Example of function transformation on foo() in some target executable.
  *
@@ -90,6 +95,17 @@ shiva_tf_splice_function(struct shiva_module *linker, struct shiva_transform *tr
 	*(uint32_t *)&transform->ptr[0] = AARCH64_NOP;
 	*(uint32_t *)&transform->ptr[transform->new_len - 4] = AARCH64_NOP;
 	*(uint32_t *)&transform->ptr[transform->new_len - 8] = AARCH64_NOP;
+#elif __x86_64__
+	if (*(uint32_t *)&transform->ptr[0] == X86_64_ENDBR64) {
+		transform->ptr[0] = X86_64_NOP;
+		transform->ptr[1] = X86_64_NOP;
+		transform->ptr[2] = X86_64_NOP;
+		transform->ptr[3] = X86_64_NOP;
+	}
+	if (*(uint16_t *)&transform->ptr[transform->new_len - 2] == X86_64_UD2) {
+		transform->ptr[transform->new_len - 2] = X86_64_NOP;
+		transform->ptr[transform->new_len - 1] = X86_64_NOP;
+	}
 #endif
 	memcpy(dest + transform->offset, transform->ptr, copy_len);
 
@@ -257,12 +273,40 @@ shiva_tf_relink_xref_aarch64(struct shiva_module *linker, struct shiva_transform
 #endif
 
 #ifdef __x86_64__
+
 static bool
 shiva_tf_relink_global_branch_x86_64(struct shiva_module *linker, struct shiva_transform *transform,
     struct shiva_branch_site *branch)
 {
 
-	return true;
+	/*
+	 * Offset to branch instruction (Within our new transformed version of the function)
+	*/
+        size_t br_site_off = branch->branch_site - transform->target_symbol.value;
+
+	shiva_debug("br_site_off = %lx - %lx = %#lx\n", branch->branch_site, transform->target_symbol.value,
+            br_site_off);
+        /*
+         * mem points to the branch instruction within the new location of the
+         * spliced/transformed function.
+         */
+        if (br_site_off > transform->offset + transform->old_len)
+                br_site_off += transform->new_len - transform->old_len;
+
+	uint8_t *mem = &linker->text_mem[transform->segment_offset + br_site_off];
+	size_t br_site_addr = linker->text_vaddr + transform->segment_offset + br_site_off;
+
+	if (branch->branch_type == SHIVA_BRANCH_CALL &&
+	    branch->o_insn[0] == X86_64_IMM_CALL) {
+		uint64_t new_offset, target_vaddr;
+
+		shiva_debug("NEW OFFSET: %lx - %#lx - 5\n", branch->target_vaddr + linker->target_base, br_site_addr);
+		new_offset = (branch->target_vaddr + linker->target_base) - br_site_addr - 5;
+		shiva_debug("NEW OFFSET VALUE: %#lx\n", new_offset);
+		*(uint32_t *)&mem[1] = new_offset;
+		return true;
+	}
+	return false;
 }
 #elif __aarch64__
 static bool
@@ -318,11 +362,65 @@ shiva_tf_relink_global_branch_aarch64(struct shiva_module *linker, struct shiva_
 #endif
 
 #ifdef __x86_64__
+
+/*
+ * Taken from ftrace.c https://github.com/elfmaster/ftrace
+ */
+struct branch_instr {
+	char *mnemonic;
+	uint8_t opcode;
+};
+
+const struct branch_instr branch_table[64] = {
+			{"jo",	0x70},
+			{"jno", 0x71},	{"jb", 0x72},  {"jnae", 0x72},	{"jc", 0x72},  {"jnb", 0x73},
+			{"jae", 0x73},	{"jnc", 0x73}, {"jz", 0x74},	{"je", 0x74},  {"jnz", 0x75},
+			{"jne", 0x75},	{"jbe", 0x76}, {"jna", 0x76},	{"jnbe", 0x77}, {"ja", 0x77},
+			{"js",	0x78},	{"jns", 0x79}, {"jp", 0x7a},	{"jpe", 0x7a}, {"jnp", 0x7b},
+			{"jpo", 0x7b},	{"jl", 0x7c},  {"jnge", 0x7c},	{"jnl", 0x7d}, {"jge", 0x7d},
+			{"jle", 0x7e},	{"jng", 0x7e}, {"jnle", 0x7f},	{"jg", 0x7f},  {"jmp", 0xeb},
+			{"jmp", 0xe9},	{"jmpf", 0xea}, {NULL, 0}
+		};
+
+
+static struct branch_instr *
+shiva_tf_search_local_branch_opcode(uint8_t byte)
+{
+	struct branch_instr *p;
+
+	for (p = branch_table; p->mnemonic != NULL; p++) {
+		if (p->opcode == byte)
+			return p;
+	}
+	return NULL;
+}
+
 static bool
 shiva_tf_relink_local_branch_x86_64(struct shiva_module *linker, struct shiva_transform *transform,
     struct shiva_branch_site *branch, ssize_t delta)
 {
+	/*
+	 * Offset to branch instruction
+	 */
+	size_t br_off = branch->branch_site - transform->target_symbol.value;
+	shiva_debug("br_off = %lx - %lx = %#lx\n", branch->branch_site, transform->target_symbol.value,
+	    br_off);
+	/*
+	 * mem points to the branch instruction within the new location of the
+	 * spliced/transformed function.
+	 */
+	if (br_off > transform->offset + transform->old_len)
+		br_off += transform->new_len - transform->old_len;
+	uint8_t *mem = &linker->text_mem[transform->segment_offset + br_off];
 
+	struct branch_instr *bptr = shiva_tf_search_local_branch_opcode(branch->o_insn[0]);
+	if (bptr == NULL) {
+		fprintf(stderr, "failed to find branch opcode: %02x\n", branch->o_insn[0]);
+		return false;
+	}
+	shiva_debug("Relinking branch: %s\n", bptr->mnemonic);
+	*(uint32_t *)&mem[1] = (int32_t)delta;
+done:
 	return true;
 }
 

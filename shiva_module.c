@@ -2925,7 +2925,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			memset(tmp, 0, sizeof(tmp));
 			strcpy(tmp, SHIVA_T_SPLICE_FUNC_ID);
 			strncat(tmp, transform->name,
-			    PATH_MAX - strlen(SHIVA_T_SPLICE_EXTEND_ID));
+			    PATH_MAX - strlen(SHIVA_T_SPLICE_FUNC_ID));
 			tmp[sizeof(tmp) - 1] = '\0';
 
 			if (elf_symbol_by_name(&linker->elfobj, tmp,

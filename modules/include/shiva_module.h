@@ -15,7 +15,7 @@
 #define SHIVA_T_SPLICE_FUNCTION(fn_name, insert, extend)	\
 	static uint64_t __shiva_splice_insert_##fn_name __attribute__((section(".shiva.transform"))) = insert; \
 	static uint64_t __shiva_splice_extend_##fn_name __attribute__((section(".shiva.transform"))) = extend; \
-	void * __shiva_splice_fn_name_##fn_name(void)
+	void * __attribute__((naked)) __shiva_splice_fn_name_##fn_name(void)
 
 #ifdef __x86_64__
 
