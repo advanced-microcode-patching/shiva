@@ -49,7 +49,6 @@ shiva_post_linker(void)
 	__asm__ __volatile__("mov %%rdx, %0" : "=g"(dl_fini_addr));
 #endif
 	TAILQ_FOREACH(delay_rel, &ctx_global->module.runtime->tailq.delayed_reloc_list, _linkage) {
-		printf("Passing so_path: %s\n", delay_rel->so_path);
 		if (shiva_maps_get_so_base(ctx_global, delay_rel->so_path, &base) == false) {
 			fprintf(stderr, "Failed to locate base address of loaded module '%s'\n",
 			    delay_rel->so_path);

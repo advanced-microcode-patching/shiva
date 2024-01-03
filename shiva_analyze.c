@@ -293,9 +293,7 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			return false;
 		}
 		xref->rip_rel_o_insn[i] = (uint8_t)b;
-		fprintf(stdout, "%02x ", (uint8_t)b);
 	}
-	fprintf(stdout, "\n");
 	memset(&symbol, 0, sizeof(symbol));
 
 	/*

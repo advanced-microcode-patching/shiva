@@ -298,11 +298,9 @@ shiva_tf_relink_global_branch_x86_64(struct shiva_module *linker, struct shiva_t
 
 	if (branch->branch_type == SHIVA_BRANCH_CALL &&
 	    branch->o_insn[0] == X86_64_IMM_CALL) {
-		uint64_t new_offset, target_vaddr;
+		uint64_t new_offset;
 
-		shiva_debug("NEW OFFSET: %lx - %#lx - 5\n", branch->target_vaddr + linker->target_base, br_site_addr);
 		new_offset = (branch->target_vaddr + linker->target_base) - br_site_addr - 5;
-		shiva_debug("NEW OFFSET VALUE: %#lx\n", new_offset);
 		*(uint32_t *)&mem[1] = new_offset;
 		return true;
 	}
@@ -386,11 +384,11 @@ const struct branch_instr branch_table[64] = {
 static struct branch_instr *
 shiva_tf_search_local_branch_opcode(uint8_t byte)
 {
-	struct branch_instr *p;
+	const struct branch_instr *p;
 
 	for (p = branch_table; p->mnemonic != NULL; p++) {
 		if (p->opcode == byte)
-			return p;
+			return (struct branch_instr *)p;
 	}
 	return NULL;
 }

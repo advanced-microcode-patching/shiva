@@ -1,7 +1,7 @@
 BUILD_DIR = './build'
 INTERP_PATH = $(PWD)/build/shiva
 PATCH_PATH = "modules/aarch64_patches"
-GCC_OPTS= -fPIC -ggdb -I ./ -DDEBUG -c 
+GCC_OPTS= -fPIC -ggdb -I ./  -c 
 
 OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \
