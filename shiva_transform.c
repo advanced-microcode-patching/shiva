@@ -216,6 +216,47 @@ static bool
 shiva_tf_relink_xref_x86_64(struct shiva_module *linker, struct shiva_transform *transform,
     struct shiva_xref_site *xref)
 {
+	bool res;
+	uint8_t *rel_unit;
+	uint64_t rel_addr, insn_offset;
+	uint32_t rel_val;
+
+	assert(xref->rip_rel_site >= transform->target_symbol.value &&
+	    xref->rip_rel_site < transform->target_symbol.value + transform->target_symbol.size);
+	insn_offset = xref->rip_rel_site - transform->target_symbol.value;
+	if (insn_offset > transform->offset + transform->old_len)
+		insn_offset += transform->new_len - transform->old_len;
+	rel_addr = linker->text_vaddr + transform->segment_offset + insn_offset;
+	rel_val = xref->target_vaddr + linker->target_base - rel_addr - xref->insn_len;
+	rel_unit = (uint8_t *)rel_addr;
+
+	/*
+	 * NOTE: All IP relative LEA's are 7 bytes.
+	 * Some IP relative mov's can be 7 bytes or 6
+	 * bytes depending on the modrm.
+	 */
+	switch(xref->type) {
+	case SHIVA_XREF_TYPE_IP_RELATIVE_LEA:
+		shiva_debug("Patching LEA with offset: %#lx\n", rel_val);
+		*(uint32_t *)&rel_unit[3] = rel_val;
+		break;
+	case SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR:
+	case SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR:
+		if (xref->insn_len == 6) {
+			*(uint32_t *)&rel_unit[2] = rel_val;
+		} else if (xref->insn_len == 7) {
+			*(uint32_t *)&rel_unit[3] = rel_val;
+		} else {
+			fprintf(stderr, "invalid insn len for ip relative mov. len val: %u\n",
+			    xref->insn_len);
+			return false;
+		}
+		shiva_debug("Patching MOV with offset: %#lx\n", rel_val);
+		break;
+	default:
+		break;
+	}
+	return true;
 
 }
 #elif __aarch64__
@@ -233,8 +274,6 @@ shiva_tf_relink_xref_aarch64(struct shiva_module *linker, struct shiva_transform
 	uint64_t rel_addr, adrp_off;
 	uint8_t *rel_unit;
 
-	shiva_debug("ctx_global: %p\n", ctx_global);
-
 	assert(xref->adrp_site >= transform->target_symbol.value &&
 	    xref->adrp_site < transform->target_symbol.value + transform->target_symbol.size);
 
@@ -245,6 +284,7 @@ shiva_tf_relink_xref_aarch64(struct shiva_module *linker, struct shiva_transform
 	 */
 	adrp_off = xref->adrp_site - transform->target_symbol.value;
 	shiva_debug("Adrp offset: %#lx\n", adrp_off);
+
 	if (adrp_off > transform->offset + transform->old_len)
 		adrp_off += transform->new_len - transform->old_len;
 	rel_addr = linker->text_vaddr + transform->segment_offset + adrp_off;
@@ -252,6 +292,7 @@ shiva_tf_relink_xref_aarch64(struct shiva_module *linker, struct shiva_transform
 	shiva_debug("Symbol name: %s\n", xref->symbol.name);
 	shiva_debug("Source sym: %s\n", xref->current_function.name);
 	shiva_debug("Target symbol addr: %#lx\n", linker->target_base + xref->symbol.value);
+
 	xoffset = rel_val = (int32_t)
 	    (ELF_PAGESTART(linker->target_base + xref->symbol.value) - ELF_PAGESTART(rel_addr));
 	shiva_debug("rel_val = %#lx - %#lx = %#lx\n", ELF_PAGESTART(linker->target_base + xref->symbol.value),
