@@ -633,7 +633,8 @@ shiva_analyze_call(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 					symbol.name = shiva_xfmtstrdup("%s@plt", plt_entry.symname);
 					symbol.type = STT_FUNC;
 					symbol.bind = STB_GLOBAL;
-					symbol.size = 0;
+					symbol.size = 16;
+					symbol.value = call_addr; /* PLTCALL types get their symbol value set to addr of PLT entry */
 					tmp->branch_flags |= SHIVA_BRANCH_F_PLTCALL;
 				}
 			}

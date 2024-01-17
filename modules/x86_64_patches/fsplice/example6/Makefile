@@ -1,7 +1,7 @@
 INTERP_PATH="/lib/shiva"
 SHIVA-LD_PATH="../../../../tools/shiva-ld/shiva-ld"
 all:
-	gcc  -I ../../../include -fno-stack-protector -fomit-frame-pointer -fno-pic -mcmodel=large -c fsplice_patch.c
+	gcc  -I ../../../include -fno-stack-protector -fomit-frame-pointer -mcmodel=large -c fsplice_patch.c
 	gcc -O0 fsplice_host.c -o fsplice_host
 	$(SHIVA-LD_PATH) -e fsplice_host -p fsplice_patch.o -i /lib/shiva -s /opt/shiva/modules -o fsplice_host.patched
 install:

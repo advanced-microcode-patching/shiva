@@ -191,6 +191,39 @@ install_x86_64_call_imm_patch(struct shiva_ctx *ctx, struct shiva_module *linker
 }
 #endif
 
+#ifdef __x86_64__
+static bool
+install_x86_64_trampoline(struct shiva_ctx *ctx, struct shiva_module *linker,
+    struct shiva_branch_site *e, struct elf_symbol *patch_symbol,
+    struct shiva_transform *transform)
+{
+	uint64_t target_vaddr = patch_symbol->value + linker->text_vaddr;
+	uint8_t trampcode[] = "\xe9\x00\x00\x00\x00";
+
+	/*
+	 * In the event of a transform, we are re-linking the executable to a function
+	 * that has been transformed with a splice, which requires that we don't use
+	 * the patch_symbol.value (Since it will have been moved), instead we use the
+	 * transform->segment_offset.
+	 */
+	target_vaddr = (transform == NULL) ? patch_symbol->value + linker->text_vaddr :
+	    linker->text_vaddr + transform->segment_offset;
+
+	shiva_debug("target_vaddr is %#lx\n", target_vaddr);
+	if (transform == NULL) {
+		if (module_has_transforms(linker) == true) {
+			shiva_debug("Increasing target vaddr by %zu bytes\n", linker->tf_text_offset);
+			target_vaddr += linker->tf_text_offset;
+		} else {
+			shiva_debug("Module has no transforms\n");
+		}
+	}
+	uint32_t tramp_offset = target_vaddr - (e->branch_site + linker->target_base) - 5;
+	shiva_debug("Trampoline offset is %x\n", tramp_offset);
+	*(uint32_t *)&trampcode[1] = tramp_offset;
+	return true;
+}
+#endif
 /*
  * XXX does not properly handle xrefs from target executable
  * to fully transformed function.
@@ -525,6 +558,33 @@ install_x86_64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 }
 
 #endif
+
+static bool
+install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
+    struct shiva_branch_site *b, struct elf_symbol *patch_symbol)
+{
+	uint64_t target_vaddr = patch_symbol->value + linker->text_vaddr;
+	uint8_t trampcode[] = "\xe9\x00\x00\x00\x00";
+	shiva_error_t trace_error;
+
+        /*
+         * In the event of a transform, we are re-linking the executable to a function
+         * that has been transformed with a splice, which requires that we don't use
+         * the patch_symbol.value (Since it will have been moved), instead we use the
+         * transform->segment_offset.
+         */
+        target_vaddr = patch_symbol->value + linker->text_vaddr;
+        uint32_t tramp_offset = target_vaddr - (b->branch_site + linker->target_base) - 5;
+        shiva_debug("Trampoline offset is %x\n", tramp_offset);
+	if (shiva_trace_write(ctx, 0, (void *)(uint8_t *)&trampcode[1], &tramp_offset,
+	    sizeof(uint32_t), &trace_error) == false) {
+		fprintf(stderr, "shiva_trace_write() failed to write at %p\n", &trampcode[1]);
+		return false;
+	}
+        *(uint32_t *)&trampcode[1] = tramp_offset;
+        return true;
+}
+
 /*
  * The following function takes care of installing linkage into the ELF executable
  * itself so that it is properly linked to the patch code and data that lives
@@ -543,11 +603,33 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 	struct elf_symbol symbol;
 	bool res;
 	const char *symname = NULL;
+	char tmp_buf[PATH_MAX];
 
 	shiva_callsite_iterator_init(ctx, &callsites);
 	while (shiva_callsite_iterator_next(&callsites, &be) == SHIVA_ITER_OK) {
-		if (be.branch_flags & SHIVA_BRANCH_F_PLTCALL) // TODO handle this scenario instead which
+		if (be.branch_flags & SHIVA_BRANCH_F_PLTCALL) {
+			char *p = strchr(be.symbol.name, '@');
+
+			strncpy(tmp_buf, be.symbol.name, p - be.symbol.name);
+			tmp_buf[PATH_MAX - 1] = '\0';
+			symname = tmp_buf;
+			/*
+			 * NOTE: Use elf_plt functions here instead perhaps?
+			 */
+			shiva_debug("Looking up PLT symbol: %s\n", symname);
+			if (elf_symbol_by_name(&linker->elfobj, symname, &symbol) == true) {
+				if (symbol.type != STT_FUNC || symbol.bind != STB_GLOBAL)
+					continue;
+				shiva_debug("Calling install_plt_redirect to relink %s to patch at %#lx\n",
+				    be.symbol.name, symbol.value + linker->text_vaddr);
+				res = install_plt_redirect(ctx, linker, &be, &symbol);
+				if (res == false) {
+					fprintf(stderr, "install_plt_redirect() failed\n");
+					return false;
+				}
+			}
 			continue;
+		}
 		/*
 		 * The callsites were found early on in shiva_analyze.c and
 		 * contain every branch instruction within the target ELF.
@@ -588,6 +670,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 				}
 			}
 		}
+		shiva_debug("Looking up symname: %s\n", symname);
 		if (elf_symbol_by_name(&linker->elfobj, symname,
 		    &symbol) == true) {
 			if (symbol.type != STT_FUNC ||
@@ -611,6 +694,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 				    "install_x86_64_call_imm_patch() failed\n");
 				return false;
 			}
+
 #endif
 		}
 		tfptr = NULL;
@@ -1194,7 +1278,7 @@ update_relocs_with_transforms(struct shiva_module *linker,
 			/*
 			 * See transformation specification on handling
 			 * relocations that apply to .text encoded data.
-		 	 */
+			 */
 			shiva_debug("Increasing r_offset(%#lx) to %#lx\n", rel->offset,
 			    rel->offset + transform->splice.copy_len3);
 			rel->offset += transform->splice.copy_len3;
@@ -2972,6 +3056,7 @@ fail:
 	free(transform);
 	return false;
 }
+
 /*
  * Our linker has two modes:
  * 1. Link Shiva modules, who's init function is always STT_FUNC:shakti_main()
