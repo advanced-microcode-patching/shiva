@@ -567,22 +567,26 @@ install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
 	uint8_t trampcode[] = "\xe9\x00\x00\x00\x00";
 	shiva_error_t trace_error;
 
-        /*
-         * In the event of a transform, we are re-linking the executable to a function
-         * that has been transformed with a splice, which requires that we don't use
-         * the patch_symbol.value (Since it will have been moved), instead we use the
-         * transform->segment_offset.
-         */
-        target_vaddr = patch_symbol->value + linker->text_vaddr;
-        uint32_t tramp_offset = target_vaddr - (b->branch_site + linker->target_base) - 5;
-        shiva_debug("Trampoline offset is %x\n", tramp_offset);
-	if (shiva_trace_write(ctx, 0, (void *)(uint8_t *)&trampcode[1], &tramp_offset,
-	    sizeof(uint32_t), &trace_error) == false) {
+	/*
+	e * In the event of a transform, we are re-linking the executable to a function
+	 * that has been transformed with a splice, which requires that we don't use
+	 * the patch_symbol.value (Since it will have been moved), instead we use the
+	 * transform->segment_offset.
+	 */
+	target_vaddr = patch_symbol->value + linker->text_vaddr;
+	shiva_debug("Target_vaddr: %#lx\n", target_vaddr);
+	shiva_debug("Branch site: %#lx\n", b->branch_site + linker->target_base);
+	uint32_t tramp_offset = target_vaddr - (b->symbol.value + linker->target_base) - 5;
+	*(uint32_t *)&trampcode[1] = tramp_offset;
+	uint64_t plt_addr = b->symbol.value + ctx->ulexec.base_vaddr;
+	shiva_debug("Trampcode: %02x %02x %02x %02x %02x\n", trampcode[0], trampcode[1], trampcode[2], trampcode[3], trampcode[4]);
+	shiva_debug("Installing trampoline to PLT address: %#lx\n", plt_addr);
+	if (shiva_trace_write(ctx, 0, (void *)plt_addr, trampcode,
+	    5, &trace_error) == false) {
 		fprintf(stderr, "shiva_trace_write() failed to write at %p\n", &trampcode[1]);
 		return false;
 	}
-        *(uint32_t *)&trampcode[1] = tramp_offset;
-        return true;
+	return true;
 }
 
 /*
@@ -610,8 +614,9 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 		if (be.branch_flags & SHIVA_BRANCH_F_PLTCALL) {
 			char *p = strchr(be.symbol.name, '@');
 
+			shiva_debug("PLT call symname: %s\n", be.symbol.name);
 			strncpy(tmp_buf, be.symbol.name, p - be.symbol.name);
-			tmp_buf[PATH_MAX - 1] = '\0';
+			tmp_buf[p - be.symbol.name] = '\0';
 			symname = tmp_buf;
 			/*
 			 * NOTE: Use elf_plt functions here instead perhaps?
@@ -621,7 +626,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 				if (symbol.type != STT_FUNC || symbol.bind != STB_GLOBAL)
 					continue;
 				shiva_debug("Calling install_plt_redirect to relink %s to patch at %#lx\n",
-				    be.symbol.name, symbol.value + linker->text_vaddr);
+				    symname, symbol.value + linker->text_vaddr);
 				res = install_plt_redirect(ctx, linker, &be, &symbol);
 				if (res == false) {
 					fprintf(stderr, "install_plt_redirect() failed\n");
