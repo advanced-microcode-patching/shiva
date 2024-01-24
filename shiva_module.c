@@ -919,6 +919,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 			    elf_pathname(linker->target_elfobj));
 			if (elf_symbol_by_name(linker->target_elfobj, current->symname,
 			    &symbol) == true) {
+				shiva_debug("Found symbol '%s' value %d\n", symbol.name, symbol.value);
 				if (symbol.value == 0 && symbol.type == STT_FUNC) {
 					if (elf_plt_by_name(linker->target_elfobj,
 					    symbol.name, &plt_entry) == true) {
@@ -964,7 +965,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 						    symbol.name);
 						return false;
 					}
-				} else if (symbol.value > 0 && symbol.type == STT_FUNC) {
+				} else if (symbol.value > 0 && (symbol.type == STT_FUNC ||symbol.type == STT_OBJECT)) {
 					shiva_debug("resolved symbol in target: %s\n", elf_pathname(linker->target_elfobj));
 					*(uint64_t *)GOT = symbol.value + linker->target_base;
 				}
@@ -1662,6 +1663,7 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 		rel_unit = &linker->text_mem[smap.offset + rel.offset];
 		rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 		rel_val = got_entry.gotoff;
+		shiva_debug("Resolved GOTOFF for GOT64 Reloc(%s): %s\n", rel.symname, rel_val);
 		shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
 		*(uint64_t *)&rel_unit[0] = rel_val;
 		return true;
@@ -1720,7 +1722,7 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 					return false;
 				}
 			}
-			shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
+			shiva_debug("GOTOFF64 rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
 			*(int64_t *)&rel_unit[0] = rel_val;
 			return true;
 		}
@@ -1806,6 +1808,8 @@ internal_lookup:
  * aarch64 interpreter is ET_EXEC and we don't need to add
  * the linker->shiva_base to it.
  */
+#endif
+
 #ifdef __x86_64__
 #ifdef SHIVA_STANDALONE
 				symval = symbol.value;
@@ -1829,7 +1833,6 @@ internal_lookup:
 			}
 		}
 	}
-#endif
 	return false;
 }
 bool
