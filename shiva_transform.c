@@ -418,7 +418,7 @@ const struct branch_instr branch_table[64] = {
 			{"js",	0x78},	{"jns", 0x79}, {"jp", 0x7a},	{"jpe", 0x7a}, {"jnp", 0x7b},
 			{"jpo", 0x7b},	{"jl", 0x7c},  {"jnge", 0x7c},	{"jnl", 0x7d}, {"jge", 0x7d},
 			{"jle", 0x7e},	{"jng", 0x7e}, {"jnle", 0x7f},	{"jg", 0x7f},  {"jmp", 0xeb},
-			{"jmp", 0xe9},	{"jmpf", 0xea}, {NULL, 0}
+			{"jmp", 0xe9},	{"jmpf", 0xea}, {"je", 0x0f},    {NULL, 0}
 		};
 
 

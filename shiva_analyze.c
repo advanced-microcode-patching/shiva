@@ -79,6 +79,8 @@ shiva_analyze_build_jmp(struct shiva_ctx *ctx, uint64_t pc_vaddr)
 	tmp->branch_type = SHIVA_BRANCH_JMP;
 	tmp->insn_string = shiva_xfmtstrdup("%s %s",
 	    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
+	memcpy(&tmp->o_insn[0], (uint8_t *)tmp->branch_site + ctx->ulexec.base_vaddr,
+	    ctx->disas.insn->size);
 	if (elf_symbol_by_range(&ctx->elfobj, pc_vaddr,
 	    &tmp_sym) == true) {
 		tmp->branch_flags |= SHIVA_BRANCH_F_SRC_SYMINFO;
@@ -652,8 +654,8 @@ shiva_analyze_call(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 		}
 		tmp->retaddr = retaddr;
 		tmp->target_vaddr = call_addr;
-		shiva_debug("CODE_PTR(%p): %x at insn-offset %d\n",
-		    ctx->disas.code_ptr, *(uint32_t *)(ctx->disas.code_ptr - 4), ctx->disas.insn_offset);
+		shiva_debug("CODE_PTR(%p): %lx at insn-offset %lx\n",
+		    ctx->disas.code_ptr, *(uint32_t *)(ctx->disas.code_ptr - ctx->disas.insn->size), ctx->disas.insn_offset);
 		memcpy(&tmp->o_insn, ctx->disas.code_ptr - ctx->disas.insn->size, ctx->disas.insn->size);
 		memcpy(&tmp->symbol, &symbol, sizeof(symbol));
 		tmp->branch_type = SHIVA_BRANCH_CALL;
