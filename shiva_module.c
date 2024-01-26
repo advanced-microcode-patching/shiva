@@ -1663,7 +1663,7 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 		rel_unit = &linker->text_mem[smap.offset + rel.offset];
 		rel_addr = linker->text_vaddr + smap.offset + rel.offset;
 		rel_val = got_entry.gotoff;
-		shiva_debug("Resolved GOTOFF for GOT64 Reloc(%s): %s\n", rel.symname, rel_val);
+		shiva_debug("Resolved GOTOFF for GOT64 Reloc(%s): %x\n", rel.symname, rel_val);
 		shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
 		*(uint64_t *)&rel_unit[0] = rel_val;
 		return true;
