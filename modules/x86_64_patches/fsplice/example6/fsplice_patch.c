@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include "shiva_module.h"
 
+int bar(void);
+
 int data_val = 7; // adds in a new .data global variable
 extern char global_buf[255]; // links to external global_buf[] variable
 
@@ -17,9 +19,10 @@ extern char global_buf[255]; // links to external global_buf[] variable
  * into the function foo() at address 0x818. It won't fit between
  * 0x818 and 0x828 so it extends the size of the function.
  */
-SHIVA_T_SPLICE_FUNCTION(foo, 0x11b6, 0x11d6)
+SHIVA_T_SPLICE_FUNCTION(foo, 0x11bb, 0x11d6)
 {
-	SHIVA_T_PAIR_BP_16(str); //equiv to char *str = [bp, #4]
+	register char *str asm ("r15");
+	__asm__("mov -0x16(%rbp), %r15");
 	if (str != NULL) {
 		fprintf(stdout, "Printing str: %s\n", str);
 	}

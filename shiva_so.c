@@ -48,8 +48,8 @@ shiva_so_resolve_symbol(struct shiva_module *linker, char *symname, struct elf_s
 			perror("strdup");
 			exit(EXIT_FAILURE);
 		}
-		shiva_debug("Found symbol '%s' in shared object '%s'\n",
-		    symname, so.basename);
+		shiva_debug("Found symbol '%s' (symval: %#lx) in shared object '%s'\n",
+		    symname, out->value, so.basename);
 		return true;
 	}
 	if (*so_path == NULL)

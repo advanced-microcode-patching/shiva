@@ -115,8 +115,10 @@ shiva_tf_splice_function(struct shiva_module *linker, struct shiva_transform *tr
 	 * with NOPS. This technique allows a splicer to overwrite
 	 * multiple lines of code with just a single line of code in
 	 * their place, overwriting the remaining area with nops.
+	 * TODO: Add x86_64 support for this capability.
 	 */
 	if (transform->flags & SHIVA_TRANSFORM_F_NOP_PAD) {
+#ifdef __aarch64__
 		uint32_t nop_bytes = AARCH64_NOP;
 		size_t nop_len = transform->old_len - transform->new_len;
 		size_t i;
@@ -131,6 +133,17 @@ shiva_tf_splice_function(struct shiva_module *linker, struct shiva_transform *tr
 			    &nop_bytes, ARM_INSN_LEN );
 		}
 		copy_len += (nop_len / 4) * ARM_INSN_LEN;
+#elif __x86_64__
+		size_t nop_len = transform->old_len - transform->new_len;
+		size_t i;
+
+		shiva_debug("Copying in %d NOP instructions at %p\n", nop_len,
+		    dest);
+		for (i = 0; i < nop_len; i++) {
+			dest[transform->offset + copy_len + i] = 0x90;
+		}
+		copy_len += nop_len;
+#endif
 	}
 	transform->splice.copy_len2 = copy_len;
 
@@ -457,8 +470,19 @@ shiva_tf_relink_local_branch_x86_64(struct shiva_module *linker, struct shiva_tr
 		fprintf(stderr, "failed to find branch opcode: %02x\n", branch->o_insn[0]);
 		return false;
 	}
-	shiva_debug("Relinking branch: %s\n", bptr->mnemonic);
-	*(uint32_t *)&mem[1] = (int32_t)delta;
+	/*
+	 * Near jump opcodes
+	 */
+
+	if (mem[0] == 0x0f) {
+		uint32_t orig_offset = *(uint32_t *)&mem[2];
+		shiva_debug("relinking near jump branch: %s to %lx\n", bptr->mnemonic, orig_offset + delta);
+		*(uint32_t *)&mem[2] = orig_offset + delta;
+	} else {
+		uint32_t orig_offset = *(uint32_t *)&mem[1];
+		shiva_debug("relinking short jump branch: %s to %lx\n", bptr->mnemonic, orig_offset + delta);
+		*(uint32_t *)&mem[1] = orig_offset + delta;
+	}
 done:
 	return true;
 }
@@ -634,8 +658,6 @@ shiva_tf_relink_new_func(struct shiva_module *linker,
 	 * must be re-linked.
 	 */
 	TAILQ_FOREACH(branch, &transform->branch_list, _linkage) {
-		if ((transform->flags & SHIVA_TRANSFORM_F_EXTEND) == 0)
-			continue;
 		/*
 		 * Relink positive offsets that link to code
 		 * after the splice insertion, from code before
@@ -645,6 +667,15 @@ shiva_tf_relink_new_func(struct shiva_module *linker,
 		    branch->insn_string);
 
 		if (BRANCH_IS_LOCAL(branch->target_vaddr)) {
+			/*
+			 * If the patch is the same size as the destination area
+			 * that's being patched, then the replace flag is set.
+			 * In this event, the local branches surrounding the
+			 * splicd in patch won't change, so we simply continue.
+			 */
+			if (transform->flags & SHIVA_TRANSFORM_F_REPLACE)
+				continue;
+
 			shiva_debug("Processing local branch: %#lx:%s\n", branch->branch_site,
 			    branch->insn_string);
 			shiva_debug("Is branch_site %#lx < %#lx\n", branch->branch_site, transform->target_symbol.value +
@@ -740,6 +771,7 @@ shiva_tf_process_transforms(struct shiva_module *linker, uint8_t *dst,
 			if (transform->flags & SHIVA_TRANSFORM_F_EXTEND) {
 				res = shiva_tf_splice_function(linker, transform, dst);
 				if (res == true ) {
+					shiva_debug("SHIVA_TRANSFORM_F_EXTEND");
 					transform->segment_offset = *segment_offset;
 					*segment_offset += transform->target_symbol.size;
 					*segment_offset += transform->source_symbol.size;
@@ -756,6 +788,7 @@ shiva_tf_process_transforms(struct shiva_module *linker, uint8_t *dst,
 			} else if (transform->flags & SHIVA_TRANSFORM_F_REPLACE) {
 				res = shiva_tf_splice_function(linker, transform, dst);
 				if (res == true) {
+					shiva_debug("SHIVA_TRANSFORM_F_REPLACE\n");
 					transform->segment_offset = *segment_offset;
 					*segment_offset += transform->target_symbol.size;
 					*segment_offset += transform->source_symbol.size;
@@ -765,6 +798,7 @@ shiva_tf_process_transforms(struct shiva_module *linker, uint8_t *dst,
 						shiva_debug("Aligning *segment_offset to 4\n");
 						*segment_offset = *segment_offset + 4 & ~3;
 					}
+					res = shiva_tf_relink_new_func(linker, transform);
 				}
 			}
 			break;

@@ -32,7 +32,7 @@
 #define SHIVA_T_PAIR_R12(var) register int64_t var asm("r12");
 
 #define SHIVA_T_LEA_BP_4(var)   register int64_t var;   \
-                                asm volatile ("lea 16(%%rbp), %0" : "=g"(var));
+                                asm volatile ("lea 4(%%rbp), %0" : "=g"(var));
 #define SHIVA_T_LEA_BP_8(var)	register int64_t var;	\
 				asm volatile ("lea 8(%%rbp), %0" : "=g"(var));
 #define SHIVA_T_LEA_BP_16(var)	register int64_t var;	\

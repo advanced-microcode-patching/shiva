@@ -3,6 +3,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 
 const char *banner = "ElfMaster";
 char global_buf[255];
