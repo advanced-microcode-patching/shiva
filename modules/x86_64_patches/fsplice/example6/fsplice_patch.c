@@ -22,7 +22,8 @@ extern char global_buf[255]; // links to external global_buf[] variable
 SHIVA_T_SPLICE_FUNCTION(foo, 0x11bb, 0x11d6)
 {
 	register char *str asm ("r15");
-	__asm__("mov -0x16(%rbp), %r15");
+	__asm__("mov -0x10(%rbp), %r15");
+
 	if (str != NULL) {
 		fprintf(stdout, "Printing str: %s\n", str);
 	}

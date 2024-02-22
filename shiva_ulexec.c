@@ -1,6 +1,10 @@
 #include "shiva.h"
 
+#ifdef __aarch64__
 #define SHIVA_AUXV_COUNT 19
+#elif __x86_64__
+#define SHIVA_AUXV_COUNT 21
+#endif
 
 uint8_t *
 shiva_ulexec_allocstack(struct shiva_ctx *ctx)
@@ -64,6 +68,7 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out, Elf64_auxv_t
 		len = strlen(s) + 1;
 		s += len;
 		*esp++ = (uintptr_t)strdata; /* set argv[n] = (char *)"arg_string" */
+		shiva_debug("strdata: %s (%p)\n", strdata, strdata);
 		strdata += len;
 	}
 	/*
@@ -81,7 +86,6 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out, Elf64_auxv_t
 		strdata += len;
 	}
 	*esp++ = (uintptr_t)0;
-
 	Elf64_auxv_t *auxv = (Elf64_auxv_t *)esp;
 	*auxv_ptr = auxv;
 	shiva_auxv_iterator_init(ctx, &a_iter, NULL);
@@ -123,7 +127,7 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out, Elf64_auxv_t
 	 * Set the out value to the stack address that is &argc -- the beginning
 	 * of our stack setup.
 	 */
-	*out = (uint64_t)esp_start;
+	*out = (void *)esp_start;
 	return esp_start;
 }
 

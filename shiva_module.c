@@ -568,7 +568,7 @@ install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
 	shiva_error_t trace_error;
 
 	/*
-	e * In the event of a transform, we are re-linking the executable to a function
+	 * In the event of a transform, we are re-linking the executable to a function
 	 * that has been transformed with a splice, which requires that we don't use
 	 * the patch_symbol.value (Since it will have been moved), instead we use the
 	 * transform->segment_offset.
@@ -1700,6 +1700,7 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 			} else {
 				struct elf_section tmpshdr;
 				struct elf_symbol tmpsym;
+				uint64_t text_vaddr = linker->text_vaddr + linker->tf_text_offset;
 
 				if (elf_symbol_by_name(&linker->elfobj, rel.symname, &tmpsym) == false) {
 					fprintf(stderr, "Failed to retrieve symbol: %s\n", rel.symname);
@@ -1713,7 +1714,7 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 					rel_val = (symbol.value + linker->data_vaddr) + rel.addend -
 					    (linker->data_vaddr + linker->pltgot_off);
 				} else if (strcmp(tmpshdr.name, ".text") == 0) {
-					rel_val = (symbol.value + linker->text_vaddr) + rel.addend -
+					rel_val = (symbol.value + text_vaddr) + rel.addend -
 					    (linker->data_vaddr + linker->pltgot_off);
 				} else if (strcmp(tmpshdr.name, ".bss") == 0) {
 					rel_val = (symbol.value + linker->bss_vaddr) + rel.addend -
@@ -2134,7 +2135,7 @@ calculate_data_size(struct shiva_module *linker)
 		case R_X86_64_GOT64:
 		case R_X86_64_PLTOFF64:
 #elif __aarch64__
-		case R_AARCH64_CALL26:
+
 #endif
 			/*
 			 * Create room for the modules pltgot
@@ -2153,7 +2154,7 @@ calculate_data_size(struct shiva_module *linker)
 
 			got_entry = shiva_malloc(sizeof(*got_entry));
 			got_entry->symname = rel.symname; /* rel.symname will be valid until elf is unloaded */
-			got_entry->gotaddr = linker->data_vaddr + linker->pltgot_off + offset;
+	//		got_entry->gotaddr = linker->data_vaddr + linker->pltgot_off + offset;
 			got_entry->gotoff = offset;
 
 			e.key = (char *)got_entry->symname;
@@ -2166,8 +2167,8 @@ calculate_data_size(struct shiva_module *linker)
 				return false;
 			}
 
-			shiva_debug("Inserting entry into GOT cache and GOT list\n"
-			    "GOT entry for %s\n", got_entry->symname);
+			shiva_debug("Inserting entry into GOT cache and GOT list for '%s', gotoff: %lx gotaddr: %#lx\n",
+			    got_entry->symname, got_entry->gotoff, got_entry->gotaddr);
 			TAILQ_INSERT_TAIL(&linker->tailq.got_list, got_entry, _linkage);
 			offset += sizeof(uint64_t);
 
@@ -2241,6 +2242,7 @@ calculate_text_size(struct shiva_module *linker)
 #elif __aarch64__
 		if (rel.type == R_AARCH64_CALL26) {
 #endif
+			shiva_debug("Creating PLT entry for %s\n", rel.symname);
 			/*
 			 * Create room for each PLT stub
 			 */
@@ -2268,16 +2270,6 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	size_t off = 0;
 	size_t count = 0;
 
-#if 0
-	/*
-	 * I commented this out, because even though the data_size may be
-	 * 0, we need a data segment area to house the .bss. 
-	 */
-	if (linker->data_size == 0) {
-		shiva_debug("No data segment is needed\n");
-		return true; // we need no data segment
-	}
-#endif
 	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
 	    MAP_PRIVATE|MAP_ANONYMOUS;
 	uint64_t mmap_base = 0;
