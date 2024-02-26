@@ -120,6 +120,20 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	double elapsed_time;
 	clock_gettime(CLOCK_REALTIME, &tv);
 #endif
+
+	/*
+	 * Since we're in interpreter mode we did not use the ulexec, but
+	 * have to set the base address of the target executable which
+	 * was mapped into memory by the kernel. This base_vaddr value
+	 * is used by the shiva_trace API internally, and must be set.
+	 */
+	res = shiva_maps_get_base(ctx, &ctx->ulexec.base_vaddr);
+	if (res == false) {
+		fprintf(stderr, "shiva_maps_get_base() failed\n");
+		return false;
+	}
+	shiva_debug("Setting target base: %#lx\n", ctx->ulexec.base_vaddr);
+
 	if (shiva_analyze_run(ctx) == false) {
 		fprintf(stderr, "Failed to run the analyzers\n");
 		exit(EXIT_FAILURE);
@@ -150,6 +164,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	}
 	ctx->shiva.base = mmap_entry.base;
 	shiva_debug("Setting shiva base: %#lx\n", mmap_entry.base);
+#if 0
 	/*
 	 * Since we're in interpreter mode we did not use the ulexec, but
 	 * have to set the base address of the target executable which
@@ -162,7 +177,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		return false;
 	}
 	shiva_debug("Setting target base: %#lx\n", ctx->ulexec.base_vaddr);
-
+#endif
 	if (shiva_target_has_prelinking(ctx) == true) {
 		if (shiva_target_get_module_path(ctx, ctx->module_path) == false) {
 			fprintf(stderr, "shiva_target_get_module_path() failed\n");

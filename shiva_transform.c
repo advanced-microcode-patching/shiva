@@ -476,12 +476,12 @@ shiva_tf_relink_local_branch_x86_64(struct shiva_module *linker, struct shiva_tr
 
 	if (mem[0] == 0x0f) {
 		uint32_t orig_offset = *(uint32_t *)&mem[2];
-		shiva_debug("relinking near jump branch: %s to %lx\n", bptr->mnemonic, orig_offset + delta);
+		shiva_debug("relinking near jump branch: %s to (%lx + %lx) = %#lx\n", bptr->mnemonic, orig_offset, delta, orig_offset + delta);
 		*(uint32_t *)&mem[2] = orig_offset + delta;
 	} else {
-		uint32_t orig_offset = *(uint32_t *)&mem[1];
-		shiva_debug("relinking short jump branch: %s to %lx\n", bptr->mnemonic, orig_offset + delta);
-		*(uint32_t *)&mem[1] = orig_offset + delta;
+		uint32_t orig_offset = *(uint8_t *)&mem[1];
+		shiva_debug("relinking short jump branch: %s to (%lx + %lx) = %#lx\n", bptr->mnemonic, orig_offset, delta, orig_offset + delta);
+		*(uint8_t *)&mem[1] = orig_offset + delta;
 	}
 done:
 	return true;
