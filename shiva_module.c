@@ -564,7 +564,7 @@ install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
     struct shiva_branch_site *b, struct elf_symbol *patch_symbol)
 {
 	uint64_t target_vaddr = patch_symbol->value + linker->text_vaddr;
-	uint8_t trampcode[] = "\xe9\x00\x00\x00\x00";
+	uint8_t trampcode[12] = "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x50\xc3";
 	shiva_error_t trace_error;
 
 	/*
@@ -576,13 +576,13 @@ install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
 	target_vaddr = patch_symbol->value + linker->text_vaddr;
 	shiva_debug("Target_vaddr: %#lx\n", target_vaddr);
 	shiva_debug("Branch site: %#lx\n", b->branch_site + linker->target_base);
-	uint32_t tramp_offset = target_vaddr - (b->symbol.value + linker->target_base) - 5;
-	*(uint32_t *)&trampcode[1] = tramp_offset;
+
+	*(uint64_t *)&trampcode[2] = target_vaddr;
 	uint64_t plt_addr = b->symbol.value + ctx->ulexec.base_vaddr;
-	shiva_debug("Trampcode: %02x %02x %02x %02x %02x\n", trampcode[0], trampcode[1], trampcode[2], trampcode[3], trampcode[4]);
+
 	shiva_debug("Installing trampoline to PLT address: %#lx\n", plt_addr);
 	if (shiva_trace_write(ctx, 0, (void *)plt_addr, trampcode,
-	    5, &trace_error) == false) {
+	    12, &trace_error) == false) {
 		fprintf(stderr, "shiva_trace_write() failed to write at %p\n", &trampcode[1]);
 		return false;
 	}
