@@ -9,7 +9,7 @@ prog:
 	gcc -O0 test_rodata.c -o test_rodata
 prelink:
 	# Pre-link the program we are patching with the proper interpreter and patch meta-data
-	$(SHIVA-LD_PATH) -e test_rodata -p ro_patch.o -i /lib/shiva -s /opt/shiva/modules -o test_rodata.patched
+	$(SHIVA-LD_PATH) -e test_rodata -p ro_patch.o -i /lib/shiva -s /opt/shiva/modules -o test_rodata.patched -d
 
 clean:
 	rm -f test_rodata test_rodata.patched ro_patch.o
