@@ -165,12 +165,14 @@ install_x86_64_call_imm_patch(struct shiva_ctx *ctx, struct shiva_module *linker
 	}
 
 	shiva_debug("PATCHING BRANCH SITE: %#lx\n", e->branch_site);
+	shiva_debug("ctx->ulexec.base_vaddr: %#lx\n", ctx->ulexec.base_vaddr);
 	memcpy(&insn_bytes, &e->o_insn, sizeof(insn_bytes));
 	shiva_debug("call_offset = %#lx - %#lx\n",
-	    target_vaddr, e->branch_site + ctx->ulexec.base_vaddr);
+	    target_vaddr, (e->branch_site + ctx->ulexec.base_vaddr));
 	call_offset = (target_vaddr - (e->branch_site + ctx->ulexec.base_vaddr));
 	call_offset -= 5; /* subtract length of call instruction */
-	*(uint32_t *)&insn_bytes[1] = call_offset;
+	shiva_debug("call_offset: %#lx\n", call_offset);
+	*(int32_t *)&insn_bytes[1] = call_offset;
 	/*
 	 * XXX
 	 * Technically the shiva_trace API shouldn't be used from within Shiva.

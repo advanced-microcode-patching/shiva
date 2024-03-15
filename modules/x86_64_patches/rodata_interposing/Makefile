@@ -11,6 +11,8 @@ prelink:
 	# Pre-link the program we are patching with the proper interpreter and patch meta-data
 	$(SHIVA-LD_PATH) -e test_rodata -p ro_patch.o -i /lib/shiva -s /opt/shiva/modules -o test_rodata.patched -d
 
+install:
+	sudo cp ro_patch.o /opt/shiva/modules/
 clean:
 	rm -f test_rodata test_rodata.patched ro_patch.o
 

@@ -44,7 +44,6 @@
 
 
 
-
 #elif __aarch64__
 
 #define SHIVA_T_PAIR_X0(var) register int64_t var asm("x0");
