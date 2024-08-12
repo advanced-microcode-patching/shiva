@@ -522,9 +522,6 @@ install_x86_64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 		}
 		return true;
 	}
-	rel_val = patch_symbol->value + var_segment - rel_addr;
-	rel_unit = (uint8_t *)rel_addr + 3;
-
 	switch(e->type) {
 	case SHIVA_XREF_TYPE_IP_RELATIVE_LEA:
 		rel_unit = (uint8_t *)rel_addr + 3;
@@ -535,19 +532,107 @@ install_x86_64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 			return false;
 		}
 		break;
-	case SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR:
 	case SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR:
-		if (e->addr_size == 8) {
+		rel_unit = NULL;
+		/*
+		 * (registers rax, rbx, rcx, rdx, rsi, rdi)
+		 * mov reg64, <offset>(%rip)
+		 */
+		if (e->insn_len == 7 && e->rip_rel_o_insn[0] == 0x48 && e->rip_rel_o_insn[1] == 0x89) {
+
 			rel_unit = (uint8_t *)rel_addr + 3;
-			rel_val = (patch_symbol->value + var_segment) - rel_addr - 7;
+		/*
+		 * (registers r8 - r15)
+		 * mov reg64 <offset>(%rip)
+		 */
+		} else if (e->insn_len == 7 && e->rip_rel_o_insn[0] == 0x4c && e->rip_rel_o_insn[1] == 0x89) {
+
+			rel_unit = (uint8_t *)rel_addr + 3;
+		/*
+		 * (registers eax, ebx, ecx, edx, esi, edi)
+		 * mov reg32, <offset>(%rip)
+		 */
+		} else if (e->insn_len == 6 && e->rip_rel_o_insn[0] == 0x89) {
+
+			rel_unit = (uint8_t *)rel_addr + 2;
+		/*
+		 * (registers r8d-r15d)
+		 * mov reg32, <offset>(%rip)
+		 */
+		} else if (e->insn_len == 7 && e->rip_rel_o_insn[0] == 0x44 && e->rip_rel_o_insn[1] == 0x89) {
+
+			rel_unit = (uint8_t *)rel_addr + 3;
+		/*
+		 * movq $imm-qword, <offset>(%rip)
+		 */
+		} else if (e->insn_len == 11 && e->rip_rel_o_insn[0] == 0x48 && e->rip_rel_o_insn[1] == 0xc7 &&
+			    e->rip_rel_o_insn[2] == 0x05) {
+
+			rel_unit = (uint8_t *)rel_addr + 3;
+		/*
+		 * movl $imm-dword, <offset>(%rip)
+		 */
+		} else if (e->insn_len == 10 && e->rip_rel_o_insn[0] == 0xc7 && e->rip_rel_o_insn[1] == 0x05) {
+
+			rel_unit = (uint8_t *)rel_addr + 2;
+		/*
+		 * movw $imm-word, <offset>(%rip)
+		 */
+		} else if (e->insn_len == 9 && e->rip_rel_o_insn[0] == 0x66 && e->rip_rel_o_insn[1] == 0xc7 &&
+			    e->rip_rel_o_insn[2] == 0x05) {
+
+			rel_unit = (uint8_t *)&rel_addr + 3;
+		/*
+		 * movb $imm-byte, <offset>(%rip)
+		 */
+		} else if (e->insn_len == 7 && e->rip_rel_o_insn[0] == 0xc6 && e->rip_rel_o_insn[1] == 0x05) {
+
+			rel_unit = (uint8_t *)rel_addr + 2;
+		}
+		if (rel_unit != NULL) {
+			rel_val = (patch_symbol->value + var_segment) - rel_addr - e->insn_len;
 			res = shiva_trace_write(ctx, 0, (void *)rel_unit, (void *)&rel_val, 4, &error);
 			if (res == false) {
 				fprintf(stderr, "shiva_trace_write() failed: %s\n", shiva_error_msg(&error));
 				return false;
 			}
-		} else if (e->addr_size == 4) {
+		}
+		break;
+	case SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR:
+		rel_unit = NULL;
+		/*
+		 * (registers rax, rbx, rcx, rdx, rsi, rdi)
+		 * mov <offset>(%rip), reg64
+		 */
+		if (e->insn_len == 7 && e->rip_rel_o_insn[0] == 0x48 && e->rip_rel_o_insn[1] == 0x8b) {
+
+			rel_unit = (uint8_t *)rel_addr + 3;
+
+		/*
+		 * (registers r8 - r15)
+		 * mov <offset>(%rip), reg64
+		 */
+		} else if (e->insn_len == 7 && e->rip_rel_o_insn[0] == 0x4c && e->rip_rel_o_insn[1] == 0x8b) {
+
+			rel_unit = (uint8_t *)rel_addr + 3;
+
+		/*
+		 * (registers eax, ebx, ecx, edx, esi, edi)
+		 * mov <offset>(%rip), reg32
+		 */
+		} else if (e->insn_len == 6 && (e->rip_rel_o_insn[0] == 0x8b)) {
+
 			rel_unit = (uint8_t *)rel_addr + 2;
-			rel_val = (patch_symbol->value + var_segment) - rel_addr - 6;
+		/*
+		 * (registers r8d - r15d)
+		 * mov <offset>(%rip), reg32
+		 */
+		} else if (e->insn_len == 7 && (e->rip_rel_o_insn[0] == 0x44 && e->rip_rel_o_insn[1] == 0x8b)) {
+
+			rel_unit = (uint8_t *)rel_addr + 3;
+		}
+		if (rel_unit != NULL ) {
+			rel_val = (patch_symbol->value + var_segment) - rel_addr - e->insn_len;
 			res = shiva_trace_write(ctx, 0, (void *)rel_unit, (void *)&rel_val, 4, &error);
 			if (res == false) {
 				fprintf(stderr, "shiva_trace_write() failed: %s\n", shiva_error_msg(&error));
