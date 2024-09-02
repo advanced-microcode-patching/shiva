@@ -639,6 +639,7 @@ install_x86_64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 				return false;
 			}
 		}
+		fprintf(stderr, "Unknown relocation unit due to unexpected instruction. Failed to relink\n");
 		break;
 	}
 	return true;
