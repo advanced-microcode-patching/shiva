@@ -353,7 +353,6 @@ typedef enum shiva_helper_type {
 	SHIVA_HELPER_UNKNOWN
 } shiva_helper_type_t;
 
-
 typedef struct shiva_helper {
 	shiva_helper_type_t type;
 	struct elf_symbol symbol;
