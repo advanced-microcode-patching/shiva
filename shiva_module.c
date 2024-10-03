@@ -596,6 +596,11 @@ install_x86_64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 				fprintf(stderr, "shiva_trace_write() failed: %s\n", shiva_error_msg(&error));
 				return false;
 			}
+		} else {
+			fprintf(stderr,
+			    "Unknown relocation unit due to unexpected"
+			    " instruction. Failed to relink\n");
+			return false;
 		}
 		break;
 	case SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR:
@@ -638,8 +643,12 @@ install_x86_64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 				fprintf(stderr, "shiva_trace_write() failed: %s\n", shiva_error_msg(&error));
 				return false;
 			}
+		} else {
+			fprintf(stderr,
+			    "Unknown relocation unit due to unexpected"
+			    " instruction. Failed to relink\n");
+			return false;
 		}
-		fprintf(stderr, "Unknown relocation unit due to unexpected instruction. Failed to relink\n");
 		break;
 	}
 	return true;
