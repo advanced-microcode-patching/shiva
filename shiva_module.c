@@ -62,6 +62,7 @@ transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
 
 	return fn(ctx);
 }
+
 #ifdef __aarch64__
 static bool
 install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
@@ -875,14 +876,14 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 	return true;
 }
 /*
- * Module entry point. Lookup symbol "shakti_main"
+ * Module entry point. Lookup symbol "shiva_init"
  */
 static bool
 module_entrypoint(struct shiva_module *linker, uint64_t *entry)
 {
 	struct elf_symbol symbol;
 
-	if (elf_symbol_by_name(&linker->elfobj, "shakti_main", &symbol) == false) {
+	if (elf_symbol_by_name(&linker->elfobj, SHIVA_INIT_FUNC, &symbol) == false) {
 		shiva_debug("elf_symbol_by_name failed to find 'shakti_main'\n");
 		return false;
 	}
@@ -1723,6 +1724,33 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 
 #if defined(__x86_64__)
 	switch(rel.type) {
+	case R_X86_64_64:
+		shiva_debug("Applying R_X86_64_64 relocation\n");
+		if (rel.symname[0] == '.') {
+			struct elf_section shdr;
+			/*
+			 * Iterate through the sections that have been mapped
+			 * from the modules ELF object into the process image
+			 */
+			TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
+				if (strcmp(smap_current->name, rel.symname) == 0) {
+					shiva_debug("Target symbol is an ELF section: '%s'\n",
+					    smap_current->name);
+					res = elf_section_by_name(&linker->elfobj, rel.symname, &shdr);
+					if (res == false) {
+						fprintf(stderr, "elf_section_by_name(..., %s, ...) failed\n",
+						    rel.symname);
+						return false;
+					}
+				}
+				/*
+				 * XXX UNFINISHED CODE XXX/
+				 */
+			 }
+		}
+		break;
+	}
+
 	case R_X86_64_PLTOFF64: /* computation L - GOT + A */
 		TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {
 			if (strcmp(rel.symname, current->symname) != 0)
@@ -3156,9 +3184,10 @@ fail:
 	return false;
 }
 
+
 /*
  * Our linker has two modes:
- * 1. Link Shiva modules, who's init function is always STT_FUNC:shakti_main()
+ * 1. Link Shiva modules, who's init function is always STT_FUNC:shiva_init_main()
  * 2. Link a microcode patch driven by targetted symbol interposition.
  */
 static void
@@ -3166,7 +3195,7 @@ set_linker_mode(struct shiva_module *linker)
 {
 	struct elf_symbol symbol;
 
-	if (elf_symbol_by_name(&linker->elfobj, "shakti_main", &symbol) == false) {
+	if (elf_symbol_by_name(&linker->elfobj, SHIVA_INIT_FUNC, &symbol) == false) {
 		linker->mode = SHIVA_LINKING_MICROCODE_PATCH;
 	} else {
 		if (symbol.type != STT_FUNC || symbol.bind != STB_GLOBAL) {
@@ -3250,10 +3279,10 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	set_linker_mode(linker);
 	switch(linker->mode) {
 	case SHIVA_LINKING_MODULE:
-		shiva_debug("Shiva linker mode: <MODULE>\n");
+		shiva_debug("Shiva linker mode: Loadable Module\n");
 		break;
 	case SHIVA_LINKING_MICROCODE_PATCH:
-		shiva_debug("Shiva linker mode: <MICROCODE PATCH>\n");
+		shiva_debug("Shiva linker mode: Micropatching\n");
 		break;
 	case SHIVA_LINKING_UNKNOWN:
 		shiva_debug("Unknown linking mode, quitting\n");
@@ -3304,7 +3333,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 
 	/*
 	 * If we are linking a Shiva module, then we pass control to the
-	 * init function of the module "shakti_main()"
+	 * init function of the module "shiva_init()"
 	 * Otherwise, if we are linking a microcode patch we don't pass
 	 * control to it directly, it is executed through patching hooks
 	 * within the target executable.

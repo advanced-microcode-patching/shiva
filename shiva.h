@@ -74,6 +74,7 @@
 
 #define SHIVA_DEFAULT_MODULE_PATH "/opt/shiva/modules/shakti.o"
 
+#define SHIVA_INIT_FUNC "shiva_init"
 /*
  * Path to real dynamic linker.
  * XXX this should be configurable via environment.
