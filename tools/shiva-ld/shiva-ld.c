@@ -43,6 +43,7 @@
 #include "../../include/capstone/capstone.h"
 
 #define SHIVA_LD_F_NO_CFG	(1UL << 0)
+#define SHIVA_LD_F_NEEDED_INJECTION	(1UL << 1)
 
 #define SHIVA_DT_NEEDED	DT_LOOS + 10
 #define SHIVA_DT_SEARCH DT_LOOS + 11
@@ -354,7 +355,11 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		} else if (segment.type == PT_DYNAMIC) {
 			found_dynamic = true;
 			ctx->new_segment.dyn_size = elf_dtag_count(&ctx->bin.elfobj) * sizeof(ElfW(Dyn));
-			ctx->new_segment.dyn_size += (sizeof(ElfW(Dyn)) * NEW_DYN_COUNT);
+			if (ctx->flags & SHIVA_LD_F_NEEDED_INJECTION) {
+				ctx->new_segment.dyn_size += sizeof(ElfW(Dyn));
+			} else {
+				ctx->new_segment.dyn_size += (sizeof(ElfW(Dyn)) * NEW_DYN_COUNT);
+			}
 			ctx->new_segment.dyn_offset = 0;
 
 			old_dynamic_size = elf_dtag_count(&ctx->bin.elfobj) * sizeof(ElfW(Dyn));
@@ -442,6 +447,9 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			dyn_segment.filesz = ctx->new_segment.dyn_size;
 			dyn_segment.memsz = ctx->new_segment.dyn_size;
 			dyn_segment.align = 8;
+
+			printf("Updating dynamic segment vaddr: %#lx offset: %#lx size: %#lx\n", dyn_segment.vaddr,
+			    dyn_segment.offset, dyn_segment.filesz);
 
 			res = elf_segment_modify(&ctx->bin.elfobj,
 			    dynamic_index, &dyn_segment, &error);
@@ -749,8 +757,8 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			}
 		}
 	} else { /* 
-		  *  We are not generating a CFG... so we re-write the binary ELF binary
-		  *  with all of the changes, except adding in the .shiva.xref, .shiva.branch
+		  *  We are not generating a CFG... so we re-write the ELF binary
+		  *  with all of the changes, except without adding in the .shiva.xref, .shiva.branch
 		  *  and .shiva.strtab sections.
 		  */
 		if (write(fd, ctx->bin.elfobj.mem, ctx->bin.elfobj.size) < 0) {
@@ -763,6 +771,65 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			return false;
 		}
  
+		/*
+		 * IF this is a DT_NEEDED Injection then we handle things a bit differently.
+		 */
+		if (ctx->flags & SHIVA_LD_F_NEEDED_INJECTION) {
+			ElfW(Dyn) dyn[1];
+
+			printf("Writing out DT_NEEDED entry in new dyn segment\n");
+			dyn[0].d_tag = DT_NEEDED;
+			dyn[0].d_un.d_ptr = ctx->new_segment.vaddr + sizeof(dyn[0]) +
+			    old_dynamic_size + sizeof(dyn[0]);
+
+			printf("Writing out %d bytes\n", sizeof(dyn[0]) + old_dynamic_size + strlen(ctx->input_patch) + 1);
+
+			if (write(fd, &dyn[0], sizeof(dyn[0])) < 0) {
+				perror("write");
+				return false;
+			}
+			if (write(fd, old_dynamic_segment,
+			    old_dynamic_size) < 0) {
+				perror("write");
+				return false;
+			}
+			dyn[0].d_tag = DT_NULL;
+			dyn[0].d_un.d_ptr = 0x0;
+
+			if (write(fd, &dyn[0], sizeof(dyn[0])) < 0) {
+				perror("write");
+				return false;
+			}
+			if (write(fd, ctx->input_patch,
+			    strlen(ctx->input_patch) + 1) < 0) {
+				perror("write");
+				return false;
+			}
+			if (fchown(fd, st.st_uid, st.st_gid) < 0) {
+				perror("fchown");
+				return false;
+			}
+			if (fchmod(fd, st.st_mode) < 0) {
+				perror("fchmod");
+				return false;
+			}
+			close(fd);
+
+			elf_close_object(&ctx->bin.elfobj);
+			rename(template, ctx->output_exec);
+
+			printf("Opening file %s\n", ctx->output_exec);
+			if (elf_open_object(ctx->output_exec, &ctx->bin.elfobj,
+			    ELF_LOAD_F_MODIFY|ELF_LOAD_F_STRICT, &error) == false) {
+				fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n",
+				    ctx->output_exec, elf_error_msg(&error));
+				return false;
+			}
+			*(uint32_t *)&ctx->bin.elfobj.mem[EI_PAD] = SHIVA_SIGNATURE;
+			elf_close_object(&ctx->bin.elfobj);
+			return true;
+		}
+
 		if (write(fd, old_dynamic_segment,
 		    old_dynamic_size - sizeof(ElfW(Dyn))) < 0) {
 			perror("write");
@@ -856,6 +923,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	 * interpreter path (i.e. "/lib/shiva").
 	 */
 	strcpy(path, ctx->interp_path);
+	elf_close_object(&ctx->bin.elfobj);
 	return true;
 }
 
@@ -1422,7 +1490,7 @@ usage:
 
 	memset(&ctx, 0, sizeof(ctx));
 
-	while ((opt = getopt_long(argc, argv, "e:p:i:s:o:d",
+	while ((opt = getopt_long(argc, argv, "Ne:p:i:s:o:d",
 	    long_options, &long_index)) != -1) {
 		switch(opt) {
 		case 'e':
@@ -1464,6 +1532,11 @@ usage:
 				exit(EXIT_FAILURE);
 			}
 			break;
+		case 'N':
+			printf("Injecting DT_NEEDED entry\n");
+			ctx.flags |= SHIVA_LD_F_NEEDED_INJECTION;
+			ctx.flags |= SHIVA_LD_F_NO_CFG; // no control-flow-graph flag is implicitly set here.
+			break;
 		case 'd':
 			ctx.flags |= SHIVA_LD_F_NO_CFG;
 			break;
@@ -1471,10 +1544,14 @@ usage:
 			break;
 		}
 	}
-	if (ctx.input_exec == NULL || ctx.input_patch == NULL ||
-	    ctx.interp_path == NULL || ctx.search_path == NULL || ctx.output_exec == NULL)
-		goto usage;
-
+	if (ctx.flags & SHIVA_LD_F_NEEDED_INJECTION) {
+		if (ctx.search_path == NULL || ctx.input_exec == NULL || ctx.input_patch == NULL || ctx.output_exec == NULL)
+			goto usage;
+	} else {
+		if (ctx.input_exec == NULL || ctx.input_patch == NULL ||
+		    ctx.interp_path == NULL || ctx.search_path == NULL || ctx.output_exec == NULL)
+			goto usage;
+	}
 	TAILQ_INIT(&ctx.tailq.xref_tqlist);
 	TAILQ_INIT(&ctx.tailq.branch_tqlist);
 	/*
@@ -1503,7 +1580,7 @@ usage:
 		exit(EXIT_FAILURE);
 	}
 
-	if ((ctx.flags & SHIVA_LD_F_NO_CFG) == 0) {
+	if (((ctx.flags & SHIVA_LD_F_NO_CFG) == 0) && ((ctx.flags & SHIVA_LD_F_NEEDED_INJECTION) == 0)){
 		if (analyze_binary(&ctx) == false) {
 			fprintf(stderr, "analyze_binary() failed on %s\n",
 			    elf_pathname(&ctx.bin.elfobj));
