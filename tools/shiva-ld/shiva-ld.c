@@ -300,6 +300,54 @@ elf_segment_copy(elfobj_t *elfobj, uint8_t *dst, struct elf_segment segment)
 	return true;
 }
 
+bool
+elf_section_copy(elfobj_t *elfobj, uint8_t *dst, struct elf_section section)
+{
+	size_t rem = section.size % sizeof(uint64_t);
+	uint64_t qword;
+	bool res;
+	size_t i = 0;
+
+	for (i = 0; i < section.size; i += sizeof(uint64_t)) {
+		if (i + sizeof(uint64_t) >= section.size) {
+			size_t j;
+
+			for (j = 0; j < rem; j++) {
+				res = elf_read_address(elfobj, section.address + i + j,
+				    &qword, ELF_BYTE);
+				if (res == false) {
+					fprintf(stderr, "elf_section_copy "
+					    "failed at %#lx\n", section.address + i + j);
+					return false;
+				}
+				dst[i + j] = (uint8_t)qword;
+			}
+			break;
+		}
+		res = elf_read_address(elfobj, section.address + i, &qword, ELF_QWORD);
+		if (res == false) {
+			fprintf(stderr, "elf_read_address failed at %#lx\n", section.address + i);
+			return false;
+		}
+		*(uint64_t *)&dst[i] = qword;
+	}
+	return true;
+}
+
+static bool
+set_dtag(struct shiva_prelink_ctx *ctx, ElfW(Dyn) *dyn, int d_tag, uint64_t value)
+{
+	int i;
+
+	for (i = 0; dyn[i].d_tag != DT_NULL; i++) {
+		if (dyn[i].d_tag == d_tag) {
+			dyn[i].d_un.d_val = value;
+			return true;
+		}
+	}
+	return false;
+}
+
 #define NEW_DYN_COUNT 3
 
 bool
@@ -321,6 +369,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	uint8_t *old_dynamic_segment;
 	size_t old_dynamic_size, dynamic_index;
 	size_t old_shstrtab_len, old_e_shoff, old_e_shnum;
+	struct elf_section dynstr_shdr;
 
 	ctx->orig_interp_path = elf_interpreter_path(&ctx->bin.elfobj);
 	if (ctx->orig_interp_path == NULL) {
@@ -357,6 +406,10 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			ctx->new_segment.dyn_size = elf_dtag_count(&ctx->bin.elfobj) * sizeof(ElfW(Dyn));
 			if (ctx->flags & SHIVA_LD_F_NEEDED_INJECTION) {
 				ctx->new_segment.dyn_size += sizeof(ElfW(Dyn));
+				if (elf_section_by_name(&ctx->bin.elfobj, ".dynstr", &dynstr_shdr) == false) {
+					fprintf(stderr, "elf_section_by_name() failed on .dynstr\n");
+					return false;
+				}
 			} else {
 				ctx->new_segment.dyn_size += (sizeof(ElfW(Dyn)) * NEW_DYN_COUNT);
 			}
@@ -387,6 +440,11 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				ctx->new_segment.filesz += ctx->xref_entry_totlen;
 				ctx->new_segment.filesz += ctx->branch_entry_totlen;
 				ctx->new_segment.filesz += sizeof(ElfW(Shdr)) * 3;
+			}
+			if (ctx->flags & SHIVA_LD_F_NEEDED_INJECTION) {
+				printf(".dynstr original size: %d\n", dynstr_shdr.size);
+				ctx->new_segment.filesz += dynstr_shdr.size;
+				ctx->new_segment.filesz += strlen(ctx->input_patch) + 1;
 			}
 			/*
 			 * Mark the index of this segment so that we can modify it
@@ -776,16 +834,30 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		 */
 		if (ctx->flags & SHIVA_LD_F_NEEDED_INJECTION) {
 			ElfW(Dyn) dyn[1];
+			size_t dynstr_n_offset = n_segment.offset + old_dynamic_size
+			    + sizeof(dyn[0]) + sizeof(dyn[0]); // + strlen(ctx->input_patch) + 1;
+			size_t dynstr_n_vaddr = n_segment.vaddr + old_dynamic_size
+			    + sizeof(dyn[0]) + sizeof(dyn[0]) ; //+ strlen(ctx->input_patch) + 1;
+			uint64_t dynstr_index;
 
 			printf("Writing out DT_NEEDED entry in new dyn segment\n");
 			dyn[0].d_tag = DT_NEEDED;
-			dyn[0].d_un.d_ptr = ctx->new_segment.vaddr + sizeof(dyn[0]) +
-			    old_dynamic_size + sizeof(dyn[0]);
+			dyn[0].d_un.d_ptr = dynstr_shdr.size;
 
-			printf("Writing out %d bytes\n", sizeof(dyn[0]) + old_dynamic_size + strlen(ctx->input_patch) + 1);
+			printf("Writing out %ld bytes\n", sizeof(dyn[0]) + old_dynamic_size + strlen(ctx->input_patch) + 1);
 
 			if (write(fd, &dyn[0], sizeof(dyn[0])) < 0) {
 				perror("write");
+				return false;
+			}
+
+			if (set_dtag(ctx, (ElfW(Dyn) *)old_dynamic_segment, DT_STRTAB, dynstr_n_vaddr) == false) {
+				fprintf(stderr, "Failed to set DT_STRTAB value\n");
+				return false;
+			}
+			if (set_dtag(ctx, (ElfW(Dyn) *)old_dynamic_segment, DT_STRSZ,
+			    dynstr_shdr.size + strlen(ctx->output_exec) + 1) == false) {
+				fprintf(stderr, "Failed to set DT_STRSZ value\n");
 				return false;
 			}
 			if (write(fd, old_dynamic_segment,
@@ -800,8 +872,13 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				perror("write");
 				return false;
 			}
+			if (write(fd, &ctx->bin.elfobj.mem[dynstr_shdr.offset],
+                            dynstr_shdr.size) < 0) {
+                                perror("write");
+                                return false;
+                        }
 			if (write(fd, ctx->input_patch,
-			    strlen(ctx->input_patch) + 1) < 0) {
+			    strlen(ctx->input_patch) + 1) != strlen(ctx->input_patch) + 1) {
 				perror("write");
 				return false;
 			}
@@ -825,6 +902,23 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				    ctx->output_exec, elf_error_msg(&error));
 				return false;
 			}
+			if (elf_section_index_by_name(&ctx->bin.elfobj, ".dynstr", &dynstr_index) == false) {
+				fprintf(stderr, "elf_section_index_by_name() failed on .dynstr\n");
+				return false;
+			}
+
+			dynstr_shdr.offset = dynstr_n_offset;
+			dynstr_shdr.address = dynstr_n_vaddr;
+			dynstr_shdr.size += strlen(ctx->output_exec) + 1;
+
+			printf("dynstr_shdr offset: %#lx\n", dynstr_n_offset);
+			printf("Modifying dynstr index %d\n", dynstr_index);
+			if (elf_section_modify(&ctx->bin.elfobj, dynstr_index, 
+			    &dynstr_shdr, &error) == false) {
+				fprintf(stderr, "elf_section_modify() failed\n");
+				return false;
+			}
+			elf_section_commit(&ctx->bin.elfobj);
 			*(uint32_t *)&ctx->bin.elfobj.mem[EI_PAD] = SHIVA_SIGNATURE;
 			elf_close_object(&ctx->bin.elfobj);
 			return true;
