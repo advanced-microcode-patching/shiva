@@ -442,7 +442,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				ctx->new_segment.filesz += sizeof(ElfW(Shdr)) * 3;
 			}
 			if (ctx->flags & SHIVA_LD_F_NEEDED_INJECTION) {
-				printf(".dynstr original size: %d\n", dynstr_shdr.size);
+				printf(".dynstr original size: %zu\n", dynstr_shdr.size);
 				ctx->new_segment.filesz += dynstr_shdr.size;
 				ctx->new_segment.filesz += strlen(ctx->input_patch) + 1;
 			}
@@ -840,7 +840,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			    + sizeof(dyn[0]) + sizeof(dyn[0]) ; //+ strlen(ctx->input_patch) + 1;
 			uint64_t dynstr_index;
 
-			printf("Writing out DT_NEEDED entry in new dyn segment\n");
+			printf("Writing out DT_NEEDED entry for %s in new dyn segment\n", ctx->input_patch);
 			dyn[0].d_tag = DT_NEEDED;
 			dyn[0].d_un.d_ptr = dynstr_shdr.size;
 
@@ -912,7 +912,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			dynstr_shdr.size += strlen(ctx->output_exec) + 1;
 
 			printf("dynstr_shdr offset: %#lx\n", dynstr_n_offset);
-			printf("Modifying dynstr index %d\n", dynstr_index);
+			printf("Modifying dynstr index %zu\n", dynstr_index);
 			if (elf_section_modify(&ctx->bin.elfobj, dynstr_index, 
 			    &dynstr_shdr, &error) == false) {
 				fprintf(stderr, "elf_section_modify() failed\n");
