@@ -856,7 +856,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				return false;
 			}
 			if (set_dtag(ctx, (ElfW(Dyn) *)old_dynamic_segment, DT_STRSZ,
-			    dynstr_shdr.size + strlen(ctx->output_exec) + 1) == false) {
+			    dynstr_shdr.size + strlen(ctx->input_patch) + 1) == false) {
 				fprintf(stderr, "Failed to set DT_STRSZ value\n");
 				return false;
 			}
@@ -909,7 +909,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 
 			dynstr_shdr.offset = dynstr_n_offset;
 			dynstr_shdr.address = dynstr_n_vaddr;
-			dynstr_shdr.size += strlen(ctx->output_exec) + 1;
+			dynstr_shdr.size += strlen(ctx->input_patch) + 1;
 
 			printf("dynstr_shdr offset: %#lx\n", dynstr_n_offset);
 			printf("Modifying dynstr index %zu\n", dynstr_index);
