@@ -1726,6 +1726,8 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 	switch(rel.type) {
 	case R_X86_64_64:
 		shiva_debug("Applying R_X86_64_64 relocation\n");
+		fprintf(stderr, "Unsupported relocation. Don't use -fno-pic on x86_64 shiva modules\n");
+		return false;
 		if (rel.symname[0] == '.') {
 			struct elf_section shdr;
 			/*
@@ -1749,7 +1751,6 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 			 }
 		}
 		break;
-	}
 
 	case R_X86_64_PLTOFF64: /* computation L - GOT + A */
 		TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {

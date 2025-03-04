@@ -127,7 +127,7 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out, Elf64_auxv_t
 	 * Set the out value to the stack address that is &argc -- the beginning
 	 * of our stack setup.
 	 */
-	*out = (void *)esp_start;
+	*out = esp_start;
 	return esp_start;
 }
 
