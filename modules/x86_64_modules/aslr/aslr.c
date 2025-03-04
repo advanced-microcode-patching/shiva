@@ -48,28 +48,31 @@ build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr)
 	elf_relocation_iterator_t rel_iter;
 	elf_symtab_iterator_t sym_iter;
 	struct elf_relocation rel;
-	char *shdrname;
 
 	TAILQ_INIT(&aslr->orig_func_list);
 	TAILQ_INIT(&aslr->aslr_func_list);
+
+	printf("Getting .text section\n");
 
 	if (elf_section_by_name(&ctx->elfobj, ".text", &text) == false) {
 		fprintf(stderr, "Failed to get section .text\n");
 		return false;
 	}
 
+	printf("Iterating over functions\n");
 	elf_symtab_iterator_init(&ctx->elfobj, &sym_iter);
 	while (elf_symtab_iterator_next(&sym_iter, &symbol) == ELF_ITER_OK) {
 		if (symbol.type != STT_FUNC)
 			continue;
 		if (symbol.bind != STB_GLOBAL)
 			continue;
-		if (symbol.bind != STB_WEAK)
-			continue;
+		printf("Found global function. Is it > than %#lx and <= %#lx\n", text.address, text.address + text.size);
 		if (symbol.value >= text.address &&
 		    symbol.value < text.address + text.size) {
 			struct func_entry *fe;
 
+			printf("Allocating function entry\n");
+			fflush(stdout);
 			fe = calloc(1, sizeof(*fe));
 			if (fe == NULL) {
 				perror("calloc");
@@ -103,6 +106,8 @@ build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr)
 			elf_relocation_iterator_init(&ctx->elfobj, &rel_iter);
 			while (elf_relocation_iterator_next(&rel_iter, &rel)
 			    == ELF_ITER_OK) {
+				if (strcmp(rel.shdrname, ".rela.text") != 0)
+					continue;
 				if (rel.offset < fe->base_vaddr)
 					continue;
 				if (rel.offset >= fe->base_vaddr + fe->func_len)
@@ -123,11 +128,6 @@ build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr)
 			printf("Inserting function %s\n", fe->symbol.name);
 			TAILQ_INSERT_TAIL(&aslr->orig_func_list, fe, _linkage);
 		}
-		/*
-		 * We're only interested in .rela.text
-		 */
-		if (strcmp(shdrname, ".rela.text") != 0)
-			continue;
 	}
 	return true;
 }
