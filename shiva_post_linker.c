@@ -81,6 +81,17 @@ shiva_post_linker(void)
 		exit(EXIT_FAILURE);
 	}
 #ifdef __x86_64__
+	if (ctx_global->flags & SHIVA_F_LOAD_MODULE_INIT) {
+		/*
+         	 * For x86_64:
+         	 * Restore rdx with address of dl_fini_addr
+         	 * Copy the modules shiva_init address into r12 and jmp
+         	 */
+        	__asm__ __volatile__("mov %0, %%rdx" :: "g"(dl_fini_addr));
+        	__asm__ __volatile__("mov %0, %%r12" :: "r"(ctx_global->module.runtime->entry_point));
+        	__asm__ __volatile__("jmp *%r12");
+
+	}
 	/*
 	 * For x86_64:
 	 * Restore rdx with address of dl_fini_addr

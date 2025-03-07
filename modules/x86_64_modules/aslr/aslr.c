@@ -28,6 +28,8 @@ typedef struct func_entry {
 	struct elf_section section;
 	size_t func_len;
 	uint64_t flags;
+	int new_entry_number;
+	int old_entry_number;
 	TAILQ_HEAD(, reloc_entry) reloc_list;
 	TAILQ_ENTRY(func_entry) _linkage;
 } func_entry_t;
@@ -38,8 +40,10 @@ typedef struct aslr_ctx {
 	uint64_t base_vaddr;
 } aslr_ctx_t;
 
+
 bool
-build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr)
+build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
+    size_t *fn_count)
 {
 	size_t text_size;
 	uint64_t text_addr;
@@ -122,12 +126,37 @@ build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr)
 					return false;
 				}
 				re->rel = rel;
-				printf("Inserting relocation for .text\n");
+				printf("Inserting relocation for .text in %s\n",
+				    symbol.name);
 				TAILQ_INSERT_TAIL(&fe->reloc_list, re, _linkage);
 			}
 			printf("Inserting function %s\n", fe->symbol.name);
+			fe->old_entry_number = fn_count;
 			TAILQ_INSERT_TAIL(&aslr->orig_func_list, fe, _linkage);
+			*fn_count++;
 		}
+	}
+	return true;
+}
+
+bool
+reorder_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
+    size_t fn_count)
+{
+	struct func_entry *fe;
+	int *order_map = alloca(fn_count * sizeof(size_t));
+	int order, i;
+
+	for (i = 0; i < fn_count; i++)
+		order_map[i] = -1;
+
+	TAILQ_INIT(&aslr->aslr_func_list);
+
+	TAILQ_FOREACH(fe, &aslr->orig_func_list, _linkage) {
+		order = rand() % fn_count;
+		if (order_map[order] != -1)
+			continue;
+		order_map[order] = rand() % fn_count;
 	}
 	return true;
 }
@@ -136,11 +165,15 @@ int
 shiva_init(struct shiva_ctx *ctx)
 {
 	struct aslr_ctx aslr;
+	size_t fn_count;
 
-	if (build_func_list(ctx, &aslr) == false) {
+	if (build_func_list(ctx, &aslr, &fn_count) == false) {
 		fprintf(stderr, "build_func_list() failed on .text\n");
 		return -1;
 	}
 
-	
+	if (reorder_func_list(ctx, &aslr, fn_count) == false) {
+		fprintf(stderr, "reorder_func_list() failed\n");
+		return -1;
+	}
 }
