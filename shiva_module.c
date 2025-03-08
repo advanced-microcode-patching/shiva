@@ -966,7 +966,6 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		/*
 		 * If the PLTGOT entry doesn't point to a symbol within the Shiva module
 		 * itself, then let's check to see if we find it in the target executable.
-		 * Only applicable if linking mode is set: SHIVA_LINKING_MICROCODE_PATCH
 		 */
 		if (linker->mode == SHIVA_LINKING_MICROCODE_PATCH ||
 		    linker->mode == SHIVA_LINKING_MODULE) {
@@ -1078,7 +1077,8 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				struct elf_symbol tmp;
 				char path_out[PATH_MAX];
 
-				if (linker->mode == SHIVA_LINKING_MODULE) {
+				if (linker->mode == SHIVA_LINKING_MODULE &&
+				    strcmp(symbol.name, "malloc") != 0) {
 					/*
 					 * If the loaded patch is a shiva module (vs. a shiva patch) then we should
 					 * attempt to search for the symbols within the shiva binary first

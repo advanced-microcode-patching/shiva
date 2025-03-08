@@ -144,20 +144,26 @@ reorder_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
     size_t fn_count)
 {
 	struct func_entry *fe;
-	int *order_map = alloca(fn_count * sizeof(size_t));
+	int order_map[4096 * sizeof(size_t)]; // = malloc(fn_count * (sizeof(size_t)));
 	int order, i;
 
-	for (i = 0; i < fn_count; i++)
+	printf("1\n");
+	for (i = 0; i < fn_count; i++) {
+		printf("Setting order_map[%d]\n", i);
 		order_map[i] = -1;
-
+	}
+	printf("2\n");
 	TAILQ_INIT(&aslr->aslr_func_list);
 
 	TAILQ_FOREACH(fe, &aslr->orig_func_list, _linkage) {
 		order = rand() % fn_count;
+		printf("order = %d\n", order);
 		if (order_map[order] != -1)
 			continue;
+		printf("order_map[order] is being set to %d\n", rand() % fn_count);
 		order_map[order] = rand() % fn_count;
 	}
+	free(order_map);
 	return true;
 }
 
@@ -167,13 +173,16 @@ shiva_init(struct shiva_ctx *ctx)
 	struct aslr_ctx aslr;
 	size_t fn_count;
 
+	printf("Calling build_func_list\n");
 	if (build_func_list(ctx, &aslr, &fn_count) == false) {
 		fprintf(stderr, "build_func_list() failed on .text\n");
 		return -1;
 	}
 
+	printf("Calling reorder_func_list\n");
 	if (reorder_func_list(ctx, &aslr, fn_count) == false) {
 		fprintf(stderr, "reorder_func_list() failed\n");
 		return -1;
 	}
+	printf("Exiting\n");
 }
