@@ -26,7 +26,14 @@
  * an updated $x21 we now jump to &_start
  *
  * shiva_post_linker() must specifically handle each linker architecture.
+ * 
+ * NOTE: THe procedure for passing control off to the target is different
+ * with Shiva modules than with Shiva patches. A shiva module is essentially
+ * the same thing as a shiva patch except that it executes a shiva_init(shiva_ctx_t *ctx)
+ * function before it passes control to _start() in main.
  */
+
+
 
 void
 shiva_post_linker(void)
@@ -34,6 +41,9 @@ shiva_post_linker(void)
 	static struct shiva_module_delayed_reloc *delay_rel;
 	static uint64_t base;
 	static uint64_t dl_fini_addr;
+	static void (*shiva_init_fn)(void *arg);
+
+	shiva_init_fn = (void (*)(void *))ctx_global->module.runtime->entry_point;
 
 #ifdef __x86_64__
 	/*
@@ -46,6 +56,7 @@ shiva_post_linker(void)
 	 * hook, we must preserve and restore rdx before jumping to _start() at
 	 * the end of this function.
 	 */
+
 	__asm__ __volatile__("mov %%rdx, %0" : "=g"(dl_fini_addr));
 #endif
 	TAILQ_FOREACH(delay_rel, &ctx_global->module.runtime->tailq.delayed_reloc_list, _linkage) {
@@ -65,7 +76,6 @@ shiva_post_linker(void)
 		    delay_rel->symval, base, delay_rel->symval + base);
 	}
 
-	shiva_debug("Transfering control to %#lx\n", ctx_global->ulexec.entry_point);
 	test_mark();
 
 	/*
@@ -81,11 +91,32 @@ shiva_post_linker(void)
 		exit(EXIT_FAILURE);
 	}
 #ifdef __x86_64__
+	if (ctx_global->flags & SHIVA_F_LOAD_MODULE_INIT) {
+		test_mark();
+		/*
+		 * For x86_64 shiva modules
+		 * store pointer to shiva_ctx in rdi
+		 * store the modules shiva_init() memory address into r12
+		 * call shiva_init()
+		 * Once
+		 */
+		shiva_debug("Transfering control to the modules shiva_init() function  %#lx\n", ctx_global->module.runtime->entry_point);
+		test_mark();
+		__asm__ __volatile__("mov %0, %%rdi" :: "g"(ctx_global)); // passed as arg0 to shiva_init(shiva_ctx_t *);
+		__asm__ __volatile__("mov %0, %%r12" :: "r"(ctx_global->module.runtime->entry_point));
+		shiva_init_fn(ctx_global);
+		__asm__ __volatile__("mov %0, %%rdx" :: "g"(dl_fini_addr));
+		__asm__ __volatile__("mov %0, %%r12" :: "r"(ctx_global->ulexec.entry_point));
+		__asm__ __volatile__("jmp *%r12");
+
+	}
 	/*
-	 * For x86_64:
+	 * For x86_64 shiva patches:
 	 * Restore rdx with address of dl_fini_addr
 	 * Copy the entry point address into r12 and jmp
 	 */
+	shiva_debug("Transfering control to %#lx\n", ctx_global->ulexec.entry_point);
+	
 	__asm__ __volatile__("mov %0, %%rdx" :: "g"(dl_fini_addr));
 	__asm__ __volatile__("mov %0, %%r12" :: "r"(ctx_global->ulexec.entry_point));
 	__asm__ __volatile__("jmp *%r12");

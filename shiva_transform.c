@@ -260,7 +260,7 @@ shiva_tf_relink_xref_x86_64(struct shiva_module *linker, struct shiva_transform 
 		} else if (xref->insn_len == 7) {
 			*(uint32_t *)&rel_unit[3] = rel_val;
 		} else {
-			fprintf(stderr, "invalid insn len for ip relative mov. len val: %u\n",
+			fprintf(stderr, "invalid insn len for ip relative mov. len val: %lu\n",
 			    xref->insn_len);
 			return false;
 		}

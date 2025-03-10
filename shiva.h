@@ -47,6 +47,7 @@
 #define SHIVA_OPTS_F_STATIC_ELF			(1UL << 3)
 
 #define SHIVA_F_ULEXEC_LDSO_NEEDED	(1UL << 0)
+#define SHIVA_F_LOAD_MODULE_INIT		(1UL << 1)
 
 #define SHIVA_STACK_SIZE	(PAGE_SIZE * 1000)
 
@@ -59,7 +60,7 @@
 
 /*
  * These flags are set to indicate various attributes of the loaded
- * shiva module.
+ * shiva module. specific to flags in struct module.
  */
 #define SHIVA_MODULE_F_RUNTIME	(1UL << 0) /* deprecated, meaningless */
 #define SHIVA_MODULE_F_INIT	(1UL << 1) /* deprecated, meaningless */
@@ -74,6 +75,7 @@
 
 #define SHIVA_DEFAULT_MODULE_PATH "/opt/shiva/modules/shakti.o"
 
+#define SHIVA_INIT_FUNC "shiva_init"
 /*
  * Path to real dynamic linker.
  * XXX this should be configurable via environment.
@@ -425,6 +427,7 @@ struct shiva_module {
 	uint64_t shiva_base; /* base address of shiva executable at runtime */
 	uint64_t target_base; /* base address of target executable at runtime */
 	size_t tf_text_offset; /* Offset of .text in module runtime image after transforms */
+	uint64_t entry_point; // only needed when loading a module vs. a patch
 	elfobj_t elfobj; /* elfobj to the module */
 	elfobj_t self; /* elfobj to self (Shiva binary) */
 	elfobj_t *target_elfobj; /* elfobj of target executable */
@@ -503,6 +506,7 @@ typedef struct shiva_ctx {
 	struct {
 		struct shiva_module *runtime;
 		struct shiva_module *initcode;
+		uint64_t entry_point;
 	} module;
 	struct {
 		Elf64_Rela *jmprel;

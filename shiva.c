@@ -502,8 +502,8 @@ int main(int argc, char **argv, char **envp)
 	 */
 transfer_control:
 	test_mark();
-	shiva_debug("Passing control to entry point: %#lx\n", ctx.ulexec.entry_point);
-	shiva_debug("LDSO entry point: %#lx\n", ctx.ulexec.ldso.entry_point);
+	shiva_debug("Passing control to LDSO entry point: %#lx\n", ctx.ulexec.ldso.entry_point);
+	shiva_debug("Target entrypoint: %#lx\n", ctx.ulexec.entry_point);
 	shiva_debug("new RSP: %#lx\n", ctx.ulexec.rsp_start);
 	SHIVA_ULEXEC_LDSO_TRANSFER(ctx.ulexec.rsp_start, ctx.ulexec.ldso.entry_point,
 	    ctx.ulexec.entry_point);

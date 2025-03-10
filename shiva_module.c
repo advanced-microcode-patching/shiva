@@ -62,6 +62,7 @@ transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
 
 	return fn(ctx);
 }
+
 #ifdef __aarch64__
 static bool
 install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
@@ -875,14 +876,14 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 	return true;
 }
 /*
- * Module entry point. Lookup symbol "shakti_main"
+ * Module entry point. Lookup symbol "shiva_init"
  */
 static bool
 module_entrypoint(struct shiva_module *linker, uint64_t *entry)
 {
 	struct elf_symbol symbol;
 
-	if (elf_symbol_by_name(&linker->elfobj, "shakti_main", &symbol) == false) {
+	if (elf_symbol_by_name(&linker->elfobj, SHIVA_INIT_FUNC, &symbol) == false) {
 		shiva_debug("elf_symbol_by_name failed to find 'shakti_main'\n");
 		return false;
 	}
@@ -965,9 +966,9 @@ resolve_pltgot_entries(struct shiva_module *linker)
 		/*
 		 * If the PLTGOT entry doesn't point to a symbol within the Shiva module
 		 * itself, then let's check to see if we find it in the target executable.
-		 * Only applicable if linking mode is set: SHIVA_LINKING_MICROCODE_PATCH
 		 */
-		if (linker->mode == SHIVA_LINKING_MICROCODE_PATCH) {
+		if (linker->mode == SHIVA_LINKING_MICROCODE_PATCH ||
+		    linker->mode == SHIVA_LINKING_MODULE) {
 			bool in_target = false;
 			struct elf_plt plt_entry;
 			struct shiva_module_delayed_reloc *delay_rel;
@@ -1068,12 +1069,29 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				}
 			} else {
 				/*
-				 * The symbol isn't in the target ELF exectutable, or in the Shiva
-				 * module. Let's try resolving it from the shared library dependencies
-				 * listed in the targets dynamic segment.
+				 * The symbol isn't in the target ELF
+				 * exectutable.  Let's try resolving it from
+				 * the shared library dependencies listed in
+				 * the targets dynamic segment.
 				 */
 				struct elf_symbol tmp;
 				char path_out[PATH_MAX];
+
+				if (linker->mode == SHIVA_LINKING_MODULE &&
+				    strcmp(symbol.name, "malloc") != 0) {
+					/*
+					 * If the loaded patch is a shiva module (vs. a shiva patch) then we should
+					 * attempt to search for the symbols within the shiva binary first
+					 * because shiva modules rely on using the libelfmaster embedded within
+					 */
+					if (elf_symbol_by_name(&linker->self, current->symname,
+					    &symbol) == true) {
+						shiva_debug("found symbol value within shiva binary, setting GOT(%p)[%s] to %#lx\n",
+						    GOT, current->symname, symbol.value);
+						*(uint64_t *)GOT = symbol.value;
+						continue;
+					}
+				}
 
 				res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 				if (res == false) {
@@ -1116,6 +1134,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 			 * important, but not so much to AMP. Although I think it could
 			 * be?
 			 */
+#if 0
 		} else if (linker->mode == SHIVA_LINKING_MODULE) {
 			if (elf_symbol_by_name(&linker->self, current->symname, &symbol) == false) {
 				fprintf(stderr, "Could not resolve symbol '%s'. Linkage failure!\n",
@@ -1125,6 +1144,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 			*(uint64_t *)GOT = symbol.value;
 			shiva_debug("Found symbol '%s':%#lx within the Shiva API\n", current->symname,
 			    symbol.value);
+#endif
 		} else {
 			fprintf(stderr, " Undefined linking behavior\n");
 			shiva_debug("undefined linking behavior\n");
@@ -1234,9 +1254,10 @@ internal_symresolve(struct shiva_module *linker, char *symname,
 		default:
 			return false;
 		}
-	} else if (res == false && linker->mode == SHIVA_LINKING_MICROCODE_PATCH) {
+	} else if (res == false) {
 		char *so_path;
 
+		printf("Looking for symbol %s in shared libs\n", symname);
 		res = shiva_so_resolve_symbol(linker, (char *)symname, &tmp, &so_path);
 		if (res == true) {
 			*type = RESOLVER_TARGET_SO_RESOLVE;
@@ -1250,6 +1271,7 @@ internal_symresolve(struct shiva_module *linker, char *symname,
 			memcpy(symbol, &tmp, sizeof(*symbol));
 			return true;
 		}
+		printf("Looking for symbol %s in shiva binary\n", symname);
 		res = elf_symbol_by_name(&linker->self, symname, &tmp);
 		if (res == true) {
 			*type = RESOLVER_TARGET_SHIVA_SELF;
@@ -1723,6 +1745,34 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 
 #if defined(__x86_64__)
 	switch(rel.type) {
+	case R_X86_64_64:
+		shiva_debug("Applying R_X86_64_64 relocation\n");
+		fprintf(stderr, "Unsupported relocation. Don't use -fno-pic on x86_64 shiva modules\n");
+		return false;
+		if (rel.symname[0] == '.') {
+			struct elf_section shdr;
+			/*
+			 * Iterate through the sections that have been mapped
+			 * from the modules ELF object into the process image
+			 */
+			TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
+				if (strcmp(smap_current->name, rel.symname) == 0) {
+					shiva_debug("Target symbol is an ELF section: '%s'\n",
+					    smap_current->name);
+					res = elf_section_by_name(&linker->elfobj, rel.symname, &shdr);
+					if (res == false) {
+						fprintf(stderr, "elf_section_by_name(..., %s, ...) failed\n",
+						    rel.symname);
+						return false;
+					}
+				}
+				/*
+				 * XXX UNFINISHED CODE XXX/
+				 */
+			 }
+		}
+		break;
+
 	case R_X86_64_PLTOFF64: /* computation L - GOT + A */
 		TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {
 			if (strcmp(rel.symname, current->symname) != 0)
@@ -3156,9 +3206,10 @@ fail:
 	return false;
 }
 
+
 /*
  * Our linker has two modes:
- * 1. Link Shiva modules, who's init function is always STT_FUNC:shakti_main()
+ * 1. Link Shiva modules, who's init function is always STT_FUNC:shiva_init_main()
  * 2. Link a microcode patch driven by targetted symbol interposition.
  */
 static void
@@ -3166,7 +3217,7 @@ set_linker_mode(struct shiva_module *linker)
 {
 	struct elf_symbol symbol;
 
-	if (elf_symbol_by_name(&linker->elfobj, "shakti_main", &symbol) == false) {
+	if (elf_symbol_by_name(&linker->elfobj, SHIVA_INIT_FUNC, &symbol) == false) {
 		linker->mode = SHIVA_LINKING_MICROCODE_PATCH;
 	} else {
 		if (symbol.type != STT_FUNC || symbol.bind != STB_GLOBAL) {
@@ -3174,6 +3225,17 @@ set_linker_mode(struct shiva_module *linker)
 		} else {
 			linker->mode = SHIVA_LINKING_MODULE;
 		}
+	}
+
+	if (linker->mode == SHIVA_LINKING_MODULE) {
+		/*
+		 * This must be set so that the shiva_post_linker()
+		 * knows to pass control to the shiva_init() function
+		 * in the module. Otherwise if it's a patch it won't
+		 * pass control to the module, it passes control to
+		 * the entry point of the target executable.
+		 */
+		linker->ctx->flags |= SHIVA_F_LOAD_MODULE_INIT;
 	}
 	return;
 }
@@ -3250,10 +3312,10 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	set_linker_mode(linker);
 	switch(linker->mode) {
 	case SHIVA_LINKING_MODULE:
-		shiva_debug("Shiva linker mode: <MODULE>\n");
+		shiva_debug("Shiva linker mode: Loadable Module\n");
 		break;
 	case SHIVA_LINKING_MICROCODE_PATCH:
-		shiva_debug("Shiva linker mode: <MICROCODE PATCH>\n");
+		shiva_debug("Shiva linker mode: Micropatching\n");
 		break;
 	case SHIVA_LINKING_UNKNOWN:
 		shiva_debug("Unknown linking mode, quitting\n");
@@ -3304,7 +3366,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 
 	/*
 	 * If we are linking a Shiva module, then we pass control to the
-	 * init function of the module "shakti_main()"
+	 * init function of the module "shiva_init()"
 	 * Otherwise, if we are linking a microcode patch we don't pass
 	 * control to it directly, it is executed through patching hooks
 	 * within the target executable.
@@ -3319,12 +3381,12 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		return true;
 	}
 
-	if (module_entrypoint(linker, &entry) == false) {
+	if (module_entrypoint(linker, &ctx->module.runtime->entry_point) == false) {
 		shiva_debug("Failed to get module entry point\n");
 		return false;
 	}
-	shiva_debug("ModuleEntry point address: %#lx\n", entry);
-	transfer_to_module(ctx, entry);
-	shiva_debug("Successfully executed module\n");
+	shiva_debug("ModuleEntry point address: %#lx\n", ctx->module.runtime->entry_point);
+	//transfer_to_module(ctx, entry);
+	//shiva_debug("Successfully executed module\n");
 	return true;
 }
