@@ -1077,18 +1077,17 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				struct elf_symbol tmp;
 				char path_out[PATH_MAX];
 
-				if (linker->mode == SHIVA_LINKING_MODULE &&
-				    strcmp(symbol.name, "malloc") != 0) {
-					/*
-					 * If the loaded patch is a shiva module (vs. a shiva patch) then we should
-					 * attempt to search for the symbols within the shiva binary first
-					 * because shiva modules rely on using the libelfmaster embedded within
-					 */
+				/*
+				 * But first... if this is a module (vs. a patch) then lets check the symbol
+				 * table within the shiva binary itself, since the modules use libelfmaster
+				 * API, which can be resolved from the shiva binary itself.
+				 */
+				if (linker->mode == SHIVA_LINKING_MODULE) {
 					if (elf_symbol_by_name(&linker->self, current->symname,
-					    &symbol) == true) {
+						 &symbol) == true) {
 						shiva_debug("found symbol value within shiva binary, setting GOT(%p)[%s] to %#lx\n",
 						    GOT, current->symname, symbol.value);
-						*(uint64_t *)GOT = symbol.value;
+							*(uint64_t *)GOT = symbol.value;
 						continue;
 					}
 				}

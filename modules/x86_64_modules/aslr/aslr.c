@@ -22,6 +22,8 @@ typedef struct reloc_entry {
 
 #define ASLR_FUNC_F_ENTRYPOINT	(1 << 0) // is pointed to by ehdr->e_entry
 
+#define ELF_RUNTIME_BASE(x) (x + ctx->ulexec.base_vaddr)
+
 typedef struct func_entry {
 	uint64_t base_vaddr;	// on disk
 	uint64_t runtime_vaddr; // after initial ASLR at runtime
@@ -32,8 +34,6 @@ typedef struct func_entry {
 	struct elf_section section;
 	size_t func_len;
 	uint64_t flags;
-	int new_entry_number;
-	int old_entry_number;
 	TAILQ_HEAD(, reloc_entry) reloc_list;
 	TAILQ_ENTRY(func_entry) _linkage;
 } func_entry_t;
@@ -44,7 +44,31 @@ typedef struct aslr_ctx {
 	uint64_t base_vaddr;
 } aslr_ctx_t;
 
+#define HEAP_INITIALIZER NULL
+
 struct elf_section text_section, got_section;
+uint8_t *heap_buf = HEAP_INITIALIZER;
+
+#define CHUNK_SIZE 32
+
+void *
+my_malloc(size_t len, uint8_t **mem)
+{
+	static int alloc_lens = 0;
+
+	if (*mem == NULL) {
+		*mem = mmap(NULL, 0x200000,
+		    PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+		if (*mem == MAP_FAILED) {
+			printf("malloc failed with mmap\n");
+			exit(-1);
+		}
+		return (void *)*mem;
+	}
+	*mem += (len = len + CHUNK_SIZE & ~(CHUNK_SIZE - 1));
+	printf("Allocating %zu bytes with my_malloc\n", len);
+	return (void *)((char *)*mem - len);
+}
 
 bool
 build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
@@ -138,24 +162,24 @@ build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
 					perror("malloc");
 					return false;
 				}
-				re->rel = rel;
-				printf("Inserting relocation for .text in %s\n",
-				    symbol.name);
+				memcpy(&re->rel, &rel, sizeof(struct elf_relocation));
+				printf("Inserting relocation type %lu for .text in %s\n",
+				    re->rel.type, symbol.name);
 				TAILQ_INSERT_TAIL(&fe->reloc_list, re, _linkage);
 			}
 			printf("Inserting function %s\n", fe->symbol.name);
-			fe->old_entry_number = fn_count;
 			fe->runtime_vaddr = fe->base_vaddr + ctx->ulexec.base_vaddr;
 			/*
 			 * Create new memory mapping to move function into.
 			 */
 			fe->n_mem = mmap(NULL, fe->func_len, PROT_READ|PROT_WRITE|PROT_EXEC,
-			    MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+			    MAP_32BIT|MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
 			if (fe->n_mem == MAP_FAILED) {
 				perror("mmap");
 				return false;
 			}
 			fe->new_base_vaddr = (uint64_t)fe->n_mem;
+			printf("NEW BASE ADDRESS OF %s is %#lx\n", fe->symbol.name, fe->new_base_vaddr);
 			fe->o_mem = (uint8_t *)fe->runtime_vaddr;
 			TAILQ_INSERT_TAIL(&aslr->orig_func_list, fe, _linkage);
 			*fn_count++;
@@ -167,32 +191,65 @@ build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
 bool
 relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entry *fe)
 {
+	uint64_t page_vaddr;
 	struct reloc_entry *rel_entry;
-	uint64_t plt_addr; // address of a specific PLT entry
-	uint64_t gotoff; // offset of beginning of GOT within the executable
+	bool res;
+
+	printf("Fixing up function %s\n", fe->symbol.name);
 
 	TAILQ_FOREACH(rel_entry, &fe->reloc_list, _linkage) {
-		uint8_t *r_ptr = fe->n_mem + rel_entry.rel.offset;
+		uint8_t *r_ptr = (fe->flags & ASLR_FUNC_F_ENTRYPOINT) ?
+		    (uint8_t *)(ctx->ulexec.base_vaddr + rel_entry->rel.offset) : fe->n_mem + rel_entry->rel.offset;
 		uint64_t rel_addr = (uint64_t)r_ptr;
+		uint32_t rel_val;
+		uint64_t plt_addr;
+		struct elf_plt plt;
+		struct elf_section shdr;
+		uint64_t symval;
+		struct elf_symbol symbol;
+		char *p;
 
-		switch(rel_entry.rel.type) {
+		page_vaddr = (uint64_t)r_ptr & ~4095;
+
+		p = strchr(rel_entry->rel.symname, '@');
+		if (p != NULL)
+			*p = '\0';
+
+		printf("Relocation type: %lu\n", rel_entry->rel.type);
+		printf("Relocation offset: %#lx\n", rel_entry->rel.offset);
+		printf("Relunit: %p\n", r_ptr);
+
+		(void )mprotect((void *)page_vaddr, 4096, PROT_READ|PROT_WRITE|PROT_EXEC);
+
+		switch(rel_entry->rel.type) {
 		case R_X86_64_GOTPCREL:
+			printf("R_X86_64_GOTPCREL, target symbol %s\n", rel_entry->rel.symname);
 			break;
-		case R_X86_64_REX_GOTPCRELX:
+		case R_X86_64_GOTPCRELX:
+			printf("R_X86_64_GOTPCRELX\n");
+			if (strcmp(rel_entry->rel.symname, "__libc_start_main") == 0) {
+				printf("Ignoring relocation with target symbol __libc_start_main\n");
+				break;
+			}
 			break;
-		case R_X86_64_PLT32:
-			res = elf_plt_by_name(&ctx->elfobj, fe->symbol.name,
+		case R_X86_64_PLT32: /* L + A - P */
+			printf("R_X86_64_PLT32\n");
+			res = elf_plt_by_name(&ctx->elfobj, rel_entry->rel.symname,
 			    &plt);
 			if (res == false) {
 				fprintf(stderr, "elf_plt_by_name() failed on %s\n",
-				    fe->symbol.name);
+				    rel_entry->rel.symname);
 				return false;
 			}
 			plt_addr = plt.addr + ctx->ulexec.base_vaddr;
 			rel_val = plt_addr + rel_entry->rel.addend - rel_addr;
+			printf("Setting X86_64_PLT32 reloc value to %x (destination symbol is PLT entry %#lx)\n",
+			    rel_val, plt_addr);
 			*(uint32_t *)r_ptr = rel_val;
+			printf("Setting ptr %p to %#lx succeeded\n", r_ptr, rel_val);
 			break;
-		case R_X86_64_PC32:
+		case R_X86_64_PC32: /* S + A - P */
+			printf("R_X86_64_PC32\n");
 			if (rel_entry->rel.symname[0] == '.') {
 				res = elf_section_by_name(&ctx->elfobj, rel_entry->rel.symname,
 				    &shdr);
@@ -201,12 +258,36 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 					    rel_entry->rel.symname);
 					return false;
 				}
-				/*
-				 * TODO
-				 */
+				symval = ELF_RUNTIME_BASE(shdr.address);
+				rel_val = symval + rel_entry->rel.addend - rel_addr;
+				printf("Setting R_X86_64_PC32 reloc value to %#x (destination symbol %s:%#lx)\n",
+				    rel_val, rel_entry->rel.symname, symval);
+				*(uint32_t *)&r_ptr[0] = rel_val;
+				break;
+			} else {
+				if (elf_symbol_by_name(&ctx->elfobj, rel_entry->rel.symname,
+				    &symbol) == true) {
+					struct func_entry *tmp;
+
+					if (symbol.type == STT_FUNC) {
+						printf("Searching for symbol %s\n", symbol.name);
+						TAILQ_FOREACH(tmp, &aslr->orig_func_list, _linkage) {
+							if (strcmp(tmp->symbol.name, rel_entry->rel.symname) != 0)
+								continue;
+							symval = tmp->new_base_vaddr;
+							rel_val = symval + rel_entry->rel.addend - rel_addr;
+							printf("Setting X86_64_PC32 reloc value to %#x"
+							    " destination symbol %s:%#lx)\n", rel_val,
+							    rel_entry->rel.symname, symval);
+							*(uint32_t *)r_ptr = rel_val;
+						}
+					}
+				}
+				break;
 			}
-			break;
+		}
 	}
+	(void)mprotect((void *)page_vaddr, 4096, PROT_READ|PROT_EXEC);
 	return true;
 }
 
@@ -217,15 +298,36 @@ move_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entry *f
 	size_t delta;
 	struct reloc_entry *rel_entry;
 
+	printf("Moving function %s\n", fe->symbol.name);
 	memcpy(fe->n_mem, (uint8_t *)fe->runtime_vaddr, fe->func_len);
 	delta = fe->base_vaddr - text_section.address;
 	TAILQ_FOREACH(rel_entry, &fe->reloc_list, _linkage) {
-		printf("Updating relocation offset from %#lx to %#lx\n", 
-		rel_entry->rel.offset, rel_entry->rel.offset - delta);
-		rel_entry->rel.offset -= delta;
+		delta = rel_entry->rel.offset - fe->base_vaddr;
+		printf("Updating relocation type %lu: changing offset from %#lx to %#lx\n", 
+		    rel_entry->rel.type, rel_entry->rel.offset, delta);
+
+		rel_entry->rel.offset = delta;
 	}
+	printf("Calling relocate_function on %s\n", fe->symbol.name);
 	return relocate_function(ctx, aslr, fe);
 }
+
+bool
+remove_old_function(struct shiva_ctx *ctx, struct func_entry *fe)
+{
+	int ret;
+
+	/*
+	 * Simply zero it out
+	 */
+	printf("%s -- len: %zu at %#lx\n", fe->symbol.name, fe->func_len, fe->runtime_vaddr);
+	ret = mprotect((void *)(fe->runtime_vaddr & ~4095), fe->func_len, PROT_READ|PROT_WRITE|PROT_EXEC);
+	memset((void *)fe->runtime_vaddr, 0, fe->func_len - 1);
+	ret = mprotect((void *)(fe->runtime_vaddr & ~4095), fe->func_len, PROT_READ|PROT_EXEC);
+
+	return ret ? false : true;
+}
+
 bool
 randomize_func_locations(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
     size_t fn_count)
@@ -233,14 +335,33 @@ randomize_func_locations(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
 	struct func_entry *fe;
 	bool res;
 
+	(void)fn_count;
+
 	TAILQ_FOREACH(fe, &aslr->orig_func_list, _linkage) {
-		if (fe->flags & ASLR_FUNC_F_ENTRYPOINT)
+		if (fe->flags & ASLR_FUNC_F_ENTRYPOINT) {
+			/*
+			 * This function is probably _start and
+			 * we therefore do not move it, we leave it
+			 * as the entrypoint, but we must fixup its
+			 * relocations to point to the new main() etc.
+			 */
+			printf("Fixing up entrypoint code\n");
+			res = relocate_function(ctx, aslr, fe);
+			if (res == false) {
+				fprintf(stderr, "Failed to relocate entrypoint function %s\n",
+				    fe->symbol.name);
+				return false;
+			}
 			continue;
+		}
 		res = move_function(ctx, aslr, fe);		
 		if (res == false) {
 			fprintf(stderr, "Failed to move function %s\n", fe->symbol.name);
 			return false;
 		}
+		printf("Removing old function %s\n", fe->symbol.name);
+		res = remove_old_function(ctx, fe);
+		printf("Finished removing old function\n");
 	}
 	return true;
 }
@@ -257,7 +378,7 @@ shiva_init(struct shiva_ctx *ctx)
 		return -1;
 	}
 	
-	if (randomize_func_locations(ctx, &aslr, &fn_count) == false) {
+	if (randomize_func_locations(ctx, &aslr, fn_count) == false) {
 		fprintf(stderr, "randomize_func_locations() failed\n");
 		return -1;
 	}
