@@ -28,6 +28,8 @@ uint8_t plt_stub[8] = "\x11\x00\x00\x58"  /* ldr	x17, got_entry_mem */
 		      "\x20\x02\x1f\xd6"; /* br x17			   */
 #endif
 
+#define STB_LOCAL_FUNC -33
+
 static bool module_has_transforms(struct shiva_module *);
 static bool get_section_mapping(struct shiva_module *, char *, struct shiva_module_section_mapping *);
 static bool enable_post_linker(struct shiva_module *);
@@ -709,6 +711,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 
 	shiva_callsite_iterator_init(ctx, &callsites);
 	while (shiva_callsite_iterator_next(&callsites, &be) == SHIVA_ITER_OK) {
+		shiva_debug("Callsite symname: %s\n", be.symbol.name);
 		if (be.branch_flags & SHIVA_BRANCH_F_PLTCALL) {
 			char *p = strchr(be.symbol.name, '@');
 
@@ -776,8 +779,9 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 		shiva_debug("Looking up symname: %s\n", symname);
 		if (elf_symbol_by_name(&linker->elfobj, symname,
 		    &symbol) == true) {
-			if (symbol.type != STT_FUNC ||
-			    symbol.bind != STB_GLOBAL)
+			if (symbol.type != STT_FUNC)
+				continue;
+			if (symbol.bind != STB_GLOBAL && symbol.bind != STB_LOCAL)
 				continue;
 #if __aarch64__
 			shiva_debug("Installing patch offset on target at %#lx for %s. Transform: %p\n",
@@ -995,7 +999,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				real_symname = strstr(symbol.name, "_orig_func_");
 				real_symname += strlen("_orig_func_");
 
-				shiva_debug("Looking up symbol: '%s' in target\n", real_symname);
+				shiva_debug("Looking up helper symbol: '%s' in target\n", real_symname);
 				if (elf_symbol_by_name(linker->target_elfobj, real_symname,
 				    &symbol) == true) {
 					if (symbol.value == 0 || symbol.type != STT_FUNC) {
@@ -1008,6 +1012,28 @@ resolve_pltgot_entries(struct shiva_module *linker)
 					    symbol.value + linker->target_base);
 					*(uint64_t *)GOT = symbol.value + linker->target_base;
 					continue;
+				} else {
+					if ((int64_t)ep->data == (int64_t)STB_LOCAL_FUNC) {
+						char tmp[PATH_MAX] = {0};
+
+						strncpy(tmp, real_symname, PATH_MAX - strlen(".part.0") - 1);
+						strcat(tmp, ".part.0");
+
+						if (elf_symbol_by_name(linker->target_elfobj, tmp,
+						    &symbol) == true) {
+							if (symbol.value == 0 || symbol.type != STT_FUNC ||
+							    symbol.bind != STB_LOCAL) {
+								fprintf(stderr, "external symbol is invalid: %s\n",
+								    symbol.name);
+								return false;
+							}
+							shiva_debug("Resolving helper function '%s' to external symbol '%s'"
+							    " that is locally bound = %#lx\n", symbol.name, tmp,
+							    symbol.value + linker->target_base);
+							*(uint64_t *)GOT = symbol.value + linker->target_base;
+							continue;
+						}
+					}
 				}
 			}
 			/*
@@ -2804,7 +2830,9 @@ validate_helpers(struct shiva_ctx *ctx, struct shiva_module *linker)
 
 	elf_symtab_iterator_init(&linker->elfobj, &sym_iter);
 	while (elf_symtab_iterator_next(&sym_iter, &symbol) == ELF_ITER_OK) {
-		if (symbol.type != STT_NOTYPE || symbol.bind != STB_GLOBAL)
+		if (symbol.type != STT_NOTYPE)
+			continue;
+		if (symbol.bind != STB_GLOBAL && symbol.bind != STB_LOCAL)
 			continue;
 		if (strncasecmp(symbol.name, SHIVA_HELPER_CALL_EXTERNAL_ID,
 		    strlen(SHIVA_HELPER_CALL_EXTERNAL_ID)) == 0) {
@@ -2818,13 +2846,36 @@ validate_helpers(struct shiva_ctx *ctx, struct shiva_module *linker)
 			shiva_debug("Function %s\n", dst_symname);
 			if (elf_symbol_by_name(linker->target_elfobj,
 				dst_symname, &target_sym) == false) {
-				fprintf(stderr, "The symbol doesn't exist: %s not found in %s\n",
-				    dst_symname, elf_pathname(linker->target_elfobj));
-				return false;
+				if (symbol.type == STB_LOCAL) {
+					/*
+					 * If the function in the patch object is STB_LOCAL
+					 * and we could not find a symbol of the same name in
+					 * the target executable, then lets check to see if there
+					 * is a symbol with this same name with a ".part.0" suffix.
+					 * Some linkers generate STB_LOCAL symbols with a suffix
+					 * to prevent multiple STB_LOCAL symbols with the exact
+					 * same name.
+					 */
+
+					char tmp[PATH_MAX] = {0};
+					strncpy(tmp, dst_symname, PATH_MAX - strlen(".part.0") - 1);
+					strcat(tmp, ".part.0");
+
+					if (elf_symbol_by_name(linker->target_elfobj, tmp,
+					    &target_sym) == false) {
+						fprintf(stderr, "The symbol doesn't exist: %s"
+						    " not found in %s\n", tmp, elf_pathname(linker->target_elfobj));
+						return false;
+					}
+				} else {
+					fprintf(stderr, "The symbol doesn't exist: %s not found in %s\n",
+					    dst_symname, elf_pathname(linker->target_elfobj));
+					return false;
+				}
 			}
 
 			e.key = (char *)symbol.name; /* i.e. __shiva_helper_orig_func */
-			e.data = NULL;
+			e.data = symbol.type == STB_LOCAL ? (void *)STB_LOCAL_FUNC : NULL;
 
 			if (hsearch_r(e, FIND, &ep, &linker->cache.helpers) != 0)
 				continue;
@@ -3386,7 +3437,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		return false;
 	}
 	shiva_debug("ModuleEntry point address: %#lx\n", ctx->module.runtime->entry_point);
-	//transfer_to_module(ctx, entry);
+	//transfer_to_module(ctx, entry); // we no longer need this
 	//shiva_debug("Successfully executed module\n");
 	return true;
 }
