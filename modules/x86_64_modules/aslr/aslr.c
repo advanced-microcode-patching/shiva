@@ -139,7 +139,7 @@ build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
 			 * Create new memory mapping to move function into.
 			 */
 			fe->n_mem = mmap(NULL/*(void *)ctx->ulexec.base_vaddr*/, fe->func_len, PROT_READ|PROT_WRITE|PROT_EXEC,
-			    MAP_32BIT|MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+			    MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
 			if (fe->n_mem == MAP_FAILED) {
 				perror("mmap");
 				return false;
@@ -224,27 +224,15 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 				}
 			} else {
 				symval = ELF_RUNTIME_BASE(symbol.value);
+				shiva_debug("symval set to %#lx\n", symval);
 			}
 
 			rel_val = symval + rel_entry->rel.addend -
 			    ELF_RUNTIME_BASE(got.address);
-#if 0
-			if (strncmp(rel_entry->rel.symname, ".LC", 3) == 0) {
-				if (elf_section_by_name(&ctx->elfobj, ".got", &got) == false) {
-					fprintf(stderr, "elf_section_by_name() failed on .got\n");
-					return false;
-				}
-				rel_val = ELF_RUNTIME_BASE(symbol.value) + rel_entry->rel.addend -
-				    ELF_RUNTIME_BASE(got.address);
-			} else {
-				
-				shiva_debug("UNHANDLED relocation for symname %s\n", rel_entry->rel.symname);
-				exit(0);
-				// TODO
-			}
-#endif
+
 			shiva_debug("R_X86_64_GOTOFF64 setting r_ptr(%p) to rel_val: %#x\n",
 			    r_ptr, rel_val);
+
 			*(int64_t *)r_ptr = rel_val;
 			break;
 		case R_X86_64_PLTOFF64: /* L - GOT + A */
@@ -460,5 +448,4 @@ shiva_init(struct shiva_ctx *ctx)
 		fprintf(stderr, "randomize_func_locations() failed\n");
 		return -1;
 	}
-	printf("Exiting gASLR module\n");
 }
