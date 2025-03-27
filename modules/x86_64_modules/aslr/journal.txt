@@ -51,3 +51,6 @@ section, in place.
 Also a large code model would not be needed if we augmented the small-code model relocations
 with an extra plt/got like jump-table.
 
+May need to make sure memory mappings for functions are not violating DEP while fixing them
+up. Keep them writable (but not rwx) and then mark it back to r+x when done.
+
