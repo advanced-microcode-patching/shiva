@@ -10,5 +10,6 @@ int test1(void)
 #endif
 int main(void)
 {
+	char *p = malloc(10);
 	printf("main is at %p\n", &main);
 }

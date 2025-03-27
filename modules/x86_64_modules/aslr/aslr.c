@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "../../include/shiva_module.h"
 #include "../../../shiva.h"
+#include "../../../shiva_debug.h"
 #include "/opt/elfmaster/include/libelfmaster.h"
 
 #include <stdio.h>
@@ -211,6 +212,23 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 				fprintf(stderr, "elf_symbol_by_name failed on %s\n", symbol.name);
 				return false;
 			}
+			if (symbol.type == STT_FUNC && symbol.bind == STB_GLOBAL) {
+				struct func_entry *tmp;
+
+				TAILQ_FOREACH(tmp, &aslr->orig_func_list, _linkage) {
+					if (strcmp(tmp->symbol.name, rel_entry->rel.symname) != 0)
+						continue;
+					symval = tmp->new_base_vaddr;
+					shiva_debug("symval set to %#lx\n", symval);
+					break;
+				}
+			} else {
+				symval = ELF_RUNTIME_BASE(symbol.value);
+			}
+
+			rel_val = symval + rel_entry->rel.addend -
+			    ELF_RUNTIME_BASE(got.address);
+#if 0
 			if (strncmp(rel_entry->rel.symname, ".LC", 3) == 0) {
 				if (elf_section_by_name(&ctx->elfobj, ".got", &got) == false) {
 					fprintf(stderr, "elf_section_by_name() failed on .got\n");
@@ -219,10 +237,13 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 				rel_val = ELF_RUNTIME_BASE(symbol.value) + rel_entry->rel.addend -
 				    ELF_RUNTIME_BASE(got.address);
 			} else {
+				
 				shiva_debug("UNHANDLED relocation for symname %s\n", rel_entry->rel.symname);
+				exit(0);
 				// TODO
 			}
-			shiva_debug("R_X86_64_GOTOFF64 setting r_ptr(%p) to %#x\n",
+#endif
+			shiva_debug("R_X86_64_GOTOFF64 setting r_ptr(%p) to rel_val: %#x\n",
 			    r_ptr, rel_val);
 			*(int64_t *)r_ptr = rel_val;
 			break;
@@ -286,46 +307,57 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 				}
 				symval = ELF_RUNTIME_BASE(shdr.address);
 				rel_val = symval + rel_entry->rel.addend - rel_addr;
-				shiva_debug("Setting R_X86_64_PC32 reloc value to %#x (destination symbol %s:%#lx)\n",
+				shiva_debug("Setting R_X86_64_PC32 reloc value to rel_val: %#x (destination symbol %s:%#lx)\n",
 				   rel_val, rel_entry->rel.symname, symval);
 				*(uint32_t *)&r_ptr[0] = rel_val;
 				break;
 			} else {
 				if (elf_symbol_by_name(&ctx->elfobj, rel_entry->rel.symname,
-				    &symbol) == true) {
-					struct func_entry *tmp;
+				    &symbol) == false) {
+					fprintf(stderr, "elf_symbol_by_name() failed to find symbol %s\n",
+					    symbol.name);
+					return false;
+				}
+				struct func_entry *tmp;
 
-					if (symbol.type == STT_FUNC) {
-						shiva_debug("Searching for symbol %s\n", symbol.name);
-						TAILQ_FOREACH(tmp, &aslr->orig_func_list, _linkage) {
-							if (strcmp(tmp->symbol.name, rel_entry->rel.symname) != 0)
-								continue;
-							if (fe->flags & ASLR_FUNC_F_ENTRYPOINT) {
-								if (strcmp(tmp->symbol.name, "main") == 0) {
-									uint8_t *new_r_ptr;
+				if (symbol.type == STT_FUNC) {
+					shiva_debug("Searching for symbol %s\n", symbol.name);
+					TAILQ_FOREACH(tmp, &aslr->orig_func_list, _linkage) {
+						if (strcmp(tmp->symbol.name, rel_entry->rel.symname) != 0)
+							continue;
+						if (fe->flags & ASLR_FUNC_F_ENTRYPOINT) {
+							/*
+							 * Instead of solving the normal relocation for
+							 * a R_X86_64_PC32 here, we actually replace an
+							 * entire 'lea 0x0(%rip), $rdi' instruction with
+							 * a 'movabs <new_main> $rdi'. The memory mapping
+							 * where main() lives will likely exceed what can
+							 * be encoded into a 4 byte offset.
+							 */ 
+							if (strcmp(tmp->symbol.name, "main") == 0) {
+								uint8_t *new_r_ptr;
 
-									new_r_ptr = r_ptr + 6;
-									uint32_t offset = *(uint32_t *)new_r_ptr;
-									*(uint32_t *)&rip_call[2] = offset - 3;
-									*(uint64_t *)&movabs_rdi[2] = tmp->new_base_vaddr;
-									new_r_ptr = r_ptr - 3;
-									memcpy(new_r_ptr, movabs_rdi, sizeof(movabs_rdi));
-									new_r_ptr += sizeof(movabs_rdi) - 1;
-									memcpy(new_r_ptr, rip_call, sizeof(rip_call));
-									break;
-								}
+								new_r_ptr = r_ptr + 6;
+								uint32_t offset = *(uint32_t *)new_r_ptr;
+								*(uint32_t *)&rip_call[2] = offset - 3;
+								*(uint64_t *)&movabs_rdi[2] = tmp->new_base_vaddr;
+								new_r_ptr = r_ptr - 3;
+								memcpy(new_r_ptr, movabs_rdi, sizeof(movabs_rdi));
+								new_r_ptr += sizeof(movabs_rdi) - 1;
+								memcpy(new_r_ptr, rip_call, sizeof(rip_call));
+								break;
 							}
-							symval = tmp->new_base_vaddr;
-							rel_val = symval + rel_entry->rel.addend - rel_addr;
-							shiva_debug("Setting X86_64_PC32 reloc value to %#x"
-							    " destination symbol %s:%#lx)\n", rel_val,
-							    rel_entry->rel.symname, symval);
-							*(uint32_t *)r_ptr = rel_val;
 						}
+						symval = tmp->new_base_vaddr;
+						rel_val = symval + rel_entry->rel.addend - rel_addr;
+						shiva_debug("Setting X86_64_PC32 reloc value to rel_val: %#x"
+						    " destination symbol %s:%#lx)\n", rel_val,
+						    rel_entry->rel.symname, symval);
+						*(uint32_t *)r_ptr = rel_val;
 					}
 				}
-				break;
 			}
+			break;
 		}
 	}
 
@@ -428,4 +460,5 @@ shiva_init(struct shiva_ctx *ctx)
 		fprintf(stderr, "randomize_func_locations() failed\n");
 		return -1;
 	}
+	printf("Exiting gASLR module\n");
 }

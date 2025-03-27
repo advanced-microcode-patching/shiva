@@ -3396,6 +3396,15 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		return false;
 	}
 	shiva_debug("ModuleEntry point address: %#lx\n", ctx->module.runtime->entry_point);
+	
+	/*
+	 * XXX TODO
+	 * We must call transfer_to_module() in the event that the target program
+	 * uses no external linkage. This has to do with the fact that external linkage
+	 * triggers the post_linker to set the AT_ENTRY hook to shiva_init() so that
+	 * once ldlinux.so is done it passes control back to shiva_init(). On programs
+	 * without ...
+	 */
 	//transfer_to_module(ctx, entry);
 	//shiva_debug("Successfully executed module\n");
 	return true;
