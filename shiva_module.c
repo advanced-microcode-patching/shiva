@@ -1826,9 +1826,21 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 		 * invoked indirectly via call *reg
 		 */
 		if (elf_symbol_by_name(&linker->elfobj, rel.symname, &symbol) == true) {
+			struct elf_section tmpshdr;
+			struct elf_symbol tmpsym;
+
 			rel_unit = &linker->text_mem[smap.offset + rel.offset];
 			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
-			if (strncmp(rel.symname, ".LC", 3) == 0) {
+
+			if (elf_symbol_by_name(&linker->elfobj, rel.symname, &tmpsym) == false) {
+				fprintf(stderr, "Failed to retrieve symbol: %s\n", rel.symname);
+				return false;
+			}
+			if (elf_section_by_index(&linker->elfobj, tmpsym.shndx, &tmpshdr) == false) {
+				fprintf(stderr, "Failed to retrieve section index %d\n", tmpsym.shndx);
+				return false;
+			}
+			if (strcmp(tmpshdr.name, ".rodata") == 0) {
 				/*
 				 * Symbol is likely pointing to locations within
 				 * the .rodata section. We will need to add symbol value
@@ -1840,7 +1852,6 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 					fprintf(stderr, "Failed to retrieve section data for %s\n", rel.shdrname);
 					return false;
 				}
-
 				rel_val = (symbol.value + smap_tmp.vaddr) + rel.addend -
 				    (linker->data_vaddr + linker->pltgot_off);
 			} else {
