@@ -1077,18 +1077,17 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				struct elf_symbol tmp;
 				char path_out[PATH_MAX];
 
-				if (linker->mode == SHIVA_LINKING_MODULE &&
-				    strcmp(symbol.name, "malloc") != 0) {
-					/*
-					 * If the loaded patch is a shiva module (vs. a shiva patch) then we should
-					 * attempt to search for the symbols within the shiva binary first
-					 * because shiva modules rely on using the libelfmaster embedded within
-					 */
+				/*
+				 * But first... if this is a module (vs. a patch) then lets check the symbol
+				 * table within the shiva binary itself, since the modules use libelfmaster
+				 * API, which can be resolved from the shiva binary itself.
+				 */
+				if (linker->mode == SHIVA_LINKING_MODULE) {
 					if (elf_symbol_by_name(&linker->self, current->symname,
-					    &symbol) == true) {
+						 &symbol) == true) {
 						shiva_debug("found symbol value within shiva binary, setting GOT(%p)[%s] to %#lx\n",
 						    GOT, current->symname, symbol.value);
-						*(uint64_t *)GOT = symbol.value;
+							*(uint64_t *)GOT = symbol.value;
 						continue;
 					}
 				}
@@ -1827,9 +1826,21 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 		 * invoked indirectly via call *reg
 		 */
 		if (elf_symbol_by_name(&linker->elfobj, rel.symname, &symbol) == true) {
+			struct elf_section tmpshdr;
+			struct elf_symbol tmpsym;
+
 			rel_unit = &linker->text_mem[smap.offset + rel.offset];
 			rel_addr = linker->text_vaddr + smap.offset + rel.offset;
-			if (strncmp(rel.symname, ".LC", 3) == 0) {
+
+			if (elf_symbol_by_name(&linker->elfobj, rel.symname, &tmpsym) == false) {
+				fprintf(stderr, "Failed to retrieve symbol: %s\n", rel.symname);
+				return false;
+			}
+			if (elf_section_by_index(&linker->elfobj, tmpsym.shndx, &tmpshdr) == false) {
+				fprintf(stderr, "Failed to retrieve section index %d\n", tmpsym.shndx);
+				return false;
+			}
+			if (strcmp(tmpshdr.name, ".rodata") == 0) {
 				/*
 				 * Symbol is likely pointing to locations within
 				 * the .rodata section. We will need to add symbol value
@@ -1841,7 +1852,6 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 					fprintf(stderr, "Failed to retrieve section data for %s\n", rel.shdrname);
 					return false;
 				}
-
 				rel_val = (symbol.value + smap_tmp.vaddr) + rel.addend -
 				    (linker->data_vaddr + linker->pltgot_off);
 			} else {
@@ -3386,6 +3396,15 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		return false;
 	}
 	shiva_debug("ModuleEntry point address: %#lx\n", ctx->module.runtime->entry_point);
+	
+	/*
+	 * XXX TODO
+	 * We must call transfer_to_module() in the event that the target program
+	 * uses no external linkage. This has to do with the fact that external linkage
+	 * triggers the post_linker to set the AT_ENTRY hook to shiva_init() so that
+	 * once ldlinux.so is done it passes control back to shiva_init(). On programs
+	 * without ...
+	 */
 	//transfer_to_module(ctx, entry);
 	//shiva_debug("Successfully executed module\n");
 	return true;
