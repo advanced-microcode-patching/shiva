@@ -1,3 +1,17 @@
+/*
+ * X86_64 gASLR by Ryan O'Neill
+ * A 2025 Shiva module
+ *
+ * Target program must be built with a large code model:
+ * 	gcc -mcmodel=large
+ * Target program must be built with preserved text relocations:
+ * 	gcc -Wl,--emit-relocs
+ *
+ * cp gASLR.o /opt/shiva/modules
+ * shiva-ld -e <binary> -p gASLR.o -s /opt/shiva/modules -i /lib/shiva -o test -d
+ *
+ */
+
 #define _GNU_SOURCE
 #include "../../include/shiva_module.h"
 #include "../../../shiva.h"
@@ -8,13 +22,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <sys/queue.h>
-/*
- * These function entries are a list of all
- * function within the .text section. We will
- * use transformations to modify the relocations
- * so that we can relocate the newly ordered
- * functions.
- */
 
 typedef struct reloc_entry {
 	struct elf_relocation rel;
@@ -138,7 +145,7 @@ build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
 			/*
 			 * Create new memory mapping to move function into.
 			 */
-			fe->n_mem = mmap(NULL/*(void *)ctx->ulexec.base_vaddr*/, fe->func_len, PROT_READ|PROT_WRITE|PROT_EXEC,
+			fe->n_mem = mmap(NULL, fe->func_len, PROT_READ|PROT_WRITE|PROT_EXEC,
 			    MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
 			if (fe->n_mem == MAP_FAILED) {
 				perror("mmap");
@@ -256,33 +263,6 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 			    rel_entry->rel.addend);
 			*(uint32_t *)r_ptr = rel_val;
 			break;
-#if 0
-		case R_X86_64_GOTPCREL:
-			//printf("R_X86_64_GOTPCREL, target symbol %s\n", rel_entry->rel.symname);
-			break;
-		case R_X86_64_GOTPCRELX:
-			//printf("R_X86_64_GOTPCRELX\n");
-			if (strcmp(rel_entry->rel.symname, "__libc_start_main") == 0) {
-				printf("Ignoring relocation with target symbol __libc_start_main\n");
-				break;
-			}
-			break;
-		case R_X86_64_PLT32: /* L + A - P */
-			shiva_debug("R_X86_64_PLT32\n");
-			res = elf_plt_by_name(&ctx->elfobj, rel_entry->rel.symname,
-			    &plt);
-			if (res == false) {
-				fprintf(stderr, "elf_plt_by_name() failed on %s\n",
-				    rel_entry->rel.symname);
-				return false;
-			}
-			plt_addr = plt.addr + ctx->ulexec.base_vaddr;
-			rel_val = plt_addr + rel_entry->rel.addend - rel_addr;
-			shiva_debug("Setting X86_64_PLT32 reloc value to %x (destination symbol is PLT entry %#lx)\n",
-			    rel_val, plt_addr);
-			*(uint32_t *)r_ptr = rel_val;
-			break;
-#endif
 		case R_X86_64_PC32: /* S + A - P */
 			shiva_debug("R_X86_64_PC32\n");
 			if (rel_entry->rel.symname[0] == '.') {
