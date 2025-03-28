@@ -116,7 +116,8 @@ build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
 			 * This makes sense since the absolute addresses didn't
 			 * exist until the ET_REL objects were linked into a
 			 * final executable, and thus the relocation tables get
-			 * updated with the absolute r_offset's.
+			 * updated with the absolute r_offset's that are relative
+			 * to the base (instead of relative to the .text section).
 			 *
 			 * NOTE: See -z --emit-relocs
 			 */
@@ -145,7 +146,7 @@ build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
 			/*
 			 * Create new memory mapping to move function into.
 			 */
-			fe->n_mem = mmap(NULL, fe->func_len, PROT_READ|PROT_WRITE|PROT_EXEC,
+			fe->n_mem = mmap(NULL, fe->func_len, PROT_READ|PROT_WRITE,
 			    MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
 			if (fe->n_mem == MAP_FAILED) {
 				perror("mmap");
@@ -173,7 +174,7 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 	uint64_t rel_flags = 0;
 
 	if (fe->flags & ASLR_FUNC_F_ENTRYPOINT) {
-		shiva_debug("RELOCATIONG ENTRY POINT %s\n", fe->symbol.name);
+		shiva_debug("Relocating entry point  %s\n", fe->symbol.name);
 	}
 	TAILQ_FOREACH(rel_entry, &fe->reloc_list, _linkage) {
 		uint8_t *r_ptr = (fe->flags & ASLR_FUNC_F_ENTRYPOINT) ?
@@ -199,7 +200,7 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 		shiva_debug("Relunit: %p\n", r_ptr);
 		shiva_debug("Symbol name: %s\n", rel_entry->rel.symname);
 
-		(void )mprotect((void *)page_vaddr, 4096, PROT_READ|PROT_WRITE|PROT_EXEC);
+		(void )mprotect((void *)page_vaddr, 4096, PROT_READ|PROT_WRITE);
 
 		switch(rel_entry->rel.type) {
 		case R_X86_64_GOTPC64: /* GOT - P + A */
@@ -288,46 +289,52 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 				}
 				struct func_entry *tmp;
 
-				if (symbol.type == STT_FUNC) {
-					shiva_debug("Searching for symbol %s\n", symbol.name);
-					TAILQ_FOREACH(tmp, &aslr->orig_func_list, _linkage) {
-						if (strcmp(tmp->symbol.name, rel_entry->rel.symname) != 0)
-							continue;
-						if (fe->flags & ASLR_FUNC_F_ENTRYPOINT) {
-							/*
-							 * Instead of solving the normal relocation for
-							 * a R_X86_64_PC32 here, we actually replace an
-							 * entire 'lea 0x0(%rip), $rdi' instruction with
-							 * a 'movabs <new_main> $rdi'. The memory mapping
-							 * where main() lives will likely exceed what can
-							 * be encoded into a 4 byte offset.
-							 */ 
-							if (strcmp(tmp->symbol.name, "main") == 0) {
-								uint8_t *new_r_ptr;
+				if (symbol.type != STT_FUNC)
+					break;
 
-								new_r_ptr = r_ptr + 6;
-								uint32_t offset = *(uint32_t *)new_r_ptr;
-								*(uint32_t *)&rip_call[2] = offset - 3;
-								*(uint64_t *)&movabs_rdi[2] = tmp->new_base_vaddr;
-								new_r_ptr = r_ptr - 3;
-								memcpy(new_r_ptr, movabs_rdi, sizeof(movabs_rdi));
-								new_r_ptr += sizeof(movabs_rdi) - 1;
-								memcpy(new_r_ptr, rip_call, sizeof(rip_call));
-								break;
-							}
+				shiva_debug("Searching for symbol %s\n", symbol.name);
+				TAILQ_FOREACH(tmp, &aslr->orig_func_list, _linkage) {
+					if (strcmp(tmp->symbol.name, rel_entry->rel.symname) != 0)
+						continue;
+					if (fe->flags & ASLR_FUNC_F_ENTRYPOINT) {
+						/*
+						 * Instead of solving the normal relocation for
+						 * a R_X86_64_PC32 here, we actually replace an
+						 * entire 'lea 0x0(%rip), $rdi' instruction with
+						 * a 'movabs <new_main> $rdi'. The memory mapping
+						 * where main() lives will likely exceed what can
+						 * be encoded into a 4 byte offset.
+						 *
+						 * init routes (i.e. _start, __libc_start_main, etc.)
+						 * are all already compiled into the crt*.o files. So
+						 * while main() and all other functions compiled may
+						 * be in a large code model, the init routines are not.
+						 */ 
+						if (strcmp(tmp->symbol.name, "main") == 0) {
+							uint8_t *new_r_ptr;
+
+							new_r_ptr = r_ptr + 6;
+							uint32_t offset = *(uint32_t *)new_r_ptr;
+							*(uint32_t *)&rip_call[2] = offset - 3;
+							*(uint64_t *)&movabs_rdi[2] = tmp->new_base_vaddr;
+							new_r_ptr = r_ptr - 3;
+							memcpy(new_r_ptr, movabs_rdi, sizeof(movabs_rdi));
+							new_r_ptr += sizeof(movabs_rdi) - 1;
+							memcpy(new_r_ptr, rip_call, sizeof(rip_call));
+							break;
 						}
-						symval = tmp->new_base_vaddr;
-						rel_val = symval + rel_entry->rel.addend - rel_addr;
-						shiva_debug("Setting X86_64_PC32 reloc value to rel_val: %#x"
-						    " destination symbol %s:%#lx)\n", rel_val,
-						    rel_entry->rel.symname, symval);
-						*(uint32_t *)r_ptr = rel_val;
 					}
+					symval = tmp->new_base_vaddr;
+					rel_val = symval + rel_entry->rel.addend - rel_addr;
+					shiva_debug("Setting X86_64_PC32 reloc value to rel_val: %#x"
+					    " destination symbol %s:%#lx)\n", rel_val,
+					    rel_entry->rel.symname, symval);
+					*(uint32_t *)r_ptr = rel_val;
 				}
 			}
-			break;
-		}
+		break;
 	}
+}
 
 	(void)mprotect((void *)page_vaddr,
 	    4096,
@@ -370,7 +377,7 @@ remove_old_function(struct shiva_ctx *ctx, struct func_entry *fe)
 	/*
 	 * Simply zero it out
 	 */
-	ret = mprotect((void *)(fe->runtime_vaddr & ~4095), fe->func_len, PROT_READ|PROT_WRITE|PROT_EXEC);
+	ret = mprotect((void *)(fe->runtime_vaddr & ~4095), fe->func_len, PROT_READ|PROT_WRITE);
 	memset((void *)fe->runtime_vaddr, 0, fe->func_len - 1);
 	ret = mprotect((void *)(fe->runtime_vaddr & ~4095), fe->func_len, PROT_READ|PROT_EXEC);
 

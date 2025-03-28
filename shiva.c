@@ -109,11 +109,12 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 		fprintf(stderr, "shiva_build_trace_data() failed\n");
 		return false;
 	}
-
+#if DETECT_RELA_TEXT
 	if (elf_section_by_name(&ctx->elfobj, ".rela.text", &section) == true) {
 		fprintf(stderr, "Warning: Found .text relocations in '%s'. This may alter"
 		    " the effects of breakpoints/instrumentation\n", elf_pathname(&ctx->elfobj));
 	}
+#endif
 
 #ifdef SPEED_TEST
 	struct timespec tv, tv2;
@@ -411,10 +412,12 @@ int main(int argc, char **argv, char **envp)
 		fprintf(stderr, "shiva_build_trace_data() failed\n");
 		exit(EXIT_FAILURE);
 	}
+#if DETECT_RELA_TEXT
 	if (elf_section_by_name(&ctx.elfobj, ".rela.text", &section) == true) {
 		fprintf(stderr, "Warning: Found .text relocations in '%s'. This may alter"
 		    " the effects of breakpoint debugging\n", elf_pathname(&ctx.elfobj));
 	}
+#endif
 	if (shiva_ulexec_prep(&ctx) == false) {
 		fprintf(stderr, "shiva_ulexec_prep() failed\n");
 		exit(EXIT_FAILURE);
