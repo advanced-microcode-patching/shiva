@@ -260,7 +260,7 @@ struct shiva_xref_site {
 	 * lea reg, qword ptr [rip + offset]
 	 * mov qword ptr [rip + offset], reg
 	 */
-	uint64_t rip_rel_disp; /* imm value of: <insn> <reg>, qword ptr [rip + <offset>] */
+	int64_t rip_rel_disp; /* imm value of: <insn> <reg>, qword ptr [rip + <offset>] */
 	uint64_t rip_rel_site; /* site address of ip relative instruction */
 	uint8_t  rip_rel_o_insn[16]; /* original instruction bytes */
 	size_t insn_len;

@@ -31,6 +31,37 @@ uint8_t plt_stub[8] = "\x11\x00\x00\x58"  /* ldr	x17, got_entry_mem */
 static bool module_has_transforms(struct shiva_module *);
 static bool get_section_mapping(struct shiva_module *, char *, struct shiva_module_section_mapping *);
 static bool enable_post_linker(struct shiva_module *);
+
+static bool
+symbol_is_glob_dat(struct elfobj *elfobj, const char *symname)
+{
+	elf_relocation_iterator_t rel_iter;
+	struct elf_relocation rel;
+	size_t len;
+	char *glibc_name;
+
+	shiva_debug("Looking for %s in %s\n", symname, elf_pathname(elfobj));
+	elf_relocation_iterator_init(elfobj, &rel_iter);
+	/*
+	 * XXX BUG the relocation iterator is showing incorrect rel.symname info
+	 * for R_X86_64_GLOB_DAT data.
+	 */
+	while (elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK) {
+		if (rel.type == R_X86_64_GLOB_DAT) {
+			shiva_debug("FOUND symbol %s type: %d\n", rel.symname, rel.type);
+		}
+	#if 0
+		if (strcmp(symname, rel.symname) == 0) {
+			return true;
+		}
+		glibc_name = shiva_xfmtstrdup("%s@GLIBC", symname);
+		len = strlen(glibc_name);
+		if (strncmp(glibc_name, rel.symname, len) == 0)
+			return true;
+	#endif
+	}
+	return false;
+}
 /*
  * Returns the name of the ELF section that the symbol lives in, within the
  * loaded ET_REL module.
@@ -1017,15 +1048,19 @@ resolve_pltgot_entries(struct shiva_module *linker)
 			    elf_pathname(linker->target_elfobj));
 			if (elf_symbol_by_name(linker->target_elfobj, current->symname,
 			    &symbol) == true) {
+				bool res1, res2;
+
 				shiva_debug("Found symbol '%s' value %d\n", symbol.name, symbol.value);
-				if (symbol.value == 0 && symbol.type == STT_FUNC) {
-					if (elf_plt_by_name(linker->target_elfobj,
-					    symbol.name, &plt_entry) == true) {
+				if (symbol.value == 0 && (symbol.type == STT_FUNC || symbol.type == STT_OBJECT)) {
+					//res1 = symbol_is_glob_dat(linker->target_elfobj, symbol.name);
+					//res2 = elf_plt_by_name(linker->target_elfobj, symbol.name, &plt_entry);
+					if (1) {
 						struct elf_symbol tmp;
 						char path_out[PATH_MAX];
 
-						shiva_debug("Symbol '%s' is a PLT entry, let's look it up in the shared libraries\n",
-						    symbol.name);
+						shiva_debug("Symbol '%s' is a %s, let's look it up in the shared libraries\n",
+						    symbol.name, res1 == true ? "GLOBAL_DATA entry" : "PLT entry");
+
 						res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 						if (res == false) {
 							fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
@@ -1059,11 +1094,13 @@ resolve_pltgot_entries(struct shiva_module *linker)
 						}
 						TAILQ_INSERT_TAIL(&linker->tailq.delayed_reloc_list, delay_rel, _linkage);
 					} else {
-						fprintf(stderr, "Undefined linking behavior: No PLT entry for STT_FUNC '%s' with zero value\n",
-						    symbol.name);
+						fprintf(stderr,
+						    "Undefined linking behavior: No GLOB_DAT or PLT entry"
+						     " for symbol '%s' with zero value\n",
+						     symbol.name);
 						return false;
 					}
-				} else if (symbol.value > 0 && (symbol.type == STT_FUNC ||symbol.type == STT_OBJECT)) {
+				} else if (symbol.value > 0 && (symbol.type == STT_FUNC || symbol.type == STT_OBJECT)) {
 					shiva_debug("resolved symbol in target: %s\n", elf_pathname(linker->target_elfobj));
 					*(uint64_t *)GOT = symbol.value + linker->target_base;
 				}
@@ -1810,7 +1847,7 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 		memcpy(&got_entry, ep->data, sizeof(got_entry));
 		rel_unit = &linker->text_mem[smap.offset + rel.offset];
 		rel_addr = linker->text_vaddr + smap.offset + rel.offset;
-		rel_val = got_entry.gotoff;
+		rel_val = got_entry.gotoff; //+ linker->text_vaddr;
 		shiva_debug("Resolved GOTOFF for GOT64 Reloc(%s): %x\n", rel.symname, rel_val);
 		shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
 		*(uint64_t *)&rel_unit[0] = rel_val;
@@ -2291,8 +2328,8 @@ calculate_data_size(struct shiva_module *linker)
 		case R_X86_64_PLT32:
 		case R_X86_64_GOT64:
 		case R_X86_64_PLTOFF64:
-#elif __aarch64__
-
+#elif __aarch64__ 
+		case R_AARCH64_CALL26: // somehow this was missing in the x86_64_port branch, added it back.
 #endif
 			/*
 			 * Create room for the modules pltgot
@@ -2311,7 +2348,7 @@ calculate_data_size(struct shiva_module *linker)
 
 			got_entry = shiva_malloc(sizeof(*got_entry));
 			got_entry->symname = rel.symname; /* rel.symname will be valid until elf is unloaded */
-	//		got_entry->gotaddr = linker->data_vaddr + linker->pltgot_off + offset;
+			got_entry->gotaddr = linker->data_vaddr + linker->pltgot_off + offset;
 			got_entry->gotoff = offset;
 
 			e.key = (char *)got_entry->symname;
@@ -2427,7 +2464,8 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	size_t off = 0;
 	size_t count = 0;
 
-	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
+	uint64_t mmap_flags = 
+	    (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
 	    MAP_PRIVATE|MAP_ANONYMOUS;
 	uint64_t mmap_base = 0;
 
@@ -2533,7 +2571,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	 * to load the target executable to a much higher address space.
 	 * In this case we won't use the MAP_32BIT.
 	 */
-	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
+	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE :
 	    MAP_PRIVATE|MAP_ANONYMOUS;
 	uint64_t mmap_base = 0;
 
@@ -2550,6 +2588,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 
 		shiva_maps_iterator_t maps_iter;
 		struct shiva_mmap_entry mmap_entry;
+		size_t offset;
 
 		shiva_maps_iterator_init(ctx, &maps_iter);
 		while (shiva_maps_iterator_next(&maps_iter, &mmap_entry) == SHIVA_ITER_OK) {
@@ -2557,6 +2596,27 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 				mmap_base = ELF_PAGEALIGN(mmap_entry.base + mmap_entry.len, PAGE_SIZE);
 				mmap_base += 4096 * 8;
 				break;
+			}
+		}
+		if (mmap_base != 0) {
+			uint64_t base_addr = mmap_base;
+			for (offset = 0; offset < 0x80000000; offset += 4096) {
+				linker->text_mem = mmap((void *)mmap_base + offset,
+				    ELF_PAGEALIGN(linker->text_size, PAGE_SIZE),
+				    PROT_READ|PROT_WRITE|PROT_EXEC,
+				    mmap_flags,
+				    -1,
+				    0);
+				if (linker->text_mem == MAP_FAILED)
+					continue;
+				if ((uintptr_t)linker->text_mem >= (uintptr_t)base_addr - 0x80000000
+				    && (uintptr_t)linker->text_mem <= (uintptr_t)base_addr + 0x80000000)
+					break;
+				munmap(linker->text_mem, ELF_PAGEALIGN(linker->text_size, PAGE_SIZE));
+			}
+			if (offset == 0x80000000) {
+				fprintf(stderr, "Unable to find mmap range within 2GB of original text\n");
+				return false;
 			}
 		}
 		if (mmap_base == 0) {
@@ -2568,13 +2628,14 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 		mmap_base = 0x6000000;
 		mmap_flags |= MAP_32BIT;
 		mmap_flags |= MAP_FIXED;
-	}
-	text_size_aligned = ELF_PAGEALIGN(linker->text_size, PAGE_SIZE);
-	linker->text_mem = mmap((void *)mmap_base, text_size_aligned, PROT_READ|PROT_WRITE|PROT_EXEC,
-	    mmap_flags, -1, 0);
-	if (linker->text_mem == MAP_FAILED) {
-		shiva_debug("mmap failed: %s\n", strerror(errno));
-		return false;
+
+		text_size_aligned = ELF_PAGEALIGN(linker->text_size, PAGE_SIZE);
+		linker->text_mem = mmap((void *)mmap_base, text_size_aligned, PROT_READ|PROT_WRITE|PROT_EXEC,
+	    	    mmap_flags, -1, 0);
+		if (linker->text_mem == MAP_FAILED) {
+			shiva_debug("mmap failed: %s\n", strerror(errno));
+			return false;
+		}
 	}
 	shiva_debug("Module text segment: %p\n", linker->text_mem);
 	linker->text_vaddr = (uint64_t)linker->text_mem;

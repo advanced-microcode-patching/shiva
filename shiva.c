@@ -208,7 +208,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	while (shiva_auxv_iterator_next(&auxv_iter, &auxv_entry) == SHIVA_ITER_OK) {
 		if (auxv_entry.type == AT_ENTRY) {
 			ctx->ulexec.entry_point = auxv_entry.value;
-			shiva_debug("[1] Entry point: %#lx\n", entry_point);
+			shiva_debug("[1] Entry point: %#lx\n", ctx->ulexec.entry_point);
 			break;
 		}
 	}
@@ -280,7 +280,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	 * rsp must now point to our new stack, right at &argc
 	 */
 	rsp = (uint64_t *)n_stack;
-	shiva_debug("Target entry point: %#lx\n", entry_point);
+	shiva_debug("Target entry point: %#lx\n", ctx->ulexec.entry_point);
 	shiva_debug("LDSO entry point: %#lx\n", ctx->ulexec.ldso.entry_point);
 	shiva_debug("RSP: %lx\n", rsp);
 #if 0
@@ -318,7 +318,7 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 
 }
 
-int main(int argc, char **argv, char **envp)
+__attribute__ ((visibility("hidden"))) int main(int argc, char **argv, char **envp)
 {
 	shiva_ctx_t ctx;
 	struct elf_section section;

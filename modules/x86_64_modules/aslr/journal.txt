@@ -54,3 +54,12 @@ with an extra plt/got like jump-table.
 May need to make sure memory mappings for functions are not violating DEP while fixing them
 up. Keep them writable (but not rwx) and then mark it back to r+x when done.
 
+
+PACMAN notes.
+
+Make sure to check mprotect ret value. It's not working when setting the mapping back to PROT_READ|PROT_EXEC
+and leaving it as PROT_READ|PROT_WRITE. For now as a workaround I made it so that it uses PROT_WRITE|PROT_READ|PROT_EXEC
+when doing the writing, so the execute bit is still on when it fails to mprotect back to PROT_READ|PROT_EXEC.
+
+Now it's failing on an instruction where $rax is 0 and causing null deref. I think that this is due to the fact
+we aren't yet supporting one of the relocation types (Atleast one).
