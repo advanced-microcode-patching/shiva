@@ -688,6 +688,12 @@ install_x86_64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 
 #endif
 
+/*
+ * TODO
+ * Add support for PLT redirection in AArch64 Shiva
+ * Currently only a feature added in x86_64, allowing users to
+ * hook functions within the PLT via symbol interposition.
+ */
 static bool
 install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
     struct shiva_branch_site *b, struct elf_symbol *patch_symbol)
@@ -721,7 +727,7 @@ install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
 /*
  * The following function takes care of installing linkage into the ELF executable
  * itself so that it is properly linked to the patch code and data that lives
- * within the patches text and data segment respectively.
+ * within the patch text and data segment respectively.
  */
 static bool
 apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
@@ -737,6 +743,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 	bool res;
 	const char *symname = NULL;
 	char tmp_buf[PATH_MAX];
+	shiva_error_t trace_error;
 
 	shiva_callsite_iterator_init(ctx, &callsites);
 	while (shiva_callsite_iterator_next(&callsites, &be) == SHIVA_ITER_OK) {
@@ -900,6 +907,39 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 					    symbol.name);
 					return false;
 				}
+			}
+		}
+	}
+	/*
+	 * Trampoline code
+	 * movabs rax, 0x0000000000000000
+	 *  push   rax
+	 *  ret
+	 */
+	int8_t trampcode[12] = "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x50\xc3";
+	uint64_t target_vaddr;
+
+	/*
+	 * If there are any functions being transformed with a function splice
+	 * we should install a trampoline from orig_func to new_func. Not to replace
+	 * all of the re-linking we do to call into the new function, but to fix
+	 * https://github.com/advanced-microcode-patching/shiva/issues/16
+	 * It's a quick fix, but a decent one.
+	 */
+	TAILQ_FOREACH(transform, &linker->tailq.transform_list, _linkage) {
+		switch(transform->type) {
+		case SHIVA_TRANSFORM_SPLICE_FUNCTION:
+			target_vaddr = linker->text_vaddr + transform->segment_offset;
+			shiva_debug("Installing trampoline from original function %s:%#lx to transformed\n"
+			    "version of the function at %#lx\n", transform->target_symbol.name, transform->target_symbol.value,
+			    target_vaddr);
+			*(uint64_t *)&trampcode[2] = target_vaddr;
+			if (shiva_trace_write(ctx, 0,
+			    (void *)RUNTIME_BASE(transform->target_symbol.value), trampcode,
+			    12, &trace_error) == false) {
+				fprintf(stderr, "shiva_trace_write() failed to write at %p\n",
+				    (void *)RUNTIME_BASE(transform->target_symbol.value));
+				return false;
 			}
 		}
 	}
@@ -2631,7 +2671,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 
 		text_size_aligned = ELF_PAGEALIGN(linker->text_size, PAGE_SIZE);
 		linker->text_mem = mmap((void *)mmap_base, text_size_aligned, PROT_READ|PROT_WRITE|PROT_EXEC,
-	    	    mmap_flags, -1, 0);
+		    mmap_flags, -1, 0);
 		if (linker->text_mem == MAP_FAILED) {
 			shiva_debug("mmap failed: %s\n", strerror(errno));
 			return false;
@@ -2920,6 +2960,131 @@ validate_helpers(struct shiva_ctx *ctx, struct shiva_module *linker)
 }
 
 /*
+ * Used to find the length of the last instruction before a function splice.
+ * Only needed for x86_64 due to variable length instructions
+ */
+static bool
+find_insert_instruction_len(struct shiva_ctx *ctx,
+    uint64_t insert_vaddr, size_t *out)
+{
+
+	uint64_t qword, qword2;
+	csh handle;
+	cs_insn *insn;
+	size_t count;
+	uint8_t insn_code[16];
+
+	if (elf_read_address(&ctx->elfobj, insert_vaddr, &qword, ELF_QWORD) == false) {
+		fprintf(stderr, "elf_read_address() failed on %#lx\n", insert_vaddr);
+		return false;
+	}
+	if (elf_read_address(&ctx->elfobj, insert_vaddr + 8, &qword2, ELF_QWORD) == false) {
+		fprintf(stderr, "elf_read_address() failed on %#lx\n", insert_vaddr);
+		return false;
+	}
+
+	memcpy(insn_code, &qword, sizeof(uint64_t));
+	memcpy(insn_code + 8, &qword2, sizeof(uint64_t));
+
+	if (cs_open(CS_ARCH_X86, CS_MODE_64, &handle) != CS_ERR_OK) {
+		fprintf(stderr, "cs_open() failed\n");
+		return false;
+	}
+
+	count = cs_disasm(handle, insn_code, 16, insert_vaddr, 1, &insn);
+	*out = count > 0 ? insn[0].size : 0;
+
+	cs_close(&handle);
+
+	if (count > 0)
+		return true;
+	return false;
+
+}
+
+static bool
+set_transform_type(struct shiva_ctx *ctx, struct shiva_transform *transform)
+{
+
+	size_t last_insn_len;
+
+	/*
+	 * Get the length of the last instruction before the splice.
+	 * i.e. the insert_vaddr
+	 */
+	if (find_insert_instruction_len(ctx, transform->insert_vaddr,
+	    &last_insn_len) == false) {
+		fprintf(stderr, "Unable to find the instruction length at %#lx\n",
+		    transform->insert_vaddr);
+		return false;
+	}
+	/*
+	 * If the splice length (new_len) is exactly the same length
+	 * as the specified insertion space then we simply replace the
+	 * old bytes with the new bytes, which is the simplest form
+	 * of function splicing as it requires less local re-linking of
+	 * the function locally. The transform flags are simply: REPLACE
+	 */
+	if (transform->new_len == transform->old_len) {
+		transform->flags |= SHIVA_TRANSFORM_F_REPLACE;
+
+	/*
+	 * If the splice length (new_len) is smaller than the insertion
+	 * space, then our splice only overwrites new_len bytes of the
+	 * area and overwrites the rest of the instructions in the gap
+	 * with NOP instructions. Therefore we end up with transform REPLACE|NOP_PAD
+	 * flags.
+	 */
+	} else if (transform->new_len < transform->old_len) {
+		transform->flags |=
+		     (SHIVA_TRANSFORM_F_NOP_PAD | SHIVA_TRANSFORM_F_REPLACE);
+#ifdef __aarch64__
+	/*
+	 * If the splice length is larger than the insertion space, and the
+	 * insertion space is larger than the space between two instructions
+	 * (Which is 4 bytes in AArch64/ARM) then we require that the insertion
+	 * space is extended in size to make room for the new splice code.
+	 * We end up with the flags: EXTEND
+	 */
+	} else if ((transform->new_len > transform->old_len) &&
+		transform->old_len > ARM_INSN_LEN) {
+		transform->flags |=
+		    (SHIVA_TRANSFORM_F_EXTEND);
+	/*
+	 * If the insertion space length is the length between two adjacent instructions
+	 * i.e.
+	 * 0x0004: ins1
+	 * 0x0008: ins2
+	 * Then we will not overwrite any instructions. We create an insertion
+	 * space between two adjacent instructions, which we call an INJECTION EXTENSION
+	 * and thus end up with the flags: EXTEND|INJECT
+	 */
+	} else if (transform->old_len == ARM_INSN_LEN && transform->new_len > 0) {
+		transform->flags |=
+		    (SHIVA_TRANSFORM_F_EXTEND | SHIVA_TRANSFORM_F_INJECT);
+		transform->offset += ARM_INSN_LEN;
+		transform->old_len = 0;
+#elif __x86_64__
+	} else if ((transform->new_len > transform->old_len) &&
+		transform->old_len > last_insn_len) {
+		transform->flags |=
+		    (SHIVA_TRANSFORM_F_EXTEND);
+	} else if (transform->old_len == last_insn_len && transform->new_len > 0) {
+		transform->flags |=
+		    (SHIVA_TRANSFORM_F_EXTEND | SHIVA_TRANSFORM_F_INJECT);
+		transform->offset += last_insn_len;
+		transform->old_len = 0;
+#endif
+	} else if (transform->old_len == 0 && transform->new_len == 0) {
+		fprintf(stderr, "Invalid patch lengths. Length of patch: %zu,"
+		    " Length of patch area: %zu\n", transform->new_len, transform->old_len);
+		return false;
+	}
+
+return true;
+
+}
+/*
  * Transformations (formerly known as PTD)
  * If there are any transformations, make internal transformation
  * records.
@@ -3014,8 +3179,6 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 	 * collected by shiva_analyze_find_calls():shiva_analyze.c initially and
 	 * get_tf_function_refs() will store the relevant entries for each transform.
 	 */
-	if (TAILQ_EMPTY(&linker->tailq.transform_list))
-		shiva_debug("List is empty?\n");
 	TAILQ_FOREACH(transform, &linker->tailq.transform_list, _linkage) {
 		shiva_debug("Checking type: %d\n", transform->type);
 		switch(transform->type) {
@@ -3065,7 +3228,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 				    elf_pathname(&linker->elfobj));
 				goto fail;
 			}
-			insert_vaddr = tf_val;
+			transform->insert_vaddr = insert_vaddr = tf_val;
 			shiva_debug("%s: (deferenced at offset %#lx): %#lx\n", tf_sym.name,
 			    shdr.offset + tf_sym.value, tf_val);
 
@@ -3199,6 +3362,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 				transform->ext_len = padlen;
 			}
 			shiva_debug("new_len is now: %d\n", transform->new_len);
+			shiva_debug("old_len is %d\n", transform->old_len);
 			/*
 			 * How does the splice behave?
 			 * REPLACE: we are replacing B bytes of code with B bytes code.
@@ -3207,24 +3371,10 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			 * INJECT: (Coupled with extend) signifies an extension between two contiguous addresses;
 			 * in other words we are not overwriting any code, just adding new code.
 			 */
-			if (transform->new_len == transform->old_len) {
-				transform->flags |= SHIVA_TRANSFORM_F_REPLACE;
-			} else if (transform->new_len < transform->old_len) {
-				transform->flags |=
-				    (SHIVA_TRANSFORM_F_NOP_PAD | SHIVA_TRANSFORM_F_REPLACE);
-			} else if ((transform->new_len > transform->old_len) &&
-				    transform->old_len > ARM_INSN_LEN) {
-				transform->flags |=
-				    (SHIVA_TRANSFORM_F_EXTEND);
-			} else if (transform->old_len == ARM_INSN_LEN && transform->new_len > 0) {
-				transform->flags |=
-				    (SHIVA_TRANSFORM_F_EXTEND | SHIVA_TRANSFORM_F_INJECT);
-				transform->offset += ARM_INSN_LEN;
-				transform->old_len = 0;
-			} else if (transform->old_len == 0 && transform->new_len == 0) {
-				fprintf(stderr, "Invalid patch lengths. Length of patch: %zu,"
-				    " Length of patch area: %zu\n", transform->new_len, transform->old_len);
-				return false;
+			if (set_transform_type(ctx, transform) == false) {
+				fprintf(stderr, "Failed to determine transform behavior for %s\n",
+				    transform->target_symbol.name);
+				return true;
 			}
 			memset(tmp, 0, sizeof(tmp));
 			strcpy(tmp, SHIVA_T_SPLICE_FUNC_ID);

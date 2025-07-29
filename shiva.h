@@ -39,7 +39,7 @@
 #define ELF_PAGEOFFSET(_v) ((_v) & (ELF_MIN_ALIGN-1))
 #define ELF_PAGEALIGN(_v, _a) (((_v) + _a - 1) & ~(_a - 1))
 
-#define SHIVA_RUNTIME_ADDR(addr) (addr + ctx->ulexec.base)
+#define RUNTIME_BASE(addr) (addr + ctx->ulexec.base_vaddr)
 
 #define SHIVA_OPTS_F_MODULE_PATH		(1UL << 0)
 #define SHIVA_OPTS_F_ULEXEC_ONLY		(1UL << 1)
@@ -371,6 +371,7 @@ typedef struct shiva_transform {
 	uint64_t new_len; /* length of new code/data being inserted */
 	uint64_t ext_len; /* Extra length of function to make room for .text rdonly relocs */
 	uint64_t ext_off; /* Offset of where extra .text area begins */
+	uint64_t insert_vaddr; /* address within function where the splice insertion should begin after */
 #define SHIVA_TRANSFORM_F_REPLACE		(1UL << 0)
 #define SHIVA_TRANSFORM_F_INJECT		(1UL << 1)
 #define SHIVA_TRANSFORM_F_NOP_PAD		(1UL << 2)
