@@ -2996,8 +2996,11 @@ find_insert_instruction_len(struct shiva_ctx *ctx,
 
 	cs_close(&handle);
 
-	if (count > 0)
+	if (count > 0) {
+		shiva_debug("Last instruction size: %zu bytes -- %#lx: %s %s\n",
+		    insn[0].size, insn[0].address, insn[0].mnemonic, insn[0].op_str);
 		return true;
+	}
 	return false;
 
 }
