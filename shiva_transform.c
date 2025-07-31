@@ -441,7 +441,7 @@ const struct branch_instr branch_table[64] = {
 			{"js",	0x78},	{"jns", 0x79}, {"jp", 0x7a},	{"jpe", 0x7a}, {"jnp", 0x7b},
 			{"jpo", 0x7b},	{"jl", 0x7c},  {"jnge", 0x7c},	{"jnl", 0x7d}, {"jge", 0x7d},
 			{"jle", 0x7e},	{"jng", 0x7e}, {"jnle", 0x7f},	{"jg", 0x7f},  {"jmp", 0xeb},
-			{"jmp", 0xe9},	{"jmpf", 0xea}, {"je", 0x0f},	 {NULL, 0}
+			{"jmp", 0xe9},	{"jmpf", 0xea}, {"je", 0x0f},	{"call", 0xe8}, {NULL, 0}
 		};
 
 
@@ -486,11 +486,11 @@ shiva_tf_relink_local_branch_x86_64(struct shiva_module *linker, struct shiva_tr
 
 	if (mem[0] == 0x0f) {
 		uint32_t orig_offset = *(uint32_t *)&mem[2];
-		shiva_debug("relinking near jump branch: %s to (%lx + %lx) = %#lx\n", bptr->mnemonic, orig_offset, delta, orig_offset + delta);
+		shiva_debug("relinking near branch: %s to (%lx + %lx) = %#lx\n", bptr->mnemonic, orig_offset, delta, orig_offset + delta);
 		*(uint32_t *)&mem[2] = orig_offset + delta;
 	} else {
 		uint32_t orig_offset = *(uint8_t *)&mem[1];
-		shiva_debug("relinking short jump branch: %s to (%lx + %lx) = %#lx\n", bptr->mnemonic, orig_offset, delta, orig_offset + delta);
+		shiva_debug("relinking short branch: %s to (%lx + %lx) = %#lx\n", bptr->mnemonic, orig_offset, delta, orig_offset + delta);
 		*(uint8_t *)&mem[1] = orig_offset + delta;
 	}
 done:
