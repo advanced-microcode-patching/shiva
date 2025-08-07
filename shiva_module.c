@@ -31,6 +31,37 @@ uint8_t plt_stub[8] = "\x11\x00\x00\x58"  /* ldr	x17, got_entry_mem */
 static bool module_has_transforms(struct shiva_module *);
 static bool get_section_mapping(struct shiva_module *, char *, struct shiva_module_section_mapping *);
 static bool enable_post_linker(struct shiva_module *);
+
+static bool
+symbol_is_glob_dat(struct elfobj *elfobj, const char *symname)
+{
+	elf_relocation_iterator_t rel_iter;
+	struct elf_relocation rel;
+	size_t len;
+	char *glibc_name;
+
+	shiva_debug("Looking for %s in %s\n", symname, elf_pathname(elfobj));
+	elf_relocation_iterator_init(elfobj, &rel_iter);
+	/*
+	 * XXX BUG the relocation iterator is showing incorrect rel.symname info
+	 * for R_X86_64_GLOB_DAT data.
+	 */
+	while (elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK) {
+		if (rel.type == R_X86_64_GLOB_DAT) {
+			shiva_debug("FOUND symbol %s type: %d\n", rel.symname, rel.type);
+		}
+	#if 0
+		if (strcmp(symname, rel.symname) == 0) {
+			return true;
+		}
+		glibc_name = shiva_xfmtstrdup("%s@GLIBC", symname);
+		len = strlen(glibc_name);
+		if (strncmp(glibc_name, rel.symname, len) == 0)
+			return true;
+	#endif
+	}
+	return false;
+}
 /*
  * Returns the name of the ELF section that the symbol lives in, within the
  * loaded ET_REL module.
@@ -657,6 +688,12 @@ install_x86_64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 
 #endif
 
+/*
+ * TODO
+ * Add support for PLT redirection in AArch64 Shiva
+ * Currently only a feature added in x86_64, allowing users to
+ * hook functions within the PLT via symbol interposition.
+ */
 static bool
 install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
     struct shiva_branch_site *b, struct elf_symbol *patch_symbol)
@@ -690,7 +727,7 @@ install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
 /*
  * The following function takes care of installing linkage into the ELF executable
  * itself so that it is properly linked to the patch code and data that lives
- * within the patches text and data segment respectively.
+ * within the patch text and data segment respectively.
  */
 static bool
 apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
@@ -706,6 +743,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 	bool res;
 	const char *symname = NULL;
 	char tmp_buf[PATH_MAX];
+	shiva_error_t trace_error;
 
 	shiva_callsite_iterator_init(ctx, &callsites);
 	while (shiva_callsite_iterator_next(&callsites, &be) == SHIVA_ITER_OK) {
@@ -872,6 +910,39 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 			}
 		}
 	}
+	/*
+	 * Trampoline code
+	 * movabs rax, 0x0000000000000000
+	 *  push   rax
+	 *  ret
+	 */
+	int8_t trampcode[12] = "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x50\xc3";
+	uint64_t target_vaddr;
+
+	/*
+	 * If there are any functions being transformed with a function splice
+	 * we should install a trampoline from orig_func to new_func. Not to replace
+	 * all of the re-linking we do to call into the new function, but to fix
+	 * https://github.com/advanced-microcode-patching/shiva/issues/16
+	 * It's a quick fix, but a decent one.
+	 */
+	TAILQ_FOREACH(transform, &linker->tailq.transform_list, _linkage) {
+		switch(transform->type) {
+		case SHIVA_TRANSFORM_SPLICE_FUNCTION:
+			target_vaddr = linker->text_vaddr + transform->segment_offset;
+			shiva_debug("Installing trampoline from original function %s:%#lx to transformed\n"
+			    "version of the function at %#lx\n", transform->target_symbol.name, transform->target_symbol.value,
+			    target_vaddr);
+			*(uint64_t *)&trampcode[2] = target_vaddr;
+			if (shiva_trace_write(ctx, 0,
+			    (void *)RUNTIME_BASE(transform->target_symbol.value), trampcode,
+			    12, &trace_error) == false) {
+				fprintf(stderr, "shiva_trace_write() failed to write at %p\n",
+				    (void *)RUNTIME_BASE(transform->target_symbol.value));
+				return false;
+			}
+		}
+	}
 #endif
 	return true;
 }
@@ -1017,15 +1088,19 @@ resolve_pltgot_entries(struct shiva_module *linker)
 			    elf_pathname(linker->target_elfobj));
 			if (elf_symbol_by_name(linker->target_elfobj, current->symname,
 			    &symbol) == true) {
+				bool res1, res2;
+
 				shiva_debug("Found symbol '%s' value %d\n", symbol.name, symbol.value);
-				if (symbol.value == 0 && symbol.type == STT_FUNC) {
-					if (elf_plt_by_name(linker->target_elfobj,
-					    symbol.name, &plt_entry) == true) {
+				if (symbol.value == 0 && (symbol.type == STT_FUNC || symbol.type == STT_OBJECT)) {
+					//res1 = symbol_is_glob_dat(linker->target_elfobj, symbol.name);
+					//res2 = elf_plt_by_name(linker->target_elfobj, symbol.name, &plt_entry);
+					if (1) {
 						struct elf_symbol tmp;
 						char path_out[PATH_MAX];
 
-						shiva_debug("Symbol '%s' is a PLT entry, let's look it up in the shared libraries\n",
-						    symbol.name);
+						shiva_debug("Symbol '%s' is a %s, let's look it up in the shared libraries\n",
+						    symbol.name, res1 == true ? "GLOBAL_DATA entry" : "PLT entry");
+
 						res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 						if (res == false) {
 							fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
@@ -1059,11 +1134,13 @@ resolve_pltgot_entries(struct shiva_module *linker)
 						}
 						TAILQ_INSERT_TAIL(&linker->tailq.delayed_reloc_list, delay_rel, _linkage);
 					} else {
-						fprintf(stderr, "Undefined linking behavior: No PLT entry for STT_FUNC '%s' with zero value\n",
-						    symbol.name);
+						fprintf(stderr,
+						    "Undefined linking behavior: No GLOB_DAT or PLT entry"
+						     " for symbol '%s' with zero value\n",
+						     symbol.name);
 						return false;
 					}
-				} else if (symbol.value > 0 && (symbol.type == STT_FUNC ||symbol.type == STT_OBJECT)) {
+				} else if (symbol.value > 0 && (symbol.type == STT_FUNC || symbol.type == STT_OBJECT)) {
 					shiva_debug("resolved symbol in target: %s\n", elf_pathname(linker->target_elfobj));
 					*(uint64_t *)GOT = symbol.value + linker->target_base;
 				}
@@ -1810,7 +1887,7 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 		memcpy(&got_entry, ep->data, sizeof(got_entry));
 		rel_unit = &linker->text_mem[smap.offset + rel.offset];
 		rel_addr = linker->text_vaddr + smap.offset + rel.offset;
-		rel_val = got_entry.gotoff;
+		rel_val = got_entry.gotoff; //+ linker->text_vaddr;
 		shiva_debug("Resolved GOTOFF for GOT64 Reloc(%s): %x\n", rel.symname, rel_val);
 		shiva_debug("rel_addr: %#lx rel_val: %#lx\n", rel_addr, rel_val);
 		*(uint64_t *)&rel_unit[0] = rel_val;
@@ -2291,8 +2368,8 @@ calculate_data_size(struct shiva_module *linker)
 		case R_X86_64_PLT32:
 		case R_X86_64_GOT64:
 		case R_X86_64_PLTOFF64:
-#elif __aarch64__
-
+#elif __aarch64__ 
+		case R_AARCH64_CALL26: // somehow this was missing in the x86_64_port branch, added it back.
 #endif
 			/*
 			 * Create room for the modules pltgot
@@ -2311,7 +2388,7 @@ calculate_data_size(struct shiva_module *linker)
 
 			got_entry = shiva_malloc(sizeof(*got_entry));
 			got_entry->symname = rel.symname; /* rel.symname will be valid until elf is unloaded */
-	//		got_entry->gotaddr = linker->data_vaddr + linker->pltgot_off + offset;
+			got_entry->gotaddr = linker->data_vaddr + linker->pltgot_off + offset;
 			got_entry->gotoff = offset;
 
 			e.key = (char *)got_entry->symname;
@@ -2427,7 +2504,8 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	size_t off = 0;
 	size_t count = 0;
 
-	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
+	uint64_t mmap_flags = 
+	    (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
 	    MAP_PRIVATE|MAP_ANONYMOUS;
 	uint64_t mmap_base = 0;
 
@@ -2533,7 +2611,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	 * to load the target executable to a much higher address space.
 	 * In this case we won't use the MAP_32BIT.
 	 */
-	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
+	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE :
 	    MAP_PRIVATE|MAP_ANONYMOUS;
 	uint64_t mmap_base = 0;
 
@@ -2550,6 +2628,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 
 		shiva_maps_iterator_t maps_iter;
 		struct shiva_mmap_entry mmap_entry;
+		size_t offset;
 
 		shiva_maps_iterator_init(ctx, &maps_iter);
 		while (shiva_maps_iterator_next(&maps_iter, &mmap_entry) == SHIVA_ITER_OK) {
@@ -2557,6 +2636,27 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 				mmap_base = ELF_PAGEALIGN(mmap_entry.base + mmap_entry.len, PAGE_SIZE);
 				mmap_base += 4096 * 8;
 				break;
+			}
+		}
+		if (mmap_base != 0) {
+			uint64_t base_addr = mmap_base;
+			for (offset = 0; offset < 0x80000000; offset += 4096) {
+				linker->text_mem = mmap((void *)mmap_base + offset,
+				    ELF_PAGEALIGN(linker->text_size, PAGE_SIZE),
+				    PROT_READ|PROT_WRITE|PROT_EXEC,
+				    mmap_flags,
+				    -1,
+				    0);
+				if (linker->text_mem == MAP_FAILED)
+					continue;
+				if ((uintptr_t)linker->text_mem >= (uintptr_t)base_addr - 0x80000000
+				    && (uintptr_t)linker->text_mem <= (uintptr_t)base_addr + 0x80000000)
+					break;
+				munmap(linker->text_mem, ELF_PAGEALIGN(linker->text_size, PAGE_SIZE));
+			}
+			if (offset == 0x80000000) {
+				fprintf(stderr, "Unable to find mmap range within 2GB of original text\n");
+				return false;
 			}
 		}
 		if (mmap_base == 0) {
@@ -2568,13 +2668,14 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 		mmap_base = 0x6000000;
 		mmap_flags |= MAP_32BIT;
 		mmap_flags |= MAP_FIXED;
-	}
-	text_size_aligned = ELF_PAGEALIGN(linker->text_size, PAGE_SIZE);
-	linker->text_mem = mmap((void *)mmap_base, text_size_aligned, PROT_READ|PROT_WRITE|PROT_EXEC,
-	    mmap_flags, -1, 0);
-	if (linker->text_mem == MAP_FAILED) {
-		shiva_debug("mmap failed: %s\n", strerror(errno));
-		return false;
+
+		text_size_aligned = ELF_PAGEALIGN(linker->text_size, PAGE_SIZE);
+		linker->text_mem = mmap((void *)mmap_base, text_size_aligned, PROT_READ|PROT_WRITE|PROT_EXEC,
+		    mmap_flags, -1, 0);
+		if (linker->text_mem == MAP_FAILED) {
+			shiva_debug("mmap failed: %s\n", strerror(errno));
+			return false;
+		}
 	}
 	shiva_debug("Module text segment: %p\n", linker->text_mem);
 	linker->text_vaddr = (uint64_t)linker->text_mem;
@@ -2859,6 +2960,134 @@ validate_helpers(struct shiva_ctx *ctx, struct shiva_module *linker)
 }
 
 /*
+ * Used to find the length of the last instruction before a function splice.
+ * Only needed for x86_64 due to variable length instructions
+ */
+static bool
+find_insert_instruction_len(struct shiva_ctx *ctx,
+    uint64_t insert_vaddr, size_t *out)
+{
+
+	uint64_t qword, qword2;
+	csh handle;
+	cs_insn *insn;
+	size_t count;
+	uint8_t insn_code[16];
+
+	if (elf_read_address(&ctx->elfobj, insert_vaddr, &qword, ELF_QWORD) == false) {
+		fprintf(stderr, "elf_read_address() failed on %#lx\n", insert_vaddr);
+		return false;
+	}
+	if (elf_read_address(&ctx->elfobj, insert_vaddr + 8, &qword2, ELF_QWORD) == false) {
+		fprintf(stderr, "elf_read_address() failed on %#lx\n", insert_vaddr);
+		return false;
+	}
+
+	memcpy(insn_code, &qword, sizeof(uint64_t));
+	memcpy(insn_code + 8, &qword2, sizeof(uint64_t));
+
+	if (cs_open(CS_ARCH_X86, CS_MODE_64, &handle) != CS_ERR_OK) {
+		fprintf(stderr, "cs_open() failed\n");
+		return false;
+	}
+
+	count = cs_disasm(handle, insn_code, 16, insert_vaddr, 1, &insn);
+	*out = count > 0 ? insn[0].size : 0;
+
+	cs_close(&handle);
+
+	if (count > 0) {
+		shiva_debug("Last instruction size: %zu bytes -- %#lx: %s %s\n",
+		    insn[0].size, insn[0].address, insn[0].mnemonic, insn[0].op_str);
+		return true;
+	}
+	return false;
+
+}
+
+static bool
+set_transform_type(struct shiva_ctx *ctx, struct shiva_transform *transform)
+{
+
+	size_t last_insn_len;
+
+	/*
+	 * Get the length of the last instruction before the splice.
+	 * i.e. the insert_vaddr
+	 */
+	if (find_insert_instruction_len(ctx, transform->insert_vaddr,
+	    &last_insn_len) == false) {
+		fprintf(stderr, "Unable to find the instruction length at %#lx\n",
+		    transform->insert_vaddr);
+		return false;
+	}
+	/*
+	 * If the splice length (new_len) is exactly the same length
+	 * as the specified insertion space then we simply replace the
+	 * old bytes with the new bytes, which is the simplest form
+	 * of function splicing as it requires less local re-linking of
+	 * the function locally. The transform flags are simply: REPLACE
+	 */
+	if (transform->new_len == transform->old_len) {
+		transform->flags |= SHIVA_TRANSFORM_F_REPLACE;
+
+	/*
+	 * If the splice length (new_len) is smaller than the insertion
+	 * space, then our splice only overwrites new_len bytes of the
+	 * area and overwrites the rest of the instructions in the gap
+	 * with NOP instructions. Therefore we end up with transform REPLACE|NOP_PAD
+	 * flags.
+	 */
+	} else if (transform->new_len < transform->old_len) {
+		transform->flags |=
+		     (SHIVA_TRANSFORM_F_NOP_PAD | SHIVA_TRANSFORM_F_REPLACE);
+#ifdef __aarch64__
+	/*
+	 * If the splice length is larger than the insertion space, and the
+	 * insertion space is larger than the space between two instructions
+	 * (Which is 4 bytes in AArch64/ARM) then we require that the insertion
+	 * space is extended in size to make room for the new splice code.
+	 * We end up with the flags: EXTEND
+	 */
+	} else if ((transform->new_len > transform->old_len) &&
+		transform->old_len > ARM_INSN_LEN) {
+		transform->flags |=
+		    (SHIVA_TRANSFORM_F_EXTEND);
+	/*
+	 * If the insertion space length is the length between two adjacent instructions
+	 * i.e.
+	 * 0x0004: ins1
+	 * 0x0008: ins2
+	 * Then we will not overwrite any instructions. We create an insertion
+	 * space between two adjacent instructions, which we call an INJECTION EXTENSION
+	 * and thus end up with the flags: EXTEND|INJECT
+	 */
+	} else if (transform->old_len == ARM_INSN_LEN && transform->new_len > 0) {
+		transform->flags |=
+		    (SHIVA_TRANSFORM_F_EXTEND | SHIVA_TRANSFORM_F_INJECT);
+		transform->offset += ARM_INSN_LEN;
+		transform->old_len = 0;
+#elif __x86_64__
+	} else if ((transform->new_len > transform->old_len) &&
+		transform->old_len > last_insn_len) {
+		transform->flags |=
+		    (SHIVA_TRANSFORM_F_EXTEND);
+	} else if (transform->old_len == last_insn_len && transform->new_len > 0) {
+		transform->flags |=
+		    (SHIVA_TRANSFORM_F_EXTEND | SHIVA_TRANSFORM_F_INJECT);
+		transform->offset += last_insn_len;
+		transform->old_len = 0;
+#endif
+	} else if (transform->old_len == 0 && transform->new_len == 0) {
+		fprintf(stderr, "Invalid patch lengths. Length of patch: %zu,"
+		    " Length of patch area: %zu\n", transform->new_len, transform->old_len);
+		return false;
+	}
+
+return true;
+
+}
+/*
  * Transformations (formerly known as PTD)
  * If there are any transformations, make internal transformation
  * records.
@@ -2953,8 +3182,6 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 	 * collected by shiva_analyze_find_calls():shiva_analyze.c initially and
 	 * get_tf_function_refs() will store the relevant entries for each transform.
 	 */
-	if (TAILQ_EMPTY(&linker->tailq.transform_list))
-		shiva_debug("List is empty?\n");
 	TAILQ_FOREACH(transform, &linker->tailq.transform_list, _linkage) {
 		shiva_debug("Checking type: %d\n", transform->type);
 		switch(transform->type) {
@@ -3004,7 +3231,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 				    elf_pathname(&linker->elfobj));
 				goto fail;
 			}
-			insert_vaddr = tf_val;
+			transform->insert_vaddr = insert_vaddr = tf_val;
 			shiva_debug("%s: (deferenced at offset %#lx): %#lx\n", tf_sym.name,
 			    shdr.offset + tf_sym.value, tf_val);
 
@@ -3138,6 +3365,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 				transform->ext_len = padlen;
 			}
 			shiva_debug("new_len is now: %d\n", transform->new_len);
+			shiva_debug("old_len is %d\n", transform->old_len);
 			/*
 			 * How does the splice behave?
 			 * REPLACE: we are replacing B bytes of code with B bytes code.
@@ -3146,24 +3374,10 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			 * INJECT: (Coupled with extend) signifies an extension between two contiguous addresses;
 			 * in other words we are not overwriting any code, just adding new code.
 			 */
-			if (transform->new_len == transform->old_len) {
-				transform->flags |= SHIVA_TRANSFORM_F_REPLACE;
-			} else if (transform->new_len < transform->old_len) {
-				transform->flags |=
-				    (SHIVA_TRANSFORM_F_NOP_PAD | SHIVA_TRANSFORM_F_REPLACE);
-			} else if ((transform->new_len > transform->old_len) &&
-				    transform->old_len > ARM_INSN_LEN) {
-				transform->flags |=
-				    (SHIVA_TRANSFORM_F_EXTEND);
-			} else if (transform->old_len == ARM_INSN_LEN && transform->new_len > 0) {
-				transform->flags |=
-				    (SHIVA_TRANSFORM_F_EXTEND | SHIVA_TRANSFORM_F_INJECT);
-				transform->offset += ARM_INSN_LEN;
-				transform->old_len = 0;
-			} else if (transform->old_len == 0 && transform->new_len == 0) {
-				fprintf(stderr, "Invalid patch lengths. Length of patch: %zu,"
-				    " Length of patch area: %zu\n", transform->new_len, transform->old_len);
-				return false;
+			if (set_transform_type(ctx, transform) == false) {
+				fprintf(stderr, "Failed to determine transform behavior for %s\n",
+				    transform->target_symbol.name);
+				return true;
 			}
 			memset(tmp, 0, sizeof(tmp));
 			strcpy(tmp, SHIVA_T_SPLICE_FUNC_ID);

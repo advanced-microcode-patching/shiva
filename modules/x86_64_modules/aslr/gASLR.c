@@ -3,9 +3,9 @@
  * A 2025 Shiva module
  *
  * Target program must be built with a large code model:
- * 	gcc -mcmodel=large
+ *	gcc -mcmodel=large
  * Target program must be built with preserved text relocations:
- * 	gcc -Wl,--emit-relocs
+ *	gcc -Wl,--emit-relocs
  *
  * cp gASLR.o /opt/shiva/modules
  * shiva-ld -e <binary> -p gASLR.o -s /opt/shiva/modules -i /lib/shiva -o test -d
@@ -15,13 +15,26 @@
 #define _GNU_SOURCE
 #include "../../include/shiva_module.h"
 #include "../../../shiva.h"
-#include "../../../shiva_debug.h"
 #include "/opt/elfmaster/include/libelfmaster.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <sys/queue.h>
+
+#include <stdarg.h>
+#include <stdio.h>
+
+#if defined DEBUG
+	#define aslr_debug(...) {\
+	do {\
+		fprintf(stdout, "[%s:%s:%d] ", __FILE__, __func__, __LINE__); \
+		fprintf(stdout, __VA_ARGS__);	\
+	} while(0); \
+}
+#else
+	  #define aslr_debug(...)
+#endif
 
 typedef struct reloc_entry {
 	struct elf_relocation rel;
@@ -87,6 +100,7 @@ build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
 			continue;
 		if (symbol.value >= text.address &&
 		    symbol.value < text.address + text.size) {
+
 			struct func_entry *fe;
 
 			fe = calloc(1, sizeof(*fe));
@@ -161,6 +175,25 @@ build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
 	return true;
 }
 
+/*
+ * returns true or false
+ * stores the offset of a given GOT entry (From the beginning of the GOT)
+ * into uint64_t *gotoff
+ */
+bool
+find_gotoff_by_symbol(struct shiva_ctx *ctx, const char *symname, uint64_t *gotoff)
+{
+	struct elf_section got;
+
+	if (elf_section_by_name(&ctx->elfobj, ".got", &got) == false) {
+		fprintf(stderr, "elf_section_by_name() failed on .got\n");
+		return false;
+	}
+
+
+	return true;
+}
+
 #define ASLR_REL_F_NEEDS_PLTGOT (1 << 0)
 
 bool
@@ -174,7 +207,7 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 	uint64_t rel_flags = 0;
 
 	if (fe->flags & ASLR_FUNC_F_ENTRYPOINT) {
-		shiva_debug("Relocating entry point  %s\n", fe->symbol.name);
+		aslr_debug("Relocating entry point  %s\n", fe->symbol.name);
 	}
 	TAILQ_FOREACH(rel_entry, &fe->reloc_list, _linkage) {
 		uint8_t *r_ptr = (fe->flags & ASLR_FUNC_F_ENTRYPOINT) ?
@@ -195,27 +228,127 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 		if (p != NULL)
 			*p = '\0';
 
-		shiva_debug("Relocation type: %lu\n", rel_entry->rel.type);
-		shiva_debug("Relocation offset: %#lx\n", rel_entry->rel.offset);
-		shiva_debug("Relunit: %p\n", r_ptr);
-		shiva_debug("Symbol name: %s\n", rel_entry->rel.symname);
+		aslr_debug("Relocation type: %lu\n", rel_entry->rel.type);
+		aslr_debug("Relocation offset: %#lx\n", rel_entry->rel.offset);
+		aslr_debug("Relunit: %p\n", r_ptr);
+		aslr_debug("Symbol name: %s\n", rel_entry->rel.symname);
 
-		(void )mprotect((void *)page_vaddr, 4096, PROT_READ|PROT_WRITE);
+		(void )mprotect((void *)page_vaddr, 4096, PROT_READ|PROT_WRITE|PROT_EXEC);
 
+		if (elf_section_by_name(&ctx->elfobj, ".got", &got) == false) {
+			fprintf(stderr, "elf_section_by_name() failed on .got\n");
+			return false;
+		}
+
+#if 0
+		if (rel_entry->rel.type == R_X86_64_GOTPCRELX || rel_entry->rel.type == R_X86_64_GOTPCREL) {
+			elf_dynsym_iterator_t dsym_iter;
+			size_t symoffset = 0;
+			struct elf_symbol tmp;
+
+			elf_dynsym_iterator_init(&ctx->elfobj, &dsym_iter);
+			while (elf_dynsym_iterator_next(&dsym_iter, &tmp) == ELF_ITER_OK) {
+				if (strcmp(tmp.name, rel_entry->rel.symname) == 0) {
+					uint64_t got_entry; // address of the GOT entry for the symbol
+					struct elf_symbol sym;
+
+					aslr_debug("R_X86_64_GOTPCREL(X) processing symbol %s\n", tmp.name);
+					/*
+					 * First 3 entries of GOT[0, 1, 2] are reserved (hence the "sizeof(uintptr_t) * 3")
+					 */
+					got_entry = ELF_RUNTIME_BASE(got.address) + symoffset + (sizeof(uintptr_t) * 3);
+					if (elf_symbol_by_name(&ctx->elfobj, tmp.name, &sym) == false) {
+						fprintf(stderr, "elf_symbol_by_name() failed to resolve symbol %s\n", tmp.name);
+						return false;
+					}
+					rel_val = got_entry - ELF_RUNTIME_BASE(sym.value);
+					aslr_debug("rel_val = %#lx - %#lx\n", got_entry, ELF_RUNTIME_BASE(sym.value));
+					aslr_debug("symoffset in got is %zu\n", symoffset);
+					aslr_debug("Setting reloc value to %#lx\n", rel_val);
+					*(uint64_t *)r_ptr = rel_val;
+					goto success;
+				}
+				symoffset += sizeof(uintptr_t);
+			 }
+#endif
+		if (rel_entry->rel.type == R_X86_64_GOT64) {
+			struct elf_symbol tmp;
+			elf_dynsym_iterator_t dsym_iter;
+			size_t symoffset = 0;
+
+			elf_dynsym_iterator_init(&ctx->elfobj, &dsym_iter);
+			while (elf_dynsym_iterator_next(&dsym_iter, &tmp) == ELF_ITER_OK) {
+				struct elf_plt plt_entry;
+
+				if (elf_section_by_name(&ctx->elfobj, ".got", &got) == false) {
+					fprintf(stderr, "elf_section_by_name() failed on .got\n");
+					return false;
+				}
+
+#if 0
+				printf("Continuing...\n");
+				if (elf_plt_by_name(&ctx->elfobj, tmp.name, &plt_entry) == false) {
+					aslr_debug("No PLT entry for %s, skipping...\n", tmp.name);
+					continue;
+				}
+#endif
+				/* This symbol should be related to a GLOB_DAT or JUMPSLOT
+				 * relocation.
+				 */
+
+				printf("Comparing %s and %s\n", tmp.name, rel_entry->rel.symname);
+				if (strcmp(tmp.name, rel_entry->rel.symname) == 0) {
+					aslr_debug("R_X86_64_GOT64 processing symbol %s\n", tmp.name);
+					/*
+					 * First 3 entries of GOT[0, 1, 2] are reserved
+					 */
+					rel_val = symoffset + (sizeof(uintptr_t) * 3);
+					aslr_debug("symoffset in got is %zu\n", symoffset);
+					aslr_debug("Setting reloc value to %#lx\n", rel_val);
+					*(uint64_t *)r_ptr = rel_val;
+					goto success;
+				}
+				symoffset += sizeof(uintptr_t);
+			}
+#if 0
+			elf_dynsym_iterator_init(&ctx->elfobj, &dsym_iter);
+			while (elf_dynsym_iterator_next(&dsym_iter, &tmp) == ELF_ITER_OK) {
+				if (tmp.type != STT_OBJECT && tmp.type != STT_NOTYPE)
+					continue;
+				 if (strcmp(tmp.name, rel_entry->rel.symname) == 0) {
+					aslr_debug("R_X86_64_GOT64 processing symbol %s\n", tmp.name);
+					aslr_debug("Type: %d\n", tmp.type);
+					 /*
+					 * First 3 entries of GOT[0, 1, 2] are reserved
+					 */
+					rel_val = symoffset + (sizeof(uintptr_t) * 3);
+					aslr_debug("symoffset in got is %zu\n", symoffset);
+					aslr_debug("Setting reloc value to %#lx\n", rel_val);
+					*(uint64_t *)r_ptr = rel_val;
+					goto success;
+				}
+				symoffset += sizeof(uintptr_t);
+			}
+#endif
+			fprintf(stderr, "Failed to find symbol for R_X86_64_GOT64 reloc entry\n");
+			return false;
+		}
+		aslr_debug("Made it to reloc switch() case\n");
 		switch(rel_entry->rel.type) {
 		case R_X86_64_GOTPC64: /* GOT - P + A */
 			if (elf_section_by_name(&ctx->elfobj, ".got", &got) == false) {
 				fprintf(stderr, "elf_section_by_name() failed on .got\n");
 				return false;
 			}
-			shiva_debug("R_X86_64_GOTPC64\n");
+			aslr_debug("R_X86_64_GOTPC64\n");
 			rel_val = ELF_RUNTIME_BASE(got.address) - rel_addr + rel_entry->rel.addend;
-			shiva_debug("rel_val = %#lx - %#lx + %#lx\n", ELF_RUNTIME_BASE(got.address));
-			shiva_debug("Setting %p to %#lx\n", r_ptr, rel_val);
+			aslr_debug("rel_val = %#lx - %#lx + %#lx\n", ELF_RUNTIME_BASE(got.address),
+			    rel_addr, rel_entry->rel.addend);
+			aslr_debug("Setting %p to %#lx\n", r_ptr, rel_val);
 			*(uint64_t *)r_ptr = rel_val;
 			break;
 		case R_X86_64_GOTOFF64:
-			shiva_debug("R_X86_64_GOTOFF64\n");
+			aslr_debug("R_X86_64_GOTOFF64\n");
 			if (elf_symbol_by_name(&ctx->elfobj, rel_entry->rel.symname, &symbol) == false) {
 				fprintf(stderr, "elf_symbol_by_name failed on %s\n", symbol.name);
 				return false;
@@ -227,24 +360,24 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 					if (strcmp(tmp->symbol.name, rel_entry->rel.symname) != 0)
 						continue;
 					symval = tmp->new_base_vaddr;
-					shiva_debug("symval set to %#lx\n", symval);
+					aslr_debug("symval set to %#lx\n", symval);
 					break;
 				}
 			} else {
 				symval = ELF_RUNTIME_BASE(symbol.value);
-				shiva_debug("symval set to %#lx\n", symval);
+				aslr_debug("symval set to %#lx\n", symval);
 			}
 
 			rel_val = symval + rel_entry->rel.addend -
 			    ELF_RUNTIME_BASE(got.address);
 
-			shiva_debug("R_X86_64_GOTOFF64 setting r_ptr(%p) to rel_val: %#x\n",
+			aslr_debug("R_X86_64_GOTOFF64 setting r_ptr(%p) to rel_val: %#x\n",
 			    r_ptr, rel_val);
 
 			*(int64_t *)r_ptr = rel_val;
 			break;
 		case R_X86_64_PLTOFF64: /* L - GOT + A */
-			shiva_debug("R_X86_64_PLTOFF64\n");
+			aslr_debug("R_X86_64_PLTOFF64\n");
 			if (elf_plt_by_name(&ctx->elfobj, rel_entry->rel.symname,
 			    &plt) == false) {
 				fprintf(stderr, "elf_plt_by_name() failed on %s\n",
@@ -256,16 +389,16 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 				return false;
 			}
 			symval = plt.addr + ctx->ulexec.base_vaddr;
-			shiva_debug("symval:(%#lx) - got:(%#lx) + addend(%#lx)\n",
+			aslr_debug("symval:(%#lx) - got:(%#lx) + addend(%#lx)\n",
 			    symval, ELF_RUNTIME_BASE(got.address), rel_entry->rel.addend);
 			rel_val = symval - ELF_RUNTIME_BASE(got.address) + rel_entry->rel.addend;
-			shiva_debug("rel_val: %#x\n", rel_val);
-			shiva_debug("Setting PLT encoded-offset to GOT offset %#lx\n", got.address +
+			aslr_debug("rel_val: %#x\n", rel_val);
+			aslr_debug("Setting PLT encoded-offset to GOT offset %#lx\n", got.address +
 			    rel_entry->rel.addend);
 			*(uint32_t *)r_ptr = rel_val;
 			break;
 		case R_X86_64_PC32: /* S + A - P */
-			shiva_debug("R_X86_64_PC32\n");
+			aslr_debug("R_X86_64_PC32\n");
 			if (rel_entry->rel.symname[0] == '.') {
 				res = elf_section_by_name(&ctx->elfobj, rel_entry->rel.symname,
 				    &shdr);
@@ -276,8 +409,8 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 				}
 				symval = ELF_RUNTIME_BASE(shdr.address);
 				rel_val = symval + rel_entry->rel.addend - rel_addr;
-				shiva_debug("Setting R_X86_64_PC32 reloc value to rel_val: %#x (destination symbol %s:%#lx)\n",
-				   rel_val, rel_entry->rel.symname, symval);
+				aslr_debug("Setting R_X86_64_PC32(1) reloc value (r_ptr: %p) to rel_val: %#x (destination symbol %s:%#lx)\n",
+				   r_ptr, rel_val, rel_entry->rel.symname, symval);
 				*(uint32_t *)&r_ptr[0] = rel_val;
 				break;
 			} else {
@@ -292,7 +425,7 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 				if (symbol.type != STT_FUNC)
 					break;
 
-				shiva_debug("Searching for symbol %s\n", symbol.name);
+				aslr_debug("Searching for symbol %s\n", symbol.name);
 				TAILQ_FOREACH(tmp, &aslr->orig_func_list, _linkage) {
 					if (strcmp(tmp->symbol.name, rel_entry->rel.symname) != 0)
 						continue;
@@ -326,20 +459,27 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 					}
 					symval = tmp->new_base_vaddr;
 					rel_val = symval + rel_entry->rel.addend - rel_addr;
-					shiva_debug("Setting X86_64_PC32 reloc value to rel_val: %#x"
+					aslr_debug("Setting X86_64_PC32(2) reloc value to rel_val: %#x"
 					    " destination symbol %s:%#lx)\n", rel_val,
 					    rel_entry->rel.symname, symval);
 					*(uint32_t *)r_ptr = rel_val;
 				}
 			}
-		break;
+			break;
+		default:
+			printf("Unhandled relocation type %d: %s\n", rel_entry->rel.type,
+			    elf_reloc_type_string(&ctx->elfobj, rel_entry->rel.type));
+			break;
 	}
 }
 
+success:
+	aslr_debug("Setting mprotect PROT_READ|PROT_EXEC on %p\n", (void *)page_vaddr);
 	(void)mprotect((void *)page_vaddr,
 	    4096,
 	    PROT_READ|PROT_EXEC);
 
+	aslr_debug("Returning\n");
 	return true;
 }
 
@@ -350,6 +490,7 @@ move_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entry *f
 	size_t delta;
 	struct reloc_entry *rel_entry;
 
+	aslr_debug("Moving function %s to %p\n", fe->symbol.name, fe->n_mem);
 	/*
 	 * Copy function code from its old address to its new address
 	 */
@@ -373,14 +514,26 @@ bool
 remove_old_function(struct shiva_ctx *ctx, struct func_entry *fe)
 {
 	int ret;
+	size_t mlen;
+	size_t pgoff;
 
 	/*
 	 * Simply zero it out
 	 */
-	ret = mprotect((void *)(fe->runtime_vaddr & ~4095), fe->func_len, PROT_READ|PROT_WRITE);
-	memset((void *)fe->runtime_vaddr, 0, fe->func_len - 1);
-	ret = mprotect((void *)(fe->runtime_vaddr & ~4095), fe->func_len, PROT_READ|PROT_EXEC);
+	aslr_debug("removing old code/data\n");
+	aslr_debug("fe: %p\n", fe);
+	aslr_debug("fe->runtime_vaddr: %#lx\n", fe->runtime_vaddr);
 
+	pgoff = ELF_PAGEOFFSET(fe->runtime_vaddr);
+	aslr_debug("pgoff: %zu\n", pgoff);
+
+	ret = mprotect((void *)(fe->runtime_vaddr & ~4095), fe->func_len + pgoff, PROT_READ|PROT_WRITE|PROT_EXEC);
+	aslr_debug("Calling memset on %#lx of %d bytes\n", fe->runtime_vaddr, fe->func_len - 1);
+	memset((void *)fe->runtime_vaddr, 0, fe->func_len - 1);
+	aslr_debug("Done calling memset\n");
+	ret = mprotect((void *)(fe->runtime_vaddr & ~4095), fe->func_len + pgoff, PROT_READ|PROT_EXEC);
+
+	aslr_debug("Returning... \n");
 	return ret ? false : true;
 }
 
@@ -409,13 +562,16 @@ randomize_func_locations(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
 			}
 			continue;
 		}
-		shiva_debug("Moving function: %s\n", fe->symbol.name);
+		aslr_debug("Moving function: %s\n", fe->symbol.name);
 		res = move_function(ctx, aslr, fe);		
 		if (res == false) {
 			fprintf(stderr, "Failed to move function %s\n", fe->symbol.name);
 			return false;
 		}
+		aslr_debug("Function %s was moved sucessfuly, now lets scrub the old version\n",
+		    fe->symbol.name);
 		res = remove_old_function(ctx, fe);
+		aslr_debug("Function %s was scrubbed from its original location\n", fe->symbol.name);
 	}
 	return true;
 }
@@ -426,13 +582,17 @@ shiva_init(struct shiva_ctx *ctx)
 	struct aslr_ctx aslr;
 	size_t fn_count;
 
+	aslr_debug("Building func list\n");
+
 	if (build_func_list(ctx, &aslr, &fn_count) == false) {
 		fprintf(stderr, "build_func_list() failed on .text\n");
 		return -1;
 	}
-	
+
+	aslr_debug("Randomizing func locations\n");
 	if (randomize_func_locations(ctx, &aslr, fn_count) == false) {
 		fprintf(stderr, "randomize_func_locations() failed\n");
 		return -1;
 	}
+	aslr_debug("Leaving module\n");
 }

@@ -216,7 +216,11 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 	 * we parse the instructions the less elegant way
 	 * by parsing the mnemonic and operator strings.
 	 */
+	shiva_debug("MNEMONIC: %s\n", ctx->disas.insn->mnemonic);
 	if (strcmp(ctx->disas.insn->mnemonic, "mov") == 0) {
+		shiva_debug("Yeah its some type of mov :)\n");
+		shiva_debug("%s %s\n", ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
+
 		cs_insn *insn = ctx->disas.insn;
 		char *p, *op2, *op1;
 		char op_str[160]; /* from capstone.h */
@@ -260,7 +264,6 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 
 		strncpy(op_str, insn->op_str, sizeof(op_str));
 		op_str[sizeof(op_str) - 1] = '\0';
-
 		op2 = strchr(op_str, ',') + 2;
 		if (strncmp(op2, "[rip +", 6) == 0) {
 			xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_LEA;
@@ -271,11 +274,26 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			xref->addr_size = 8;
 			found_insn = true;
 			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA\n");
+		} else if (strncmp(op2, "[rip -", 6) == 0) {
+			xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_LEA;
+                        xref->rip_rel_site = current_vaddr;
+                        p = strchr(op2, '-') + 2;
+			*(char *)strchr(p, ']') = '\0';
+                        xref->rip_rel_disp = strtoul(p, NULL, 16);
+			/*
+			 * Since this was a [rip - <offset>] we are making
+			 * the offset negative here:
+			 */
+			xref->rip_rel_disp = -xref->rip_rel_disp; // ~(xref->r ip_rel_disp + 1);
+                        xref->addr_size = 8;
+                        found_insn = true;
+                        shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA\n");
 		}
 	}
 
 	if (found_insn == false)
 		return true;
+	shiva_debug("dispoffset: %#lx\n", xref->rip_rel_disp);
 	xref->target_vaddr = xref->rip_rel_site + xref->rip_rel_disp + ctx->disas.insn->size;
 	shiva_debug("Searching for symbol associated with address: %#lx\n", xref->target_vaddr);
 

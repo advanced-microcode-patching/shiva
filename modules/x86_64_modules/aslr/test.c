@@ -17,6 +17,10 @@ static int ignore_me(void)
 int main(void)
 {
 	char *p = malloc(10);
+	if (p == NULL) {
+		perror("malloc");
+		exit(0);
+	}
 	printf("base address: %p\n", (unsigned long)&ignore_me & ~4095);
 	printf("main() is at %p\n", &main);
 	printf("test1() is at %p\n", &test1);

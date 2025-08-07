@@ -2,7 +2,8 @@ INTERP_PATH="/lib/shiva"
 SHIVA-LD_PATH="../../../../tools/shiva-ld/shiva-ld"
 all:
 	gcc -Wl,--emit-relocs -mcmodel=large test.c -o test
-	gcc -I ../../../include -fno-stack-protector -fomit-frame-pointer -mcmodel=large -c gASLR.c
+	gcc -O2 -Wl,--emit-relocs -mcmodel=large test.c -o test2
+	gcc -DDEBUG -I ../../../include -fno-stack-protector -fomit-frame-pointer -mcmodel=large -c gASLR.c
 install:
 	cp gASLR.o /opt/shiva/modules/
 clean:

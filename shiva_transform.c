@@ -14,6 +14,7 @@
 #define X86_64_UD2 0x00000b0f
 #define X86_64_NOP 0x90
 #define X86_64_IMM_CALL 0xe8
+#define X86_64_IMM_JMP 0xe9
 
 /*
  * Example of function transformation on foo() in some target executable.
@@ -250,7 +251,7 @@ shiva_tf_relink_xref_x86_64(struct shiva_module *linker, struct shiva_transform 
 	 */
 	switch(xref->type) {
 	case SHIVA_XREF_TYPE_IP_RELATIVE_LEA:
-		shiva_debug("Patching LEA with offset: %#lx\n", rel_val);
+		shiva_debug("Patching LEA SITE: %#lx (LEA of %#lx) (realsite: %#lx) with offset: %#lx\n", xref->rip_rel_site, xref->target_vaddr, rel_addr,  rel_val);
 		*(uint32_t *)&rel_unit[3] = rel_val;
 		break;
 	case SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR:
@@ -334,18 +335,19 @@ shiva_tf_relink_global_branch_x86_64(struct shiva_module *linker, struct shiva_t
 {
 
 	/*
-	 * Offset to branch instruction (Within our new transformed version of the function)
+	 * Offset to the branch instruction in question-- relative from the start of the function that
+	 * is being transformed.
 	*/
-        size_t br_site_off = branch->branch_site - transform->target_symbol.value;
+	size_t br_site_off = branch->branch_site - transform->target_symbol.value;
 
 	shiva_debug("br_site_off = %lx - %lx = %#lx\n", branch->branch_site, transform->target_symbol.value,
-            br_site_off);
-        /*
-         * mem points to the branch instruction within the new location of the
-         * spliced/transformed function.
-         */
-        if (br_site_off > transform->offset + transform->old_len)
-                br_site_off += transform->new_len - transform->old_len;
+	    br_site_off);
+	/*
+	 * mem points to the branch instruction within the new location of the
+	 * spliced/transformed function.
+	 */
+	if (br_site_off > transform->offset + transform->old_len)
+		br_site_off += transform->new_len - transform->old_len;
 
 	uint8_t *mem = &linker->text_mem[transform->segment_offset + br_site_off];
 	size_t br_site_addr = linker->text_vaddr + transform->segment_offset + br_site_off;
@@ -357,6 +359,14 @@ shiva_tf_relink_global_branch_x86_64(struct shiva_module *linker, struct shiva_t
 		new_offset = (branch->target_vaddr + linker->target_base) - br_site_addr - 5;
 		*(uint32_t *)&mem[1] = new_offset;
 		return true;
+	} else if (branch->branch_type == SHIVA_BRANCH_CALL &&
+		    branch->o_insn[0] != X86_64_IMM_CALL) {
+			shiva_debug("Indirect call from %s to %s\n", branch->current_function.name, branch->symbol.name);
+			return true;
+	} else if (branch->branch_type == SHIVA_BRANCH_JMP &&
+		    branch->o_insn[0] != X86_64_IMM_JMP) {
+			shiva_debug("Indirect jmp from %s to %s\n", branch->current_function.name, branch->symbol.name);
+			return true;
 	}
 	return false;
 }
@@ -431,7 +441,7 @@ const struct branch_instr branch_table[64] = {
 			{"js",	0x78},	{"jns", 0x79}, {"jp", 0x7a},	{"jpe", 0x7a}, {"jnp", 0x7b},
 			{"jpo", 0x7b},	{"jl", 0x7c},  {"jnge", 0x7c},	{"jnl", 0x7d}, {"jge", 0x7d},
 			{"jle", 0x7e},	{"jng", 0x7e}, {"jnle", 0x7f},	{"jg", 0x7f},  {"jmp", 0xeb},
-			{"jmp", 0xe9},	{"jmpf", 0xea}, {"je", 0x0f},    {NULL, 0}
+			{"jmp", 0xe9},	{"jmpf", 0xea}, {"je", 0x0f},	{"call", 0xe8}, {NULL, 0}
 		};
 
 
@@ -476,11 +486,11 @@ shiva_tf_relink_local_branch_x86_64(struct shiva_module *linker, struct shiva_tr
 
 	if (mem[0] == 0x0f) {
 		uint32_t orig_offset = *(uint32_t *)&mem[2];
-		shiva_debug("relinking near jump branch: %s to (%lx + %lx) = %#lx\n", bptr->mnemonic, orig_offset, delta, orig_offset + delta);
+		shiva_debug("relinking near branch: %s to (%lx + %lx) = %#lx\n", bptr->mnemonic, orig_offset, delta, orig_offset + delta);
 		*(uint32_t *)&mem[2] = orig_offset + delta;
 	} else {
 		uint32_t orig_offset = *(uint8_t *)&mem[1];
-		shiva_debug("relinking short jump branch: %s to (%lx + %lx) = %#lx\n", bptr->mnemonic, orig_offset, delta, orig_offset + delta);
+		shiva_debug("relinking short branch: %s to (%lx + %lx) = %#lx\n", bptr->mnemonic, orig_offset, delta, orig_offset + delta);
 		*(uint8_t *)&mem[1] = orig_offset + delta;
 	}
 done:
