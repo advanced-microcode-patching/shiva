@@ -48,6 +48,7 @@
 
 #define SHIVA_F_ULEXEC_LDSO_NEEDED	(1UL << 0)
 #define SHIVA_F_LOAD_MODULE_INIT		(1UL << 1)
+#define SHIVA_F_HAS_JUMPTABLE_METADATA	(1UL << 2)
 
 #define SHIVA_STACK_SIZE	(PAGE_SIZE * 1000)
 
@@ -165,6 +166,13 @@ typedef struct shiva_auxv_entry {
 	char *string;
 } shiva_auxv_entry_t;
 
+typedef struct shiva_jumptable_iterator {
+	unsigned int index;
+	struct shiva_ctx *ctx;
+	uint8_t *jmptab;
+	size_t entry_count;
+} shiva_jumptable_iterator_t;
+
 #define SHIVA_TRACE_MAX_ERROR_STRLEN 4096
 
 typedef struct shiva_error {
@@ -241,6 +249,7 @@ struct shiva_branch_site {
 #define SHIVA_XREF_F_DST_SYMINFO	(1UL << 2) /* we have dst symbol info */
 #define SHIVA_XREF_F_DEREF_SYMINFO	(1UL << 3)
 #define SHIVA_XREF_F_TO_SECTION		(1UL << 4) /* xref to a section (i.e. .rodata) with no syminfo */
+#define SHIVA_XREF_F_TO_JUMPTABLE	(1UL << 5) /* xref to jumptable */
 
 struct shiva_xref_site {
 	uint32_t type;
@@ -265,6 +274,7 @@ struct shiva_xref_site {
 	uint8_t  rip_rel_o_insn[16]; /* original instruction bytes */
 	size_t insn_len;
 	uint32_t addr_size; 	/* width of address being written/read */
+	size_t jumptable_count; /* only relevant if it's an xref to a jumptable */
 #endif
 	uint32_t reloc_type;
 	uint64_t target_vaddr; /* addr that is being xref'd. add to base_vaddr at runtime */
@@ -337,6 +347,11 @@ typedef struct shiva_mmap_entry {
 	bool debugger_mapping;
 	TAILQ_ENTRY(shiva_mmap_entry) _linkage;
 } shiva_mmap_entry_t;
+
+typedef struct shiva_jumptable_entry {
+	uint64_t base; // base of jump table;
+	uint64_t entries; // number of jump targets from the base
+} shiva_jumptable_entry_t;
 
 typedef enum shiva_linking_mode {
 	SHIVA_LINKING_MICROCODE_PATCH = 0,
@@ -501,6 +516,8 @@ typedef struct shiva_ctx {
 	uint64_t duplicate_base;
 	char *shiva_path; // path to /bin/shiva
 	char orig_interp_path[PATH_MAX];
+	uint8_t *jmptab; // pointer to data in .llvm_jump_table_sizes section
+	size_t jmptab_size; // size of jump table section
 	union {
 		struct shiva_trace_regset_x86_64 regset_x86_64;
 	} regs;

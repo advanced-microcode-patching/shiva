@@ -52,6 +52,22 @@ shiva_analyze_make_xref(struct shiva_ctx *ctx, struct elf_symbol *symbol, struct
 #endif
 
 static bool
+is_a_jumptable(struct shiva_ctx *ctx, uint64_t vaddr, size_t *out)
+{
+	struct shiva_jumptable_iterator jmptab_iter;
+	struct shiva_jumptable_entry entry;
+
+	shiva_jumptable_iterator_init(ctx, &jmptab_iter);
+	while (shiva_jumptable_iterator_next(&jmptab_iter, &entry) == SHIVA_ITER_OK) {
+		if (vaddr == entry.base) {
+			*out = entry.entries;
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool
 shiva_analyze_build_jmp(struct shiva_ctx *ctx, uint64_t pc_vaddr)
 {
 	struct shiva_branch_site *tmp;
@@ -276,24 +292,32 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA\n");
 		} else if (strncmp(op2, "[rip -", 6) == 0) {
 			xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_LEA;
-                        xref->rip_rel_site = current_vaddr;
-                        p = strchr(op2, '-') + 2;
+			xref->rip_rel_site = current_vaddr;
+			p = strchr(op2, '-') + 2;
 			*(char *)strchr(p, ']') = '\0';
-                        xref->rip_rel_disp = strtoul(p, NULL, 16);
+			xref->rip_rel_disp = strtoul(p, NULL, 16);
 			/*
 			 * Since this was a [rip - <offset>] we are making
 			 * the offset negative here:
 			 */
 			xref->rip_rel_disp = -xref->rip_rel_disp; // ~(xref->r ip_rel_disp + 1);
-                        xref->addr_size = 8;
-                        found_insn = true;
-                        shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA\n");
+			xref->addr_size = 8;
+			found_insn = true;
+			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_LEA\n");
+		}
+		/*
+		 * Is this LEA instruction accessing a jump table?
+		 */
+		xref->target_vaddr = xref->rip_rel_site + xref->rip_rel_disp + ctx->disas.insn->size;
+		if (is_a_jumptable(ctx, xref->target_vaddr, &xref->jumptable_count)
+		    == true) {
+			shiva_debug("xref to target %#lx is a jumptable reference\n", xref->target_vaddr);
+			xref->flags |= SHIVA_XREF_F_TO_JUMPTABLE;
 		}
 	}
 
 	if (found_insn == false)
 		return true;
-	shiva_debug("dispoffset: %#lx\n", xref->rip_rel_disp);
 	xref->target_vaddr = xref->rip_rel_site + xref->rip_rel_disp + ctx->disas.insn->size;
 	shiva_debug("Searching for symbol associated with address: %#lx\n", xref->target_vaddr);
 

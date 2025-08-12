@@ -19,6 +19,7 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 {
 	elf_error_t error;
 	struct elf_section section;
+	struct elf_section llvm_shdr;
 	int bits;
 
 	if (elf_open_object(ctx->path, &ctx->elfobj, ELF_LOAD_F_FORENSICS,
@@ -39,14 +40,24 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 		return false;
 	}
 	ctx->disas.base = section.address;
-#if 0
-	ud_init(&ctx->disas.ud_obj);
-	ud_set_input_buffer(&ctx->disas.ud_obj, ctx->disas.textptr, section.size);
-	ud_set_mode(&ctx->disas.ud_obj, bits);
-	ud_set_syntax(&ctx->disas.ud_obj, UD_SYN_INTEL);
-	while (ud_disassemble(&ctx->disas.ud_obj) != 0) {
-		printf("%-20s %s\n", ud_insn_hex(&ctx->disas.ud_obj),
-		    ud_insn_asm(&ctx->disas.ud_obj));
+	if (elf_section_by_name(&ctx->elfobj, ".llvm_jump_table_sizes",
+	    &llvm_shdr) == true) {
+		shiva_debug("Found llvm_jump_table_sizes at %#lx jmptab is %p\n", llvm_shdr.offset, ctx->jmptab);
+		ctx->flags |= SHIVA_F_HAS_JUMPTABLE_METADATA;
+		ctx->jmptab = elf_offset_pointer(&ctx->elfobj, llvm_shdr.offset);
+		ctx->jmptab_size = llvm_shdr.size;
+		if (ctx->jmptab == NULL) {
+			ctx->flags &= ~SHIVA_F_HAS_JUMPTABLE_METADATA;
+			shiva_debug("elf_section_pointer() failed to get section pointer for llvm_jump_table_sizes\n");
+		}
+	}
+#if DEBUG
+	struct shiva_jumptable_iterator jmptab_iter;
+	struct shiva_jumptable_entry entry;
+
+	shiva_jumptable_iterator_init(ctx, &jmptab_iter);
+	while (shiva_jumptable_iterator_next(&jmptab_iter, &entry) == SHIVA_ITER_OK) {
+		fprintf(stdout, "jmptable %#lx entries: %d\n", entry.base, entry.entries);
 	}
 #endif
 	return true;

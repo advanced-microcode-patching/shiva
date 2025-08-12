@@ -662,6 +662,7 @@ shiva_tf_relink_new_func(struct shiva_module *linker,
 	struct shiva_xref_site *xref;
 	ssize_t delta;
 	bool res;
+	int i;
 
 	/*
 	 * Local branches (i.e. jmp's) and global branches (i.e. calls)
@@ -739,6 +740,62 @@ shiva_tf_relink_new_func(struct shiva_module *linker,
 		if ((xref->adrp_site < transform->target_symbol.value + transform->offset) ||
 		    (xref->adrp_site >= transform->target_symbol.value + transform->offset + transform->old_len)) {
 #elif __x86_64__
+		if (xref->flags & SHIVA_XREF_F_TO_JUMPTABLE) {
+			/*
+			 * Does this xref point to a jumptable that is used by the function
+			 * that we are splicing into? If so we must patch the jumptable with
+			 * the offset to the transformed version of the function being spliced.
+			 */
+			shiva_debug("XREF to %#lx points to jumptable\n", xref->target_vaddr);
+			for (i = 0; i < xref->jumptable_count; i++) {
+				uint64_t jmp_offset;
+
+				if (elf_read_address(linker->target_elfobj, xref->target_vaddr + (i * 4),
+				    &jmp_offset, ELF_DWORD) == false) {
+					fprintf(stderr, "elf_read_address failed on XREF to jumptable at %#lx\n",
+					    xref->target_vaddr + (i * 4));
+					return false;
+				}
+				if (xref->target_vaddr + jmp_offset >= transform->target_symbol.value &&
+				    xref->target_vaddr + jmp_offset < transform->target_symbol.value + transform->target_symbol.size) {
+					/*
+					 * It appears that there is a jumptable that we must update with a new offset
+					 * pointing to the newly transformed version of the function.
+					 */
+					shiva_debug("Updating JUMPTABLE at %#lx. The offset %#lx points to a function being transformed: %s\n",
+					    xref->target_vaddr + i * 4, jmp_offset, transform->target_symbol.name);
+
+					uint64_t dest = xref->target_vaddr + jmp_offset;
+					uint64_t off = dest - transform->target_symbol.value; // offset of jmp target from beginning of the function its in
+					uint64_t new_jmp_address, tf_function_addr, new_jmp_offset;
+					uint64_t jump_table_base = xref->target_vaddr;
+					shiva_error_t error;
+
+					shiva_debug("The jmp-offset-target into function is %d\n", off);
+					if (off >= transform->offset + transform->old_len) {
+						shiva_debug("extending jmp-offset-target value from %d to %d to make room for splice\n",
+						    off, off + transform->new_len - transform->old_len);
+						off += transform->new_len - transform->old_len; // update offset with room for splice code
+					}
+					tf_function_addr = linker->text_vaddr + transform->segment_offset;
+					new_jmp_address = tf_function_addr + off;
+
+					shiva_debug("new_jmp_address into transformed function: %#lx\n", new_jmp_address);
+					new_jmp_offset = new_jmp_address - (linker->target_base + jump_table_base);
+
+					shiva_debug("new_jmp_offset = %#lx - %#lx\n", new_jmp_address, linker->target_base + jump_table_base);
+					shiva_debug("Patching jmptable at %#lx  with new jmp offset: %#lx\n",
+					    xref->target_vaddr + (i * 4), new_jmp_offset);
+
+					if (shiva_trace_write(linker->ctx, 0, linker->target_base + xref->target_vaddr + (i * 4),
+					    &new_jmp_offset, 4, &error) == false) {
+						fprintf(stderr, "shiva_trace_write() failed on re-writing jumptable at %#lx\n",
+						    xref->target_vaddr + (i * 4));
+						return false;
+					}
+				}
+			}
+		}
 		if ((xref->rip_rel_site < transform->target_symbol.value + transform->offset) ||
 		    (xref->rip_rel_site >= transform->target_symbol.value + transform->offset + transform->old_len)) {
 #endif
