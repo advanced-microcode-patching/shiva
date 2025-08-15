@@ -265,7 +265,12 @@ shiva_tf_relink_xref_x86_64(struct shiva_module *linker, struct shiva_transform 
 			    xref->insn_len);
 			return false;
 		}
-		shiva_debug("Patching MOV with offset: %#lx\n", rel_val);
+		shiva_debug("Patching IP relative MOV with offset: %#lx\n", rel_val);
+		break;
+	case SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_LDR:
+	case SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_STR:
+		shiva_debug("Patching IP relative MOVAPS with offset: %#lx\n", rel_val);
+		*(uint32_t *)&rel_unit[3] = rel_val;
 		break;
 	default:
 		break;

@@ -232,10 +232,8 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 	 * we parse the instructions the less elegant way
 	 * by parsing the mnemonic and operator strings.
 	 */
-	shiva_debug("MNEMONIC: %s\n", ctx->disas.insn->mnemonic);
+
 	if (strcmp(ctx->disas.insn->mnemonic, "mov") == 0) {
-		shiva_debug("Yeah its some type of mov :)\n");
-		shiva_debug("%s %s\n", ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
 
 		cs_insn *insn = ctx->disas.insn;
 		char *p, *op2, *op1;
@@ -251,6 +249,10 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 		 * NOTE: We start at &op1[1] (Instead of just op1) to move past
 		 * the 'q' or the 'd', as this operand could be "qword ptr"
 		 * or "dword ptr" in the string we are analyzing.
+		 */
+
+		/*
+		 * TODO add support for negative offset re-linking on mov's
 		 */
 		if (strncmp(&op1[1], "word ptr [rip +", 15) == 0) {
 			xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR;
@@ -272,6 +274,65 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR at site: %#lx\n",
 			    xref->rip_rel_site);
 			xref->addr_size = (op2[0] == 'q') ? 8 : 4;
+		}
+	} else if (strcmp(ctx->disas.insn->mnemonic, "movaps") == 0) {
+		shiva_debug("movaps instruction found\n");
+
+		cs_insn *insn = ctx->disas.insn;
+		char *p, *op2, *op1;
+		char op_str[160];
+
+		strncpy(op_str, insn->op_str, sizeof(op_str));
+		op_str[sizeof(op_str) - 1] = '\0';
+
+		op1 = op_str;
+		op2 = strchr(op_str, ',') + 2;
+		shiva_debug("op1: %s\n", op1);
+		shiva_debug("op2: %s\n", op2);
+		if (strncmp(op1, "xmmword ptr [rip +", 18) == 0) {
+			xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_STR;
+			xref->rip_rel_site = current_vaddr;
+			p = strchr(op1, '+') + 2;
+			*(char *)strchr(p, ']') = '\0';
+			xref->rip_rel_disp = strtoul(p, NULL, 16);
+			found_insn = true;
+			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_STR at site: %#lx\n",
+			    xref->rip_rel_site);
+			xref->addr_size = (op1[0] == 'q') ? 8 : 4;
+		} else if (strncmp(op1, "xmmword ptr [rip -", 18) == 0) {
+                        xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_STR;
+                        xref->rip_rel_site = current_vaddr;
+                        p = strchr(op1, '-') + 2;
+                        *(char *)strchr(p, ']') = '\0';
+                        xref->rip_rel_disp = strtoul(p, NULL, 16);
+                        xref->rip_rel_disp = -xref->rip_rel_disp;
+			found_insn = true;
+                        shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_STR at site: %#lx\n",
+                            xref->rip_rel_site);
+                        xref->addr_size = (op1[0] == 'q') ? 8 : 4;
+		} else if (strncmp(op2, "xmmword ptr [rip +", 18) == 0) {
+			xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_LDR;
+			xref->rip_rel_site = current_vaddr;
+			p = strchr(op2, '+') + 2;
+			*(char *)strchr(p, ']') = '\0';
+			xref->rip_rel_disp = strtoul(p, NULL, 16);
+			found_insn = true;
+			shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_LDR at site: %#lx\n",
+			    xref->rip_rel_site);
+			xref->addr_size = (op2[0] == 'q') ? 8 : 4;
+		} else if (strncmp(op2, "xmmword ptr [rip -", 18) == 0) {
+                        xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_LDR;
+                        xref->rip_rel_site = current_vaddr;
+                        p = strchr(op2, '-') + 2;
+                        *(char *)strchr(p, ']') = '\0';
+                        xref->rip_rel_disp = strtoul(p, NULL, 16);
+			xref->rip_rel_disp = -xref->rip_rel_disp;
+                        found_insn = true;
+                        shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_LDR at site: %#lx\n",
+                            xref->rip_rel_site);
+                        xref->addr_size = (op2[0] == 'q') ? 8 : 4;
+                } else {
+			shiva_debug("Unknown movaps\n");
 		}
 	} else if (strcmp(ctx->disas.insn->mnemonic, "lea") == 0) {
 		cs_insn *insn = ctx->disas.insn;
