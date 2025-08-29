@@ -792,7 +792,7 @@ shiva_tf_relink_new_func(struct shiva_module *linker,
 					shiva_debug("Patching jmptable at %#lx  with new jmp offset: %#lx\n",
 					    xref->target_vaddr + (i * 4), new_jmp_offset);
 
-					if (shiva_trace_write(linker->ctx, 0, linker->target_base + xref->target_vaddr + (i * 4),
+					if (shiva_trace_write(linker->ctx, 0, (void *)(linker->target_base + xref->target_vaddr + (i * 4)),
 					    &new_jmp_offset, 4, &error) == false) {
 						fprintf(stderr, "shiva_trace_write() failed on re-writing jumptable at %#lx\n",
 						    xref->target_vaddr + (i * 4));

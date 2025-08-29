@@ -37,5 +37,3 @@ shiva_jumptable_iterator_next(struct shiva_jumptable_iterator *iter,
 	iter->index++;
 	return SHIVA_ITER_OK;
 }
-
-

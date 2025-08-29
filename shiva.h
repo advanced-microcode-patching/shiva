@@ -19,6 +19,8 @@
 #include <errno.h>
 #include <sys/prctl.h>
 #include <sys/wait.h>
+#include "/usr/include/libdwarf/dwarf.h"
+#include "/usr/include/libdwarf/libdwarf.h"
 
 #include "sys/queue.h"
 
@@ -891,6 +893,18 @@ bool shiva_so_resolve_symbol(struct shiva_module *, char *, struct elf_symbol *,
  * shiva_post_linker.c
  */
 void shiva_post_linker(void);
+
+/*
+ * shiva_jumptable.c
+ */
+void shiva_jumptable_iterator_init(shiva_ctx_t *, shiva_jumptable_iterator_t *);
+shiva_iterator_res_t shiva_jumptable_iterator_next(shiva_jumptable_iterator_t *, struct shiva_jumptable_entry *);
+
+/*
+ * shiva_dwarf.c
+ */
+bool shiva_dwarf_line_attributes(const char *, const char *e,
+    unsigned int, uint64_t *, size_t *);
 #endif
 
 /*
