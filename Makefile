@@ -1,8 +1,8 @@
 BUILD_DIR = './build'
 INTERP_PATH = $(PWD)/build/shiva
 PATCH_PATH = "modules/aarch64_patches"
-GCC_OPTS= -fPIC -ggdb -I ./ -c
-DWARFLIB=/usr/local/lib/libdwarf.a
+GCC_OPTS= -DDEBUG -fPIC -ggdb -I ./ -c
+DWARFLIB=/usr/local/musl/lib/libdwarf.a
 ELFLIB=/usr/lib/x86_64-linux-gnu/libelf.a
 LIBZ=/usr/local/lib/libz.a
 OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\

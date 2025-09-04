@@ -32,13 +32,13 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 	uint64_t laddr;
         size_t lsize;
 
-        fprintf(stderr, "Calling shiva_dwarf_line_attributes\n");
         if (shiva_dwarf_line_attributes(elf_pathname(&ctx->elfobj),
-            "stbir__alloc_internal_mem_and_build_samplers", 7210, &laddr, &lsize) == false) {
+            "stbir__alloc_internal_mem_and_build_samplers", "test1.c", 8, &laddr, &lsize) == false) {
                 fprintf(stderr, "shiva_dwarf_line_attributes() failed\n");
                 return false;
         }
 
+	shiva_debug("address: %#lx size: %zu bytes\n", laddr, lsize);
 	if (elf_section_by_name(&ctx->elfobj, ".text", &section) == false) {
 		fprintf(stderr, "elf_section_by_name failed to find \".text\"\n");
 		return false;

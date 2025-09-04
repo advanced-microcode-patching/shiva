@@ -19,8 +19,8 @@
 #include <errno.h>
 #include <sys/prctl.h>
 #include <sys/wait.h>
-#include "/usr/include/libdwarf/dwarf.h"
-#include "/usr/include/libdwarf/libdwarf.h"
+#include "/usr/local/musl/include/libdwarf-2/dwarf.h"
+#include "/usr/local/musl/include/libdwarf-2/libdwarf.h"
 
 #include "sys/queue.h"
 
@@ -903,7 +903,7 @@ shiva_iterator_res_t shiva_jumptable_iterator_next(shiva_jumptable_iterator_t *,
 /*
  * shiva_dwarf.c
  */
-bool shiva_dwarf_line_attributes(const char *, const char *e,
+bool shiva_dwarf_line_attributes(const char *, const char *, const char *,
     unsigned int, uint64_t *, size_t *);
 #endif
 
