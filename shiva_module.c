@@ -3112,6 +3112,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 	uint64_t insert_vaddr, extend_vaddr, tf_val;
 	char *dst_symname;
 	char tmp[PATH_MAX];
+	typewidth_t tpw;
 
 	shiva_debug("Transform validator\n");
 	/*
@@ -3126,12 +3127,15 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 	 */
 	elf_symtab_iterator_init(&linker->elfobj, &sym_iter);
 	while (elf_symtab_iterator_next(&sym_iter, &tf_sym) == ELF_ITER_OK) {
+		shiva_transform_type_t tf_type;
+
 		shiva_debug("transform symbol '%s'\n", tf_sym.name);
 		if (tf_sym.type == STT_FUNC) {
 			if (strncmp(tf_sym.name, SHIVA_T_SPLICE_FUNC_ID,
 			    strlen(SHIVA_T_SPLICE_FUNC_ID)) == 0) {
 				shiva_debug("transform op: %s\n", SHIVA_T_SPLICE_FUNC_ID);
 				dst_symname = strstr(tf_sym.name, "_fn_name_");
+				tf_type = SHIVA_TRANSFORM_SPLICE_FUNCTION;
 				if (dst_symname == NULL) {
 					fprintf(stderr, "Invalid format to SHIVA_T_SPLICE_FUNCTION: %s\n",
 					    tf_sym.name);
@@ -3139,6 +3143,13 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 				}
 				dst_symname += strlen("_fn_name_");
 				shiva_debug("Function %s\n", dst_symname);
+				if (strncmp(tf_sym.name, SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID,
+				    strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID)) == 0) {
+					shiva_debug("transform op extended to replace source line: %s\n",
+					    SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID);
+					dst_symname += strlen("replace_srcline_");
+					tf_type = SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE;
+				}
 				if (elf_symbol_by_name(linker->target_elfobj,
 				    dst_symname, &target_sym) == false) {
 					fprintf(stderr, "Transform target symbol doesn't exist: %s not found\n",
@@ -3148,7 +3159,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 				shiva_debug("Found symbol information in target executable, for %s\n",
 				    dst_symname);
 				transform = shiva_malloc(sizeof(*transform));
-				transform->type = SHIVA_TRANSFORM_SPLICE_FUNCTION;
+				transform->type = tf_type;
 				memcpy(&transform->target_symbol, &target_sym,
 				    sizeof(struct elf_symbol));
 				memcpy(&transform->source_symbol, &tf_sym,
@@ -3185,8 +3196,77 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 	TAILQ_FOREACH(transform, &linker->tailq.transform_list, _linkage) {
 		shiva_debug("Checking type: %d\n", transform->type);
 		switch(transform->type) {
+		case SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE:
+			shiva_debug("case SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE");
+			if (get_tf_function_refs(ctx, linker, transform) == false) {
+				fprintf(stderr, "Failed to gather xref and branch data from %s\n",
+				    transform->name);
+				return false;
+			}
+			strcpy(tmp, SHIVA_T_SPLICE_LINENO_ID);
+			strncat(tmp, transform->name, PATH_MAX - strlen(SHIVA_T_SPLICE_LINENO_ID));
+			tmp[sizeof(tmp) - 1] = '\0';
+			shiva_debug("Checking '%s' symbol cache for %s\n",
+			    elf_pathname(&linker->elfobj), tmp);
+			if (elf_symbol_by_name(&linker->elfobj, tmp, &tf_sym) == false) {
+				fprintf(stderr, "Failed to find transform input '%s'\n", tmp);
+				goto fail;
+			}
+			shiva_debug("Looking for section at index %d\n", tf_sym.shndx);
+			if (elf_section_by_index(&linker->elfobj, tf_sym.shndx,
+			    &shdr) == false) {
+				fprintf(stderr, "Failed to find section index %d\n",
+				    tf_sym.shndx);
+				goto fail;
+			}
+			if (strcmp(shdr.name, ".shiva.transform") != 0) {
+				fprintf(stderr, "Symbol '%s' corresponds to wrong section: '%s'"
+				    " and not '.shiva.transform'\n", tf_sym.name, shdr.name);
+				goto fail;
+			}
+			assert(tf_sym.size == sizeof(Elf64_Addr) ||
+			    tf_sym.size == sizeof(Elf32_Addr));
+			tpw = tf_sym.size == 8 ? ELF_QWORD : ELF_DWORD;
+			/*
+			 * Here we are reading from .shiva.transform section
+			 * at the symbol offset for __shiva_splice_lineno_<funcname>
+			 * This will retrieve us the line number that we are aiming
+			 * to replace.
+			 */
+			if (elf_read_offset(&linker->elfobj, shdr.offset + tf_sym.value,
+			    &tf_val, tpw) == false) {
+				fprintf(stderr, "Failed to read transform input '%s' value"
+				    " at %#lx in %s\n", tf_sym.name, shdr.offset + tf_sym.value,
+				    elf_pathname(&linker->elfobj));
+				goto fail;
+			}
+			uint32_t lineno = (uint32_t)tf_val;
+			size_t insert_size;
+			shiva_debug("DWARF srcline replace, line number: %d\n", lineno);
+			if (shiva_dwarf_line_attributes(elf_pathname(&ctx->elfobj),
+			    transform->name, lineno, &insert_vaddr, &insert_size) == false) {
+				fprintf(stderr, "shiva_dwarf_line_attributes() failed\n");
+				return false;
+			}
+			shiva_debug("Found insert_vaddr: %#lx and insert_size: %d\n", 
+			    insert_vaddr, insert_size);
+			transform->insert_vaddr = insert_vaddr;
+			transform->extend_vaddr = insert_vaddr + insert_size;
+			memset(tmp, 0, sizeof(tmp));
+			strcpy(tmp, SHIVA_T_SPLICE_LINENO_ID);
+			strncat(tmp, transform->name,
+			    PATH_MAX - strlen(SHIVA_T_SPLICE_LINENO_ID));
+			tmp[sizeof(tmp) - 1] = '\0';
+			shiva_debug("Checking symbol cache for %s\n", tmp);
+			if (elf_symbol_by_name(&linker->elfobj,
+			    tmp, &tf_sym) == false) {
+				fprintf(stderr, "Failed to find transform input '%s'\n",
+				    tmp);
+				goto fail;
+			}
+			break;
 		case SHIVA_TRANSFORM_SPLICE_FUNCTION:
-			shiva_debug("case SHIVA_TRANFORM_SPLICE_FUNCTION:\n");
+			shiva_debug("case SHIVA_TRANSFORM_SPLICE_FUNCTION:\n");
 			if (get_tf_function_refs(ctx, linker, transform) == false) {
 				fprintf(stderr, "Failed to gather xref and branch data from %s\n",
 				    transform->name);
@@ -3218,7 +3298,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			}
 			assert(tf_sym.size == sizeof(Elf64_Addr) ||
 			    tf_sym.size == sizeof(Elf32_Addr));
-			typewidth_t tpw = tf_sym.size == 8 ? ELF_QWORD : ELF_DWORD;
+			tpw = tf_sym.size == 8 ? ELF_QWORD : ELF_DWORD;
 			/*
 			 * TO CLARIFY: We are reading from the .shiva.transform
 			 * section + (symbol offset of __shiva_splice_insert_<func_name>)

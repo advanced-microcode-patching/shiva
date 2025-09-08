@@ -5,7 +5,7 @@
  * the last two args: addr and size are where the outputs are stored for the address and size
  */
 bool
-shiva_dwarf_line_attributes(const char *binpath, const char *funcname, const char *srcfile,
+shiva_dwarf_line_attributes(const char *binpath, const char *funcname,
     unsigned int lineno, uint64_t *addr, size_t *size)
 {
 	int fd;
@@ -138,30 +138,30 @@ getlineinfo:
 
 		for (i = 0; i < linecount; i++) {
 			char *filename;
-
+#if 0
 			if (dwarf_linesrc(linebuf[i], &filename, &err) != DW_DLV_OK) {
 				fprintf(stderr, "dwarf_linesrc() failed\n");
 				return false;
 			}
-			filename = strrchr(filename, '/') + 1;
 			if (strstr(filename, srcfile) == NULL) {
-				shiva_debug("Skipping line %llu in wrong file %s (expected %s)\n",
-				    line_no, filename, srcfile);
+				shiva_debug("Skipping line in wrong file %s (expected %s)\n",
+				    filename, srcfile);
 				dwarf_dealloc(dbg, filename, DW_DLA_STRING);
 				continue;
 			}
+#endif
 			if (dwarf_lineno(linebuf[i], &line_no, &err) != DW_DLV_OK) {
 				fprintf(stderr, "dwarf_lineno() failed\n");
 				return false;
 			}
+
 			if (line_no != lineno)
 				continue;
-			shiva_debug("FOUND LINE NUMBER %d\n", lineno);
+
 			if (dwarf_lineaddr(linebuf[i], &line_addr, &err) != DW_DLV_OK) {
 				fprintf(stderr, "dwarf_lineaddr() failed\n");
 				return false;
 			}
-			shiva_debug("LINEADDR for %d is %#lx\n", lineno, line_addr);
 			*addr = line_addr;
 			*size = 0;
 			if (i + 1 < linecount) {

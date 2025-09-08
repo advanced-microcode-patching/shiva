@@ -12,10 +12,17 @@
 #define SHIVA_T_SPLICE_INSERT_ID "__shiva_splice_insert_"
 #define SHIVA_T_SPLICE_EXTEND_ID "__shiva_splice_extend_"
 
+#define SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID "__shiva_splice_fn_name_replace_srcline_"
+#define SHIVA_T_SPLICE_LINENO_ID "__shiva_splice_lineno_"
+
 #define SHIVA_T_SPLICE_FUNCTION(fn_name, insert, extend)	\
 	static uint64_t __shiva_splice_insert_##fn_name __attribute__((section(".shiva.transform"))) = insert; \
 	static uint64_t __shiva_splice_extend_##fn_name __attribute__((section(".shiva.transform"))) = extend; \
 	void * __attribute__((naked)) __shiva_splice_fn_name_##fn_name(void)
+
+#define SHIVA_T_SPLICE_FUNCTION_REPLACE_SRCLINE(fn_name, lineno)	\
+	static uint64_t __shiva_splice_lineno_##fn_name __attribute__((section(".shiva.transform"))) = lineno; \
+	void * __attribute__((naked)) __shiva_splice_fn_name_replace_srcline_##fn_name(void)
 
 #ifdef __x86_64__
 

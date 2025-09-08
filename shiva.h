@@ -365,7 +365,8 @@ typedef enum shiva_linking_mode {
 
 typedef enum shiva_transform_type {
 	SHIVA_TRANSFORM_SPLICE_FUNCTION = 0,
-	SHIVA_TRANSFORM_EMIT_BYTECODE = 1,
+	SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE,
+	SHIVA_TRANSFORM_EMIT_BYTECODE,
 	SHIVA_TRANSFORM_UNKNOWN
 } shiva_transform_type_t;
 
@@ -903,7 +904,7 @@ shiva_iterator_res_t shiva_jumptable_iterator_next(shiva_jumptable_iterator_t *,
 /*
  * shiva_dwarf.c
  */
-bool shiva_dwarf_line_attributes(const char *, const char *, const char *,
+bool shiva_dwarf_line_attributes(const char *, const char *,
     unsigned int, uint64_t *, size_t *);
 #endif
 
