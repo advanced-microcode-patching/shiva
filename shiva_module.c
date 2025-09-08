@@ -806,6 +806,17 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 						tfptr = transform;
 					}
 					break;
+				case SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE:
+					shiva_debug("Comparing %s and %s\n",
+                                            transform->source_symbol.name +
+                                            strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID), be.symbol.name);
+                                        if (strcmp(transform->source_symbol.name +
+                                            strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID), be.symbol.name) == 0) {
+                                                symname = transform->source_symbol.name;
+                                                shiva_debug("Transform source found: %s\n", symname);
+                                                tfptr = transform;
+                                        }
+
 				default:
 					break;
 				}
@@ -3113,6 +3124,9 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 	char *dst_symname;
 	char tmp[PATH_MAX];
 	typewidth_t tpw;
+	struct elf_symbol next_func;
+	struct elf_section text_shdr;
+	bool res;
 
 	shiva_debug("Transform validator\n");
 	/*
@@ -3251,7 +3265,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			shiva_debug("Found insert_vaddr: %#lx and insert_size: %d\n", 
 			    insert_vaddr, insert_size);
 			transform->insert_vaddr = insert_vaddr;
-			transform->extend_vaddr = insert_vaddr + insert_size;
+			extend_vaddr = insert_vaddr + insert_size;
 			memset(tmp, 0, sizeof(tmp));
 			strcpy(tmp, SHIVA_T_SPLICE_LINENO_ID);
 			strncat(tmp, transform->name,
@@ -3264,6 +3278,124 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 				    tmp);
 				goto fail;
 			}
+			transform->offset = insert_vaddr - target_sym.value;
+			transform->old_len = extend_vaddr - insert_vaddr;
+			transform->new_len = transform->source_symbol.size;
+			shiva_debug("Transform offset: %#lx old_len: %d new_len: %d\n",
+			    transform->offset, transform->old_len, transform->new_len);
+			/*
+			 * In ARM64 .text relocations are often used that access
+			 * read-only data stored right in the .text at the end of
+			 * a given function. We must make room for this read-only
+			 * data at the end of a function, so that the code which
+			 * accesses the data after it's relocated, works properly.
+			 */
+
+			shiva_debug("Calling next_function_by_address."
+			    " source_symbol.value: %#lx and size %#lx\n",
+			    transform->source_symbol.value, transform->source_symbol.size);
+			res = next_function_by_address(&linker->elfobj,
+			    transform->source_symbol.value, &next_func);
+			if (res == false) {
+				fprintf(stderr, "next_function_by_address() failed\n");
+				return false;
+			}
+			/*
+			 * If there is no next function beyond the current function
+			 * ... Then write out N bytes. Where N is section_size - 
+			 * function.offset + function.size
+			 */
+			shiva_debug("next_func.value: %#lx\n", next_func.value);
+			shiva_debug("source_symbol.value: %#lx\n",
+			    transform->source_symbol.value);
+			if (elf_section_by_name(&linker->elfobj, ".text", &text_shdr) == false) {
+				fprintf(stderr,
+				    "elf_section_by_name(%p, \".text\", ...) failed\n", &linker->elfobj);
+				return false;
+			}
+			if (next_func.value == transform->source_symbol.value) {
+				/*
+				 * There is no function that lives after
+				 * transform->source_symbol.value
+				 */
+				size_t padlen;
+
+				memcpy(&transform->next_func, &transform->source_symbol,
+				    sizeof(struct elf_symbol));
+				shiva_debug("shdr.size: %d source_symbol.value + size: %d\n",
+				    text_shdr.size, transform->source_symbol.value + transform->source_symbol.size);
+				padlen = text_shdr.size - (transform->source_symbol.value +
+				    transform->source_symbol.size);
+				shiva_debug("padlen = %d - %d + %d\n",
+				    text_shdr.size, transform->source_symbol.value, transform->source_symbol.size);
+				transform->ext_len = padlen;
+				shiva_debug("ext_len is %d bytes\n", transform->ext_len);
+			} else {
+				/*
+				 * A function does exist after transform->source_symbol.value
+				 */
+				size_t padlen;
+
+				memcpy(&transform->next_func, &next_func, sizeof(next_func));
+				shiva_debug("new_len is currently %d\n", transform->new_len);
+				shiva_debug("%lx - %lx + %lx\n",
+				    next_func.value, transform->source_symbol.value,
+				    transform->source_symbol.size);
+				shiva_debug("ext_len is %d bytes\n",
+				    next_func.value -
+				    (transform->source_symbol.value + transform->source_symbol.size));
+				padlen = next_func.value -
+				    (transform->source_symbol.value + transform->source_symbol.size);
+				transform->ext_len = padlen;
+			}
+			shiva_debug("new_len is now: %d\n", transform->new_len);
+			shiva_debug("old_len is %d\n", transform->old_len);
+			/*
+			 * How does the splice behave?
+			 * REPLACE: we are replacing B bytes of code with B bytes code.
+			 * NOP_PAD: the patch code is smaller than the target, so pad it with nops.
+			 * EXTEND: the patch code is larger than the target, so extend the function size.
+			 * INJECT: (Coupled with extend) signifies an extension between two contiguous addresses;
+			 * in other words we are not overwriting any code, just adding new code.
+			 */
+			if (set_transform_type(ctx, transform) == false) {
+				fprintf(stderr, "Failed to determine transform behavior for %s\n",
+				    transform->target_symbol.name);
+				return true;
+			}
+			memset(tmp, 0, sizeof(tmp));
+			strcpy(tmp, SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID);
+			strncat(tmp, transform->name,
+			    PATH_MAX - strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID));
+			tmp[sizeof(tmp) - 1] = '\0';
+
+			if (elf_symbol_by_name(&linker->elfobj, tmp,
+			    &tf_sym) == false) {
+				fprintf(stderr, "elf_symbol_by_name failed '%s'\n", tmp);
+				goto fail;
+			}
+			if (elf_section_by_index(&linker->elfobj, tf_sym.shndx,
+			    &shdr) == false) {
+				fprintf(stderr, "elf_section_by_index failed, invalid index %d\n",
+				    tf_sym.shndx);
+				goto fail;
+			}
+			assert((transform->ptr = elf_offset_pointer(&linker->elfobj,
+			    shdr.offset + tf_sym.value)) != NULL);
+			/*
+			 * transform->ptr should now point to something like
+			 * __shiva_splice_fn_name_<func_name>();
+			 * Which is a function in the module who's code is
+			 * meant to be spliced into the target ELF function
+			 * transform->name.
+			 */
+			shiva_debug("Finalized transform record '%s'\n", transform->name);
+			shiva_debug("offset:\t%#lx\n", transform->offset);
+			shiva_debug("old_len:\t%#lx\n", transform->old_len);
+			shiva_debug("new_len:\t%#lx\n", transform->new_len);
+			shiva_debug("flags:\t%#lx\n", transform->flags);
+			shiva_debug("transform symbol: %s\n", transform->source_symbol.name);
+			shiva_debug("target symbol: %s\n", transform->target_symbol.name);
 			break;
 		case SHIVA_TRANSFORM_SPLICE_FUNCTION:
 			shiva_debug("case SHIVA_TRANSFORM_SPLICE_FUNCTION:\n");
@@ -3378,10 +3510,6 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			 * data at the end of a function, so that the code which
 			 * accesses the data after it's relocated, works properly.
 			 */
-			struct elf_symbol next_func;
-			struct elf_section text_shdr;
-			bool res;
-
 			shiva_debug("Calling next_function_by_address."
 			    " source_symbol.value: %#lx and size %#lx\n",
 			    transform->source_symbol.value, transform->source_symbol.size);

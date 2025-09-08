@@ -23,7 +23,6 @@ shiva_dwarf_line_attributes(const char *binpath, const char *funcname,
 	Dwarf_Die func_die;
 	Dwarf_Die cu_die;
 
-	printf("Opening %s\n", binpath);
 	fd = open(binpath, O_RDONLY);
 	if (fd < 0) {
 		fprintf(stderr, "failed to open: %s. %s\n", binpath, strerror(errno));
@@ -42,7 +41,6 @@ shiva_dwarf_line_attributes(const char *binpath, const char *funcname,
 	 * Iterate over each compilation unit (i.e. source files) until we find
 	 * the function specified by funcname
 	 */
-	printf("iterating over compilation units\n");
 	while ((ret = dwarf_next_cu_header_e(dbg, true, &cu_die, &cu_header_length, &version,
 	    &abbrev_offset, &address_size, &length_size, &extension_size, &type_sig,
 	    &typeoffset, &next_cu_header, &header_cu_type, &err)) == DW_DLV_OK) {
