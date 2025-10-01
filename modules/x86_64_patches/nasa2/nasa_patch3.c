@@ -37,6 +37,7 @@ int processSciencePacket(char *buf, int len)
 		packet_len =  __builtin_bswap16(packet_len);
 		packet_len += 1;
 		new_len = packet_len + HEADER_LEN;
+		printf("packet_len: %d\n", packet_len);
 		header_len = (iter++ == 0) ? 0 : HEADER_LEN;
 		memcpy(newp, p + header_len, new_len - header_len);
 		newp += new_len - header_len;

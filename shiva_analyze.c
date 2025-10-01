@@ -245,6 +245,8 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 		op1 = op_str;
 		op2 = strchr(op_str, ',') + 2;
 
+		shiva_debug("op1: %s\n", op1);
+		shiva_debug("op2: %s\n", op2);
 		/*
 		 * NOTE: We start at &op1[1] (Instead of just op1) to move past
 		 * the 'q' or the 'd', as this operand could be "qword ptr"
@@ -263,7 +265,7 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 		} else if (strncmp(&op1[1], "word ptr [rip -", 15) == 0) {
                         xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR;
                         xref->rip_rel_site = current_vaddr;
-                        p = strchr(op1, '+') + 2;
+                        p = strchr(op1, '-') + 2;
                         *(char *)strchr(p, ']') = '\0';
                         xref->rip_rel_disp = strtoul(p, NULL, 16);
                         xref->rip_rel_disp = -xref->rip_rel_disp;
@@ -284,7 +286,7 @@ shiva_analyze_xrefs_x86_64(struct shiva_ctx *ctx, struct elf_section text)
 		}  else if (strncmp(&op2[1], "word ptr [rip -", 15) == 0) {
                         xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR;
                         xref->rip_rel_site = current_vaddr;
-                        p = strchr(op2, '+') + 2;
+                        p = strchr(op2, '-') + 2;
                         *(char *)strchr(p, ']') = '\0';
                         xref->rip_rel_disp = strtoul(p, NULL, 16);
                         xref->rip_rel_disp = -xref->rip_rel_disp;
