@@ -67,6 +67,7 @@
 	#define shiva_pl_debug(...)
 #endif
 
+#define shiva_debug shiva_pl_debug
 
 #define BIT_MASK(n)	((1U << n) - 1)
 #define ARM_INSN_LEN 4
@@ -873,10 +874,10 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				return false;
 			}
 			if (write(fd, &ctx->bin.elfobj.mem[dynstr_shdr.offset],
-                            dynstr_shdr.size) < 0) {
-                                perror("write");
-                                return false;
-                        }
+			    dynstr_shdr.size) < 0) {
+				perror("write");
+				return false;
+			}
 			if (write(fd, ctx->input_patch,
 			    strlen(ctx->input_patch) + 1) != strlen(ctx->input_patch) + 1) {
 				perror("write");
@@ -1194,6 +1195,51 @@ build_aarch64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr)
 	return true;
 }
 
+static bool
+build_x86_64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr)
+{
+	struct shiva_branch_site *tmp;
+	struct elf_symbol tmp_sym;
+	char insn_str[256];
+	char *p = strchr(ctx->disas.insn->op_str, '#');
+	size_t strtab_offset;
+
+	if (p == NULL) {
+		fprintf(stderr,
+		    "Unforseen parsing error in build_aarch64_jmp()\n");
+		return false;
+	}
+	tmp = calloc(1, sizeof(*tmp));
+	if (tmp == NULL) {
+		perror("calloc");
+		return false;
+	}
+	tmp->target_vaddr = strtoul((p + 1), NULL, 16);
+	tmp->branch_site = pc_vaddr;
+	tmp->branch_type = SHIVA_BRANCH_JMP;
+	tmp->insn_string = get_shiva_strtab_offset(ctx);
+
+	snprintf(insn_str, sizeof(insn_str), "%s %s", ctx->disas.insn->mnemonic,
+	    ctx->disas.insn->op_str);
+	(void)set_shiva_strtab_string(ctx, insn_str, &tmp->insn_string);
+
+	if (elf_symbol_by_range(&ctx->bin.elfobj, pc_vaddr,
+	    &tmp_sym) == true) {
+		tmp->branch_flags |= SHIVA_BRANCH_F_SRC_SYMINFO;
+		memcpy(&tmp->current_function, &tmp_sym, sizeof(tmp_sym));
+		assert(tmp_sym.name != NULL);
+		(void)set_shiva_strtab_string(ctx, tmp_sym.name, &tmp->current_function.name);
+		shiva_pl_debug("Source function found: %s\n", tmp_sym.name);
+	}
+	/*
+	 * Unconditional branch at a PC-relative offset
+	 */
+	shiva_pl_debug("Found branch: %#lx:(str_offset: %u)\n", pc_vaddr, tmp->insn_string);
+	TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
+	ctx->branch_entry_totlen += sizeof(struct shiva_branch_site) - sizeof(uintptr_t);
+	return true;
+}
+
 bool
 analyze_binary(struct shiva_prelink_ctx *ctx)
 {
@@ -1222,12 +1268,17 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 	cs_insn insnack = {0};
 	ctx->disas.insn = &insnack;
 
+#ifdef __aarch64__
 	if (cs_open(CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN,
 	    &ctx->disas.handle) != CS_ERR_OK) {
 		fprintf(stderr, "cs_open failed\n");
 		return false;
 	}
 
+	/*
+	 * AARCH64
+	 * FIND ALL BRANCHES/CALLS
+	 */
 	shiva_pl_debug("disassembling text(%#lx), %zu bytes\n", section.address, section.size);
 	for (c = 0 ;; c += ARM_INSN_LEN) {
 		bool res;
@@ -1389,6 +1440,10 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 			TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 			ctx->branch_entry_totlen += sizeof(struct shiva_branch_site) - sizeof(uintptr_t);
 			shiva_pl_debug("Done inserting it\n");
+		/*
+		 * AARCH64
+		 * FIND ALL INSTANCES OF XREF's (LOAD/STORE)
+		 */
 		} else if (strcmp(ctx->disas.insn->mnemonic, "adrp") == 0) {
 			uint64_t adrp_imm, adrp_site;
 			uint32_t adrp_o_bytes = *(uint32_t *)ctx->disas.insn->bytes;
@@ -1551,6 +1606,143 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 			continue;
 		}
 	}
+#endif
+
+#ifdef __x86_64__
+	/*
+	 * X86_64
+	 * FIND ALL INSTANCES OF BRANCHES/CALLS
+	 */
+	for (c = 0 ;; c += ctx->disas.insn->size) {
+		bool res;
+		double progress;
+		size_t insn_max_count = (code_len / ARM_INSN_LEN);
+
+		insn_counter++;
+		progress = insn_counter * 100.0 / insn_max_count;
+		if ((int)progress % 10 == 0) {
+			fprintf(stdout, ".");
+			fflush(stdout);
+		}
+		shiva_pl_debug("Address: %#lx\n", section.address + c);
+		shiva_pl_debug("(uint32_t)textptr: %#x\n", *(uint32_t *)code_ptr);
+		if (c >= section.size)
+			break;
+		shiva_pl_debug("code_ptr: %p\n", code_ptr);
+		res = cs_disasm_iter(ctx->disas.handle, (void *)&code_ptr, &code_len,
+		    &code_vaddr, ctx->disas.insn);
+		if (res == false) {
+			shiva_pl_debug("code_ptr after fail: %p\n", code_ptr);
+			shiva_pl_debug("code_vaddr after fail: %lx\n", code_vaddr);
+			code_vaddr += ctx->disas.insn->size;
+			code_ptr += ctx->disas.insn->size;
+			continue;
+		}
+		shiva_pl_debug("0x%"PRIx64":\t%s\t\t%s\n", ctx->disas.insn->address,
+		    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
+
+		/*
+		 * Analyze branch instructions
+		 */
+		if (strncmp(ctx->disas.insn->mnemonic, "j", 1) == 0) {
+			if (build_x86_64_jmp(ctx, section.address + c)
+			    == false) {
+				fprintf(stderr, "analyze_branches failed\n");
+				return false;
+			}
+		} else if (strcmp(ctx->disas.insn->mnemonic, "jmp") == 0) {
+			if (build_x86_64_jmp(ctx, section.address + c) == false) {
+				fprintf(stderr, "analyze_branches failed\n");
+				return false;
+			}
+		}
+		if (strcmp(ctx->disas.insn->mnemonic, "call") == 0) {
+			struct shiva_branch_site *tmp;
+			uint64_t addr, call_addr, call_site, retaddr;
+			struct elf_symbol tmp_sym, symbol;
+			shiva_debug("op_str: %s\n", ctx->disas.insn->op_str);
+
+			call_site = section.address + c;
+			call_addr = strtoul(ctx->disas.insn->op_str, NULL, 16);
+			retaddr = call_site + ctx->disas.insn->size;
+			memset(&symbol, 0, sizeof(symbol));
+			tmp = calloc(1, sizeof(*tmp));
+			if (tmp == NULL) {
+				perror("calloc");
+				return false;
+			}
+
+			if (elf_symbol_by_value_lookup(&ctx->bin.elfobj, call_addr,
+			    &symbol) == false) {
+				struct elf_plt plt_entry;
+				elf_plt_iterator_t plt_iter;
+
+				symbol.name = NULL;
+
+				elf_plt_iterator_init(&ctx->bin.elfobj, &plt_iter);
+				while (elf_plt_iterator_next(&plt_iter, &plt_entry) == ELF_ITER_OK) {
+					if (plt_entry.addr == call_addr) {
+						symbol.name = shiva_xfmtstrdup("%s@plt", plt_entry.symname);
+						symbol.type = STT_FUNC;
+						symbol.bind = STB_GLOBAL;
+						symbol.size = 16;
+						symbol.value = call_addr; /* PLTCALL types get their symbol value set to addr of PLT entry */
+						tmp->branch_flags |= SHIVA_BRANCH_F_PLTCALL;
+					}
+				}
+				if (symbol.name == NULL) {
+					symbol.name = shiva_xfmtstrdup("fn_%#lx", call_addr);
+					if (symbol.name == NULL) {
+						perror("strdup");
+						return false;
+					}
+					symbol.value = call_addr;
+					symbol.type = STT_FUNC;
+					symbol.size = symbol.size;
+					symbol.bind = STB_GLOBAL;
+				}
+			}
+			tmp->retaddr = retaddr;
+			tmp->target_vaddr = call_addr;
+			shiva_debug("CODE_PTR(%p): %lx at insn-offset %lx\n",
+			    code_ptr, *(uint32_t *)(code_ptr - ctx->disas.insn->size), c);
+			memcpy(&tmp->o_insn, code_ptr - ctx->disas.insn->size, ctx->disas.insn->size);
+			memcpy(&tmp->symbol, &symbol, sizeof(symbol));
+			assert(symbol.name != NULL);
+			tmp->branch_type = SHIVA_BRANCH_CALL;
+			tmp->branch_site = call_site;
+			tmp->branch_flags |= SHIVA_BRANCH_F_DST_SYMINFO;
+			tmp->insn_string = get_shiva_strtab_offset(ctx);
+			char *tmp_str = shiva_xfmtstrdup("%s %s", ctx->disas.insn->mnemonic,
+			    ctx->disas.insn->op_str);
+			/*
+			 * Add the string to the .shiva.strtab string table
+			 */
+			(void) set_shiva_strtab_string(ctx, tmp_str, &tmp->insn_string);
+			if (elf_symbol_by_range(&ctx->bin.elfobj, code_vaddr - 4,
+			    &tmp_sym) == true) {
+				tmp->branch_flags |= SHIVA_BRANCH_F_SRC_SYMINFO;
+				tmp->current_function.value = tmp_sym.value;
+				tmp->current_function.shndx = tmp_sym.shndx;
+				tmp->current_function.bind = tmp_sym.bind;
+				tmp->current_function.type = tmp_sym.type;
+				tmp->current_function.visibility = tmp_sym.visibility;
+				tmp->current_function.__pad2 = 0;
+				 if (set_shiva_strtab_string(ctx, (char *)tmp_sym.name,
+				     &tmp->current_function.name) == false) {
+					fprintf(stderr, "Failed to insert string into .shiva.strtab\n");
+					exit(EXIT_FAILURE);
+				}
+				shiva_debug("Source symbol included: %s\n", tmp_sym.name);
+			}
+			shiva_debug("Inserting branch for symbol %s callsite: %#lx\n", tmp->symbol.name, tmp->branch_site);
+			TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
+			ctx->branch_entry_totlen += sizeof(struct shiva_branch_site) - sizeof(uintptr_t);
+		}
+
+	}
+
+#endif
 	return true;
 }
 
