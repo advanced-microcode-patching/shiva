@@ -1201,20 +1201,15 @@ build_x86_64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr)
 	struct shiva_branch_site *tmp;
 	struct elf_symbol tmp_sym;
 	char insn_str[256];
-	char *p = strchr(ctx->disas.insn->op_str, '#');
 	size_t strtab_offset;
 
-	if (p == NULL) {
-		fprintf(stderr,
-		    "Unforseen parsing error in build_aarch64_jmp()\n");
-		return false;
-	}
 	tmp = calloc(1, sizeof(*tmp));
 	if (tmp == NULL) {
 		perror("calloc");
 		return false;
 	}
-	tmp->target_vaddr = strtoul((p + 1), NULL, 16);
+
+	tmp->target_vaddr = strtoul(ctx->disas.insn->op_str, NULL, 16);
 	tmp->branch_site = pc_vaddr;
 	tmp->branch_type = SHIVA_BRANCH_JMP;
 	tmp->insn_string = get_shiva_strtab_offset(ctx);
@@ -1609,6 +1604,18 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 #endif
 
 #ifdef __x86_64__
+	if (cs_open(CS_ARCH_X86, CS_MODE_64, &ctx->disas.handle) != CS_ERR_OK) {
+		fprintf(stderr, "cs_open failed\n");
+		return false;
+	}
+	size_t insn_count;
+	cs_insn *insn;
+	insn_count = cs_disasm(ctx->disas.handle, ctx->disas.textptr,
+	    code_len, code_vaddr, 0, &insn);
+	if (insn_count == 0) {
+		fprintf(stderr, "cs_disasm failed\n");
+		return false;
+	}
 	/*
 	 * X86_64
 	 * FIND ALL INSTANCES OF BRANCHES/CALLS
@@ -1616,7 +1623,7 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 	for (c = 0 ;; c += ctx->disas.insn->size) {
 		bool res;
 		double progress;
-		size_t insn_max_count = (code_len / ARM_INSN_LEN);
+		size_t insn_max_count = insn_count;
 
 		insn_counter++;
 		progress = insn_counter * 100.0 / insn_max_count;
@@ -1624,6 +1631,8 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 			fprintf(stdout, ".");
 			fflush(stdout);
 		}
+
+		shiva_pl_debug("insn->size: %d c: %d\n", c, c);
 		shiva_pl_debug("Address: %#lx\n", section.address + c);
 		shiva_pl_debug("(uint32_t)textptr: %#x\n", *(uint32_t *)code_ptr);
 		if (c >= section.size)
