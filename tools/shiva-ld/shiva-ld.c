@@ -112,10 +112,20 @@ static char *shiva_strtab = NULL;
  * adrp x0, #data_segment_offset
  * add x0, x0, #variable_offset
  */
+#ifdef __aarch64__
 #define SHIVA_XREF_TYPE_ADRP_LDR 1
 #define SHIVA_XREF_TYPE_ADRP_STR 2
 #define SHIVA_XREF_TYPE_ADRP_ADD 3
 #define SHIVA_XREF_TYPE_UNKNOWN 4
+#elif __x86_64__
+#define SHIVA_XREF_TYPE_IP_RELATIVE_LEA 1
+#define SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR 2
+#define SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR 3
+#define SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_LDR 4
+#define SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_STR 5
+#define SHIVA_XREF_TYPE_UNKNOWN 6
+#endif
+
 
 #define SHIVA_XREF_F_INDIRECT	(1UL << 0) /* i.e. got[entry] holds address to .bss variable */
 #define SHIVA_XREF_F_SRC_SYMINFO	(1UL << 1) /* we have src func symbol of xref */
@@ -127,12 +137,28 @@ struct shiva_xref_site {
 	int type;
 	uint64_t flags;
 	uint64_t *got; // indirect xrefs use a .got to hold a symbol value.
+#ifdef __aarch64__
 	uint64_t adrp_imm; /* imm value of adrp */
 	uint64_t adrp_site; /* site address of adrp */
 	uint64_t adrp_o_insn; /* original instruction bytes of adrp */
 	uint64_t next_imm; /* imm value of the add/str/ldr instruction */
 	uint64_t next_site; /* site address of the add/str/ldr instruction */
 	uint64_t next_o_insn; /* original instruction bytes of instruction after adrp */
+#elif __x86_64__
+	/*
+	 * IP relative instructions for loading/storing, getting pointer vlaues etc.
+	 * i.e.
+	 * lea reg, qword ptr[rip + offset]
+	 * mov qword ptr[rip + offset], reg
+	 */
+	int64_t rip_rel_disp; /* imm value of: <insn> <reg>, qword ptr[rip + <offset>] */
+	uint64_t rip_rel_site; /* site address of ip relative instruction */
+	uint8_t rip_rel_o_insn[16]; /* original instruction bytes */
+	size_t insn_len;
+	uint32_t addr_size; /* width of address being written/read */
+	size_t jumptable_count; /* only relevant if it's an xref to a jumptable */
+#endif
+	uint32_t reloc_type;
 	uint64_t target_vaddr; /* addr that is being xref'd. add to base_vaddr at runtime */
 	struct __elf_symbol deref_symbol; /* Indirect symbol value pointed to by symbol.value */
 	struct __elf_symbol symbol; /* symbol info for the symbol the xref goes to */
@@ -1022,12 +1048,13 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	return true;
 }
 
+#ifdef __aarch64__
 /*
  * TODO
  * Way to many args, turn this into a macro.
  */
 static inline bool
-gen_xref(struct shiva_prelink_ctx *ctx, struct elf_symbol *symbol, struct elf_symbol *deref_symbol,
+gen_aarch64_xref(struct shiva_prelink_ctx *ctx, struct elf_symbol *symbol, struct elf_symbol *deref_symbol,
     struct elf_symbol *src_func, int xref_type, uint64_t xref_flags, uint64_t adrp_site,
     uint64_t adrp_imm, uint64_t next_imm,
     uint32_t adrp_o_bytes, uint32_t next_o_bytes)
@@ -1095,6 +1122,7 @@ gen_xref(struct shiva_prelink_ctx *ctx, struct elf_symbol *symbol, struct elf_sy
 	ctx->xref_entry_totlen += sizeof(struct shiva_xref_site) - sizeof(uintptr_t);
 	return true;
 }
+#endif
 
 static size_t 
 get_shiva_strtab_offset(struct shiva_prelink_ctx *ctx)
@@ -1592,7 +1620,7 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 				    xref_type, adrp_site, symbol.name ? symbol.name : "<unknown>",
 				    deref_symbol.name, deref_symbol.value);
 			}
-			res = gen_xref(ctx, &symbol, &deref_symbol, src_func, xref_type, xref_flags, adrp_site,
+			res = gen_aarch64_xref(ctx, &symbol, &deref_symbol, src_func, xref_type, xref_flags, adrp_site,
 			    adrp_imm, tmp_imm, adrp_o_bytes, next_o_bytes);
 			if (res == false ) {
 				fprintf(stderr, "shiva_analyze_install_xref failed\n");
@@ -1604,6 +1632,13 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 #endif
 
 #ifdef __x86_64__
+	struct elf_symbol tmp_sym, deref_symbol;
+	struct elf_symbol *src_func = NULL;
+	uint64_t qword;
+	bool found_symbol = false;
+	bool res, found_insn = false;
+	struct shiva_xref_site *xref;
+
 	if (cs_open(CS_ARCH_X86, CS_MODE_64, &ctx->disas.handle) != CS_ERR_OK) {
 		fprintf(stderr, "cs_open failed\n");
 		return false;
@@ -1624,6 +1659,7 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 		bool res;
 		double progress;
 		size_t insn_max_count = insn_count;
+		uint64_t current_vaddr = ctx->disas.base + c;
 
 		insn_counter++;
 		progress = insn_counter * 100.0 / insn_max_count;
@@ -1747,8 +1783,139 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 			shiva_debug("Inserting branch for symbol %s callsite: %#lx\n", tmp->symbol.name, tmp->branch_site);
 			TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 			ctx->branch_entry_totlen += sizeof(struct shiva_branch_site) - sizeof(uintptr_t);
-		}
+		} else if (strcmp(ctx->disas.insn->mnemonic, "mov") == 0) {
 
+			cs_insn *insn = ctx->disas.insn;
+			char *p, *op2, *op1;
+			char op_str[160]; /* from capstone.h */
+
+			strncpy(op_str, insn->op_str, sizeof(op_str));
+			op_str[sizeof(op_str) - 1] = '\0';
+
+			op1 = op_str;
+			op2 = strchr(op_str, ',') + 2;
+
+			shiva_debug("op1: %s\n", op1);
+			shiva_debug("op2: %s\n", op2);
+			/*
+			 * NOTE: We start at &op1[1] (Instead of just op1) to move past
+			 * the 'q' or the 'd', as this operand could be "qword ptr"
+			 * or "dword ptr" in the string we are analyzing.
+			 */
+			xref = calloc(1, sizeof(*xref));
+			if (xref == NULL) {
+				perror("calloc");
+				return false;
+			}
+			if (strncmp(&op1[1], "word ptr [rip +", 15) == 0) {
+				xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR;
+				xref->rip_rel_site = current_vaddr;
+				p = strchr(op1, '+') + 2;
+				*(char *)strchr(p, ']') = '\0';
+				xref->rip_rel_disp = strtoul(p, NULL, 16);
+				found_insn = true;
+				shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR at site: %#lx\n",
+				    xref->rip_rel_site);
+				xref->addr_size = (op1[0] == 'q') ? 8 : 4;
+			} else if (strncmp(&op1[1], "word ptr [rip -", 15) == 0) {
+				xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR;
+				xref->rip_rel_site = current_vaddr;
+				p = strchr(op1, '-') + 2;
+				*(char *)strchr(p, ']') = '\0';
+				xref->rip_rel_disp = strtoul(p, NULL, 16);
+				xref->rip_rel_disp = -xref->rip_rel_disp;
+				found_insn = true;
+				shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR at site: %#lx\n",
+				    xref->rip_rel_site);
+				xref->addr_size = (op1[0] == 'q') ? 8 : 4;
+			} else if (strncmp(&op2[1], "word ptr [rip +", 15) == 0) {
+				xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR;
+				xref->rip_rel_site = current_vaddr;
+				p = strchr(op2, '+') + 2;
+				*(char *)strchr(p, ']') = '\0';
+				xref->rip_rel_disp = strtoul(p, NULL, 16);
+				found_insn = true;
+				shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR at site: %#lx\n",
+				    xref->rip_rel_site);
+				xref->addr_size = (op2[0] == 'q') ? 8 : 4;
+			}  else if (strncmp(&op2[1], "word ptr [rip -", 15) == 0) {
+				xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR;
+				xref->rip_rel_site = current_vaddr;
+				p = strchr(op2, '-') + 2;
+				*(char *)strchr(p, ']') = '\0';
+				xref->rip_rel_disp = strtoul(p, NULL, 16);
+				xref->rip_rel_disp = -xref->rip_rel_disp;
+				found_insn = true;
+				shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR at site: %#lx\n",
+				    xref->rip_rel_site);
+				xref->addr_size = (op2[0] == 'q') ? 8 : 4;
+			}
+		} else if (strcmp(ctx->disas.insn->mnemonic, "movaps") == 0) {
+			shiva_debug("movaps instruction found\n");
+			cs_insn *insn = ctx->disas.insn;
+			char *p, *op2, *op1;
+			char op_str[160];
+
+			strncpy(op_str, insn->op_str, sizeof(op_str));
+			op_str[sizeof(op_str) - 1] = '\0';
+
+			op1 = op_str;
+			op2 = strchr(op_str, ',') + 2;
+
+			xref = calloc(1, sizeof(*xref));
+			if (xref == NULL) {
+				perror("calloc");
+				return false;
+			}
+
+			if (strncmp(op1, "xmmword ptr [rip +", 18) == 0) {
+				xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_STR;
+				xref->rip_rel_site = current_vaddr;
+				p = strchr(op1, '+') + 2;
+				*(char *)strchr(p, ']') = '\0';
+				xref->rip_rel_disp = strtoul(p, NULL, 16);
+				found_insn = true;
+				shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_STR at site: %#lx\n",
+				    xref->rip_rel_site);
+				xref->addr_size = (op1[0] == 'q') ? 8 : 4;
+			} else if (strncmp(op1, "xmmword ptr [rip -", 18) == 0) {
+				xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_STR;
+				xref->rip_rel_site = current_vaddr;
+				p = strchr(op1, '-') + 2;
+				*(char *)strchr(p, ']') = '\0';
+				xref->rip_rel_disp = strtoul(p, NULL, 16);
+				xref->rip_rel_disp = -xref->rip_rel_disp;
+				found_insn = true;
+				shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_STR at site: %#lx\n",
+				    xref->rip_rel_site);
+				xref->addr_size = (op1[0] == 'q') ? 8 : 4;
+			} else if (strncmp(op2, "xmmword ptr [rip +", 18) == 0) {
+				xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_LDR;
+				xref->rip_rel_site = current_vaddr;
+				p = strchr(op2, '+') + 2;
+				*(char *)strchr(p, ']') = '\0';
+				xref->rip_rel_disp = strtoul(p, NULL, 16);
+				found_insn = true;
+				shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_LDR at site: %#lx\n",
+				    xref->rip_rel_site);
+				xref->addr_size = (op2[0] == 'q') ? 8 : 4;
+			} else if (strncmp(op2, "xmmword ptr [rip -", 18) == 0) {
+				xref->type = SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_LDR;
+				xref->rip_rel_site = current_vaddr;
+				p = strchr(op2, '-') + 2;
+				*(char *)strchr(p, ']') = '\0';
+				xref->rip_rel_disp = strtoul(p, NULL, 16);
+				xref->rip_rel_disp = -xref->rip_rel_disp;
+				found_insn = true;
+				shiva_debug("xref->type: SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_LDR at site: %#lx\n",
+				    xref->rip_rel_site);
+				xref->addr_size = (op2[0] == 'q') ? 8 : 4;
+			} else {
+				shiva_debug("Unknown movaps\n");
+			}
+		} else if (strcmp(ctx->disas.insn->mnemonic, "lea") == 0) {
+			
+		}
 	}
 
 #endif
