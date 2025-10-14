@@ -998,6 +998,7 @@ shiva_analyze_run(struct shiva_ctx *ctx)
 
 	char *shiva_strtab =(char *)&ctx->elfobj.mem[shiva_strtab_shdr.offset];
 
+	shiva_debug("XREF_SHDR.size: %zu\n", xref_shdr.size);
 	for (i = 0; i < xref_shdr.size; i += xref_shdr.entsize) {
 		for (xptr = (uint8_t *)&xref_site, j = 0; j < xref_shdr.entsize; j += 8) {
 			res = elf_read_offset(&ctx->elfobj, xref_shdr.offset + i + j, &qword, ELF_QWORD);
@@ -1015,7 +1016,8 @@ shiva_analyze_run(struct shiva_ctx *ctx)
 		 * string table.  We must convert this offset back into a
 		 * pointer into the .shiva.strtab
 		 */
-		shiva_debug("Imported XREF for symbol %d\n", xref_site.symbol.name);
+		shiva_debug("Imported XREF for symbol (offset: %zu) xref site: %#lx\n",
+		    xref_site.symbol.name, xref_site.rip_rel_site);
 		xref_new = shiva_malloc(sizeof(*xref_new));
 		memcpy(xref_new, &xref_site, sizeof(struct shiva_xref_site));
 
@@ -1047,8 +1049,9 @@ shiva_analyze_run(struct shiva_ctx *ctx)
 	/*
 	 * Read .shiva.branch data into memory.
 	 */
+	shiva_debug("Reading from .shiva.branch section at offset %#lx\n", branch_shdr.offset);
 	for (i = 0; i < branch_shdr.size; i+= branch_shdr.entsize) {
-		for (xptr = (uint8_t *)&branch_site, j = 0; j < branch_shdr.entsize; j+= 8) {
+		for (xptr = (uint8_t *)&branch_site, j = 0; j < branch_shdr.entsize; j += 8) {
 			res = elf_read_offset(&ctx->elfobj, branch_shdr.offset + i + j, &qword, ELF_QWORD);
 			if (res == false) {
 				fprintf(stderr, "elf_read_offset failed at offset %#lx\n",
@@ -1057,7 +1060,7 @@ shiva_analyze_run(struct shiva_ctx *ctx)
 			}
 			memcpy(xptr + j, (uint8_t *)&qword, 8);
 		}
-		shiva_debug("Imported branch for symbol %s\n", (char *)&shiva_strtab[(size_t)branch_site.symbol.name]);
+		shiva_debug("Imported branch for symbol %zu\n", branch_site.symbol.name); // (char *)&shiva_strtab[(size_t)branch_site.symbol.name]);
 		branch_new = shiva_malloc(sizeof(struct shiva_branch_site));
 		memcpy(branch_new, &branch_site, sizeof(struct shiva_branch_site));
 		VALIDATE_STRTAB_OFFSET((size_t)branch_site.symbol.name);
