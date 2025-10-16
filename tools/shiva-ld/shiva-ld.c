@@ -894,6 +894,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		TAILQ_FOREACH(branch_site, &ctx->tailq.branch_tqlist, _linkage) {
 			int ret;
 
+			printf("branch_site->symbol.name: %#lx\n", branch_site->symbol.name);
 			ret = write(fd, branch_site, sizeof(*branch_site) - sizeof(uintptr_t));
 			if (ret < 0) {
 				perror("write");
@@ -1283,7 +1284,7 @@ build_aarch64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr)
 }
 
 static bool
-build_x86_64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr)
+build_x86_64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr, uint8_t *code_ptr)
 {
 	struct shiva_branch_site *tmp;
 	struct elf_symbol tmp_sym;
@@ -1300,6 +1301,8 @@ build_x86_64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr)
 	tmp->branch_site = pc_vaddr;
 	tmp->branch_type = SHIVA_BRANCH_JMP;
 	tmp->insn_string = get_shiva_strtab_offset(ctx);
+	memcpy(&tmp->o_insn, code_ptr - ctx->disas.insn->size, ctx->disas.insn->size);
+	shiva_debug("o_insn[0]: %02x\n", tmp->o_insn);
 
 	snprintf(insn_str, sizeof(insn_str), "%s %s", ctx->disas.insn->mnemonic,
 	    ctx->disas.insn->op_str);
@@ -1317,6 +1320,7 @@ build_x86_64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr)
 	 * Unconditional branch at a PC-relative offset
 	 */
 	shiva_pl_debug("Found branch: %#lx:(str_offset: %u)\n", pc_vaddr, tmp->insn_string);
+	printf("tmp->symbol.name: %d\n", tmp->symbol.name);
 	TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 	ctx->branch_entry_totlen += sizeof(struct shiva_branch_site) - sizeof(uintptr_t);
 	return true;
@@ -1359,9 +1363,6 @@ process_x86_64_xref(struct shiva_prelink_ctx *ctx, size_t c, uint64_t current_va
 
 	xref->type = SHIVA_XREF_TYPE_UNKNOWN;
 
-	if (current_vaddr == 0x1100) {
-		shiva_debug("NOTICE XREF_SITE 1100\n");
-	}
 	/*
 	 * TODO: Figure out why the cs_option for detail
 	 * doesn't work. It crashes cs_disasm_iter() due to
@@ -1692,14 +1693,14 @@ process_x86_64_xref(struct shiva_prelink_ctx *ctx, size_t c, uint64_t current_va
 		shiva_debug("Source symbol included: %s\n", tmp_sym.name);
 	} else {
 		xref->flags |= SHIVA_XREF_F_SRC_SYMINFO;
-                memcpy(&xref->current_function, &tmp_sym, sizeof(tmp_sym));
-                shiva_debug("SETTING XREF SRC SYMBOL INFO: fn_%#lx\n", current_vaddr);
+		memcpy(&xref->current_function, &tmp_sym, sizeof(tmp_sym));
+		shiva_debug("SETTING XREF SRC SYMBOL INFO: fn_%#lx\n", current_vaddr);
 		char *tmp_name = shiva_xfmtstrdup("fn_%#lx\n", current_vaddr);
-                if (set_shiva_strtab_string(ctx, tmp_name,
-                    &xref->current_function.name) == false) {
-                        fprintf(stderr, "failed to insert '%s' into string table\n", tmp_sym.name);
-                        return false;
-                }
+		if (set_shiva_strtab_string(ctx, tmp_name,
+		    &xref->current_function.name) == false) {
+			fprintf(stderr, "failed to insert '%s' into string table\n", tmp_sym.name);
+			return false;
+		}
 		shiva_debug("current function '%s' set name offset: %zu\n", tmp_name, xref->current_function.name);
 	}
 	/*
@@ -2151,13 +2152,14 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 		 * Analyze branch instructions
 		 */
 		if (strncmp(ctx->disas.insn->mnemonic, "j", 1) == 0) {
-			if (build_x86_64_jmp(ctx, section.address + c)
+			printf("section.address + c: %#lx code_vaddr: %#lx\n", section.address + c, code_vaddr);
+			if (build_x86_64_jmp(ctx, section.address + c, code_ptr)
 			    == false) {
 				fprintf(stderr, "analyze_branches failed\n");
 				return false;
 			}
 		} else if (strcmp(ctx->disas.insn->mnemonic, "jmp") == 0) {
-			if (build_x86_64_jmp(ctx, section.address + c) == false) {
+			if (build_x86_64_jmp(ctx, section.address + c, code_ptr) == false) {
 				fprintf(stderr, "analyze_branches failed\n");
 				return false;
 			}
@@ -2213,7 +2215,9 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 			shiva_debug("CODE_PTR(%p): %lx at insn-offset %lx\n",
 			    code_ptr, *(uint32_t *)(code_ptr - ctx->disas.insn->size), c);
 			memcpy(&tmp->o_insn, code_ptr - ctx->disas.insn->size, ctx->disas.insn->size);
+			shiva_debug("o_insn[0]: %02x\n", tmp->o_insn);
 			memcpy(&tmp->symbol, &symbol, sizeof(symbol));
+			(void) set_shiva_strtab_string(ctx, symbol.name, &tmp->symbol.name);
 			assert(symbol.name != NULL);
 			tmp->branch_type = SHIVA_BRANCH_CALL;
 			tmp->branch_site = call_site;
@@ -2241,7 +2245,8 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 				}
 				shiva_debug("Source symbol included: %s\n", tmp_sym.name);
 			}
-			shiva_debug("Inserting branch for symbol %s callsite: %#lx\n", tmp->symbol.name, tmp->branch_site);
+			shiva_debug("Inserting branch for symbol %s callsite: %#lx\n", symbol.name, tmp->branch_site);
+			shiva_debug("The symbol string offset is %#lx\n", tmp->symbol.name);
 			TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 			ctx->branch_entry_totlen += sizeof(struct shiva_branch_site) - sizeof(uintptr_t);
 		} else {

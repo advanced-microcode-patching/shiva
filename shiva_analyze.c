@@ -1049,7 +1049,7 @@ shiva_analyze_run(struct shiva_ctx *ctx)
 	/*
 	 * Read .shiva.branch data into memory.
 	 */
-	shiva_debug("Reading from .shiva.branch section at offset %#lx\n", branch_shdr.offset);
+	shiva_debug("Reading from .shiva.branch section at offset %#lx size: %d\n", branch_shdr.offset, branch_shdr.entsize);
 	for (i = 0; i < branch_shdr.size; i+= branch_shdr.entsize) {
 		for (xptr = (uint8_t *)&branch_site, j = 0; j < branch_shdr.entsize; j += 8) {
 			res = elf_read_offset(&ctx->elfobj, branch_shdr.offset + i + j, &qword, ELF_QWORD);
@@ -1060,7 +1060,7 @@ shiva_analyze_run(struct shiva_ctx *ctx)
 			}
 			memcpy(xptr + j, (uint8_t *)&qword, 8);
 		}
-		shiva_debug("Imported branch for symbol %zu\n", branch_site.symbol.name); // (char *)&shiva_strtab[(size_t)branch_site.symbol.name]);
+		shiva_debug("Imported branch for symbol %s\n", (char *)&shiva_strtab[(size_t)branch_site.symbol.name]);
 		branch_new = shiva_malloc(sizeof(struct shiva_branch_site));
 		memcpy(branch_new, &branch_site, sizeof(struct shiva_branch_site));
 		VALIDATE_STRTAB_OFFSET((size_t)branch_site.symbol.name);
