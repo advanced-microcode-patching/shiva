@@ -894,7 +894,6 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		TAILQ_FOREACH(branch_site, &ctx->tailq.branch_tqlist, _linkage) {
 			int ret;
 
-			printf("branch_site->symbol.name: %#lx\n", branch_site->symbol.name);
 			ret = write(fd, branch_site, sizeof(*branch_site) - sizeof(uintptr_t));
 			if (ret < 0) {
 				perror("write");
@@ -1320,7 +1319,6 @@ build_x86_64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr, uint8_t *code
 	 * Unconditional branch at a PC-relative offset
 	 */
 	shiva_pl_debug("Found branch: %#lx:(str_offset: %u)\n", pc_vaddr, tmp->insn_string);
-	printf("tmp->symbol.name: %d\n", tmp->symbol.name);
 	TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 	ctx->branch_entry_totlen += sizeof(struct shiva_branch_site) - sizeof(uintptr_t);
 	return true;
