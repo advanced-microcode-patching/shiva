@@ -1,4 +1,4 @@
 
-const char my_string[] = "The Great Arcanum";
+extern const char my_string[] = "Dartmouth RoX!";
 
 
