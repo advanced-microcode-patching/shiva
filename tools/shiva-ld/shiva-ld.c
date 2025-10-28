@@ -2150,7 +2150,6 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 		 * Analyze branch instructions
 		 */
 		if (strncmp(ctx->disas.insn->mnemonic, "j", 1) == 0) {
-			printf("section.address + c: %#lx code_vaddr: %#lx\n", section.address + c, code_vaddr);
 			if (build_x86_64_jmp(ctx, section.address + c, code_ptr)
 			    == false) {
 				fprintf(stderr, "analyze_branches failed\n");
