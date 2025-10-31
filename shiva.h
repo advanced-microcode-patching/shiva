@@ -552,6 +552,10 @@ typedef struct shiva_ctx {
 		uint64_t base;
 	} shiva;
 	struct {
+		Dwarf_Debug debug;
+		Dwarf_Error error;
+	} dwarf;
+	struct {
 		/*
 		 * basic runtime data created during
 		 * userland exec.
@@ -591,6 +595,18 @@ typedef struct shiva_ctx {
 		TAILQ_HEAD(, shiva_trace_handler) trace_handlers_tqlist;
 	} tailq;
 } shiva_ctx_t;
+
+typedef enum shiva_dwarf_loc_type {
+	SHIVA_DWARF_LOC_REG = 0,
+	SHIVA_DWARF_LOC_STACK,
+	SHIVA_DWARF_LOC_UNKNOWN
+} shiva_dwarf_loc_type_t;
+
+typedef struct shiva_dwarf_loc {
+	shiva_dwarf_loc_type_t type;
+	uint32_t reg;
+	uint64_t stack_offset;
+} shiva_dwarf_loc_t;
 
 extern struct shiva_ctx *ctx_global;
 

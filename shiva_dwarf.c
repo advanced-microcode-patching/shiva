@@ -1,5 +1,155 @@
 #include "shiva.h"
 
+static bool
+shiva_dwarf_find_function(Dwarf_Debug, const char *, Dwarf_Die *);
+
+static bool
+shiva_dwarf_resolve_die_location(Dwarf_Debug dbg, Dwarf_Die var_die, Dwarf_Addr pc, shiva_dwarf_loc_t *location)
+{
+
+
+}
+/*
+ * A local variable or argument can be resolved
+ * at given PC to a specific register or stack offset
+ * -- This gives us the ability to function splice at a more
+ *  high-level with original local variable names, etc.
+ */
+bool
+shiva_dwarf_resolve_variable(struct shiva_ctx *ctx, const char *funcname, const char *varname,
+    Dwarf_Addr pc, shiva_dwarf_loc_t *location)
+{
+	int fd;
+	Dwarf_Attribute attr;
+	Dwarf_Debug dbg = ctx->dwarf.debug;
+	Dwarf_Error err;
+	Dwarf_Die func_die = NULL;
+	Dwarf_Die child = NULL;
+	Dwarf_Die sibling = NULL;
+	char *name = NULL;
+
+	fd = ctx->elfobj.fd;
+
+	int ret = dwarf_init_b(fd, 0, NULL, NULL, &dbg, &err);
+	if (ret != DW_DLV_OK) {
+		fprintf(stderr, "dwarf_init_b() failed: %s\n", dwarf_errmsg(err));
+		dwarf_dealloc_error(dbg, err);
+		close(fd);
+		return false;
+	}
+	if (shiva_dwarf_find_function(dbg, funcname, &func_die) == false) {
+		fprintf(stderr, "failed to find dwarf die for function %s\n", funcname);
+		return false;
+	}
+
+	ret = dwarf_child(func_die, &child, &err);
+	if (ret != DW_DLV_OK) {
+		shiva_debug("dwarf_child() failed\n");
+		return false;
+	}
+	while (child != NULL) {
+		Dwarf_Half tag;
+
+		ret = dwarf_tag(child, &tag, &err);
+		if (ret != DW_DLV_OK)
+			break;
+
+		switch(tag) { /* may add more types in future */
+		case DW_TAG_formal_parameter:
+		case DW_TAG_variable:
+			ret = dwarf_formstring(attr, &name, &err);
+			if (ret == DW_DLV_OK && name != NULL && strcmp(name, varname) == 0) {
+				dwarf_dealloc(dbg, name, DW_DLA_STRING);
+				return shiva_dwarf_resolve_die_location(dbg, child, pc, location);
+			}
+			if (name != NULL) {
+				dwarf_dealloc(dbg, name, DW_DLA_STRING);
+			}
+			return false;
+			break;
+		default:
+			break;
+		}
+		ret = dwarf_siblingof_b(dbg, child, true, &sibling, &err);
+		if (ret != DW_DLV_OK)
+			break;
+		dwarf_dealloc(dbg, child, DW_DLA_DIE);
+		child = sibling;
+	}
+	return false;
+}
+
+static bool
+shiva_dwarf_find_function(Dwarf_Debug dbg, const char *funcname, Dwarf_Die *out)
+{
+	Dwarf_Unsigned cu_header_length;
+	Dwarf_Unsigned next_cu_header, typeoffset;
+	Dwarf_Half version, header_length;
+	Dwarf_Half address_size, length_size, extension_size, header_cu_type;
+	Dwarf_Off abbrev_offset;
+	Dwarf_Sig8 type_sig;
+	Dwarf_Die func_die;
+	Dwarf_Die cu_die;
+	Dwarf_Error err;
+	int ret;
+
+	while ((ret = dwarf_next_cu_header_e(dbg, true, &cu_die, &cu_header_length, &version,
+	    &abbrev_offset, &address_size, &length_size, &extension_size, &type_sig,
+	    &typeoffset, &next_cu_header, &header_cu_type, &err)) == DW_DLV_OK) {
+
+		shiva_debug("Iterating again\n");
+		if (ret != DW_DLV_OK) {
+			fprintf(stderr, "dwarf_siblingof_b failed: %s\n", dwarf_errmsg(err));
+			continue;
+		}
+		bool found_func = false;
+		Dwarf_Die child_die, sibling;
+		/*
+		 * Get the first child DIE
+		 */
+		ret = dwarf_child(cu_die, &child_die, &err);
+		do {
+			if (ret != DW_DLV_OK)
+				break;
+			Dwarf_Half tag;
+			/*
+			 * Is this a function?
+			 */
+			if (dwarf_tag(child_die, &tag, &err) == DW_DLV_OK &&
+			    tag == DW_TAG_subprogram) {
+				char *name = NULL;
+
+				/*
+				 * If it is a function, does it compare to char *funcname?
+				 */
+				if (dwarf_diename(child_die, &name, &err) == DW_DLV_OK) {
+					if (strcmp(name, funcname) == 0) {
+						func_die = child_die;
+						*out = func_die;
+						found_func = true;
+						dwarf_dealloc(dbg, name, DW_DLA_STRING);
+						goto done;
+					}
+					dwarf_dealloc(dbg, name, DW_DLA_STRING);
+				}
+			}
+			Dwarf_Die next_die = 0;
+			ret = dwarf_siblingof_b(dbg, child_die, true, &sibling, &err);
+			dwarf_dealloc(dbg, child_die, DW_DLA_DIE);
+			child_die = sibling;
+		} while(child_die && ret == DW_DLV_OK);
+	}
+done:
+	if (func_die) {
+		/*
+		 * The caller must dwarf_dealloc_die of Dwarf_Die *out
+		 */
+		return true;
+	}
+	return false;
+}
+
+
 /*
  * returns true if function succeeds
  * the last two args: addr and size are where the outputs are stored for the address and size
@@ -174,5 +324,6 @@ getlineinfo:
 			break;
 		}
 	}
+	dwarf_dealloc_die(func_die);
 	return found_line;
 }
