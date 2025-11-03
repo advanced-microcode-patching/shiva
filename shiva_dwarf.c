@@ -6,8 +6,117 @@ shiva_dwarf_find_function(Dwarf_Debug, const char *, Dwarf_Die *);
 static bool
 shiva_dwarf_resolve_die_location(Dwarf_Debug dbg, Dwarf_Die var_die, Dwarf_Addr pc, shiva_dwarf_loc_t *location)
 {
+	Dwarf_Error err = NULL;
+	Dwarf_Attribute loc_attr;
+	Dwarf_Off loc_offset;
+	int ret, i;
+        Dwarf_Unsigned entry_cnt = 0;
+	Dwarf_Loc_Head_c loclist = NULL;
+	bool res = false;
 
+	/*
+	 * Reference to location list in .debug_loc section
+	 */
+	ret = dwarf_attr(var_die, DW_AT_location, &loc_attr, &err);
+	if (ret != DW_DLV_OK) {
+		shiva_debug("dwarf_attr failed. no location info\n");
+		return false;
+	}
 
+#if 0
+	/*
+	 * Get the offset of the location table
+	 */
+	ret = dwarf_global_formref(loc_attr, &loc_offset, &err);
+	if (ret != DW_DLV_OK) {
+		dwarf_dealloc(dbg, loc_attr, DW_DLA_ATTR);
+		shiva_debug("dwarf_global_formref() failed\n");
+		return false;
+	}
+#endif
+	/*
+	 * Read list into an array of Dwarf_Locdesc's
+	 */
+	shiva_debug("Calling dwarf_get_loclist_c\n");
+	ret = dwarf_get_loclist_c(loc_attr, &loclist, &entry_cnt, &err);
+	if (ret != DW_DLV_OK) {
+		shiva_debug("dwarf_loclist_n() failed\n");
+		return false;
+	}
+	shiva_debug("Iterating over %d entries\n", entry_cnt);
+	for (i = 0; i < entry_cnt; i++) {
+		Dwarf_Locdesc_c ld;
+		Dwarf_Unsigned lopc, hipc, cents, lle_bytecount, expression_offset, locdesc_offset;
+		Dwarf_Small lle_value, loclist_source;
+		Dwarf_Bool dbg_addr_unavailable;
+		Dwarf_Addr lowpc_cooked, hipc_cooked;
+
+		shiva_debug("dwarf_get_locdesc_entry_e calling\n");
+		ret = dwarf_get_locdesc_entry_e(loclist, i, &lle_value, &lopc, &hipc, &dbg_addr_unavailable,
+		    &lowpc_cooked, &hipc_cooked, &cents, &lle_bytecount, &ld, &loclist_source, &expression_offset,
+		    &locdesc_offset, &err);
+		if (ret != DW_DLV_OK) {
+			shiva_debug("dwarf_get_locdesc_entry_e failed\n");
+			goto out;
+		}
+		printf("dbg_addr_unavailable: %d\n", dbg_addr_unavailable);
+		if (dbg_addr_unavailable == true) {
+			shiva_debug("Location entry %d has unavailable addresses\n", i);
+			continue;
+		}
+		shiva_debug("pc: %#lx lopc: %#lx hipc: %#lx\n", pc, lowpc_cooked, hipc_cooked);
+		if (entry_cnt == 1 && lowpc_cooked == 0 && hipc_cooked == 0) {
+			shiva_debug("Single location expression for entire scope\n");
+		} else if (pc < lowpc_cooked || pc >= hipc_cooked) {
+			shiva_debug("PC %#lx outside of range %#lx-%#lx\n", pc, lowpc_cooked, hipc_cooked);
+			continue;
+		}
+
+		if (cents == 0) {
+			shiva_debug("No location entries for PC %#lx\n", pc);
+			continue;
+		}
+		{
+			Dwarf_Small atom;
+			Dwarf_Unsigned val, op1, op2, branch_offset;
+
+#if 0
+			ret = dwarf_get_loclist_entry_c(ld, &loc_head, &err);
+			if (ret != DW_DLV_OK) {
+				shiva_debug("dwarf_get_loc_c() failed\n");
+				goto out;
+			}
+#endif
+			shiva_debug("Calling dwarf_get_location_op_value_c\n");
+			ret = dwarf_get_location_op_value_c(ld, 0, &atom, &val, &op1, &op2, &branch_offset, &err);
+			if (ret != DW_DLV_OK) {
+				shiva_debug("dwarf_get_location_op_value_c failed\n");
+				goto out;
+			}
+			if (atom >= DW_OP_reg0 && atom <= DW_OP_reg31) {
+				location->type = SHIVA_DWARF_LOC_REG;
+				location->reg = atom - DW_OP_reg0;
+				res = true;
+				goto out;
+			}
+
+			if (atom == DW_OP_fbreg) {
+				location->type = SHIVA_DWARF_LOC_STACK;
+				location->stack_offset = val;
+				res = true;
+				goto out;
+			}
+			/*
+			 * TODO: evaluate complex location.
+			 */
+			shiva_debug("unable to evaluate location\n");
+			goto out;
+		}
+	}
+out:
+	dwarf_dealloc(dbg, loc_attr, DW_DLA_ATTR);
+	dwarf_dealloc(dbg, loclist, DW_DLA_BLOCK);
+	return res;
 }
 /*
  * A local variable or argument can be resolved
@@ -19,17 +128,18 @@ bool
 shiva_dwarf_resolve_variable(struct shiva_ctx *ctx, const char *funcname, const char *varname,
     Dwarf_Addr pc, shiva_dwarf_loc_t *location)
 {
-	int fd;
-	Dwarf_Attribute attr;
+	int fd, ret;
+	Dwarf_Attribute attr = NULL;
 	Dwarf_Debug dbg = ctx->dwarf.debug;
 	Dwarf_Error err;
 	Dwarf_Die func_die = NULL;
 	Dwarf_Die child = NULL;
 	Dwarf_Die sibling = NULL;
 	char *name = NULL;
-
+	bool res = false;
 	fd = ctx->elfobj.fd;
 
+#if 0
 	int ret = dwarf_init_b(fd, 0, NULL, NULL, &dbg, &err);
 	if (ret != DW_DLV_OK) {
 		fprintf(stderr, "dwarf_init_b() failed: %s\n", dwarf_errmsg(err));
@@ -37,6 +147,7 @@ shiva_dwarf_resolve_variable(struct shiva_ctx *ctx, const char *funcname, const 
 		close(fd);
 		return false;
 	}
+#endif
 	if (shiva_dwarf_find_function(dbg, funcname, &func_die) == false) {
 		fprintf(stderr, "failed to find dwarf die for function %s\n", funcname);
 		return false;
@@ -45,27 +156,41 @@ shiva_dwarf_resolve_variable(struct shiva_ctx *ctx, const char *funcname, const 
 	ret = dwarf_child(func_die, &child, &err);
 	if (ret != DW_DLV_OK) {
 		shiva_debug("dwarf_child() failed\n");
+		dwarf_dealloc(dbg, func_die, DW_DLA_DIE);
 		return false;
 	}
 	while (child != NULL) {
 		Dwarf_Half tag;
-
 		ret = dwarf_tag(child, &tag, &err);
-		if (ret != DW_DLV_OK)
+		if (ret != DW_DLV_OK) {
+			dwarf_dealloc(dbg, child, DW_DLA_DIE);
 			break;
-
+		}
+		shiva_debug("Checking tag\n");
 		switch(tag) { /* may add more types in future */
 		case DW_TAG_formal_parameter:
 		case DW_TAG_variable:
+			shiva_debug("Getting attribute\n");
+			ret = dwarf_attr(child, DW_AT_name, &attr, &err);
+			if (ret == DW_DLV_ERROR) {
+				fprintf(stderr, "dwarf_attr() failed\n");
+				dwarf_dealloc(dbg, child, DW_DLA_DIE);
+				return false;
+			}
+			shiva_debug("Calling dwarf_formstring\n");
 			ret = dwarf_formstring(attr, &name, &err);
 			if (ret == DW_DLV_OK && name != NULL && strcmp(name, varname) == 0) {
+				shiva_debug("name: %s, varname: %s\n", name, varname);
 				dwarf_dealloc(dbg, name, DW_DLA_STRING);
-				return shiva_dwarf_resolve_die_location(dbg, child, pc, location);
+				dwarf_dealloc(dbg, attr, DW_DLA_ATTR);
+				res = shiva_dwarf_resolve_die_location(dbg, child, pc, location);
+				dwarf_dealloc(dbg, child, DW_DLA_DIE);
+				dwarf_dealloc(dbg, func_die, DW_DLA_DIE);
+				return res;
 			}
 			if (name != NULL) {
 				dwarf_dealloc(dbg, name, DW_DLA_STRING);
 			}
-			return false;
 			break;
 		default:
 			break;
@@ -149,17 +274,44 @@ done:
 	return false;
 }
 
+bool
+shiva_dwarf_init(struct shiva_ctx *ctx)
+{
+	int fd;
+	fd = ctx->elfobj.fd; /* already open file desriptor on ELF target */
+	Dwarf_Error err;
+
+        int ret = dwarf_init_b(fd, 0, NULL, NULL, &ctx->dwarf.debug, &err);
+        if (ret != DW_DLV_OK) {
+                fprintf(stderr, "dwarf_init_b() failed: %s\n", dwarf_errmsg(err));
+                dwarf_dealloc_error(ctx->dwarf.debug, err);
+                return false;
+        }
+	return true;
+}
+
+bool
+shiva_dwarf_fini(struct shiva_ctx *ctx)
+{
+	Dwarf_Error err;
+
+	if (dwarf_finish(ctx->dwarf.debug) != DW_DLV_OK) {
+		fprintf(stderr, "shiva_dwarf_fini() failed: %s\n", dwarf_errmsg(err));
+		return false;
+	}
+	return true;
+}
 
 /*
  * returns true if function succeeds
  * the last two args: addr and size are where the outputs are stored for the address and size
  */
 bool
-shiva_dwarf_line_attributes(const char *binpath, const char *funcname,
+shiva_dwarf_line_attributes(struct shiva_ctx *ctx, const char *binpath, const char *funcname,
     unsigned int lineno, uint64_t *addr, size_t *size)
 {
-	int fd;
-	Dwarf_Debug dbg = 0;
+	int fd, ret;
+	Dwarf_Debug dbg = ctx->dwarf.debug;
 	Dwarf_Error err = 0;
 	size_t line_count = 0;
 	size_t line_capacity = 0;
@@ -173,6 +325,7 @@ shiva_dwarf_line_attributes(const char *binpath, const char *funcname,
 	Dwarf_Die func_die;
 	Dwarf_Die cu_die;
 
+#if 0
 	fd = open(binpath, O_RDONLY);
 	if (fd < 0) {
 		fprintf(stderr, "failed to open: %s. %s\n", binpath, strerror(errno));
@@ -186,7 +339,7 @@ shiva_dwarf_line_attributes(const char *binpath, const char *funcname,
 		close(fd);
 		return false;
 	}
-
+#endif
 	/*
 	 * Iterate over each compilation unit (i.e. source files) until we find
 	 * the function specified by funcname

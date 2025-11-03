@@ -3257,7 +3257,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			uint32_t lineno = (uint32_t)tf_val;
 			size_t insert_size;
 			shiva_debug("DWARF srcline replace, line number: %d\n", lineno);
-			if (shiva_dwarf_line_attributes(elf_pathname(&ctx->elfobj),
+			if (shiva_dwarf_line_attributes(ctx, elf_pathname(&ctx->elfobj),
 			    transform->name, lineno, &insert_vaddr, &insert_size) == false) {
 				fprintf(stderr, "shiva_dwarf_line_attributes() failed\n");
 				return false;

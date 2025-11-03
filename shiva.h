@@ -920,8 +920,13 @@ shiva_iterator_res_t shiva_jumptable_iterator_next(shiva_jumptable_iterator_t *,
 /*
  * shiva_dwarf.c
  */
-bool shiva_dwarf_line_attributes(const char *, const char *,
+bool shiva_dwarf_line_attributes(shiva_ctx_t *, const char *, const char *,
     unsigned int, uint64_t *, size_t *);
+bool shiva_dwarf_resolve_variable(shiva_ctx_t *, const char *, const char *,
+    Dwarf_Addr, shiva_dwarf_loc_t *);
+bool shiva_dwarf_init(shiva_ctx_t *);
+bool shiva_dwarf_fini(shiva_ctx_t *);
+
 #endif
 
 /*

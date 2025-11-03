@@ -29,17 +29,23 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 		return false;
 	}
 
-	uint64_t laddr;
-        size_t lsize;
-
-#if 0
-	if (shiva_dwarf_line_attributes(elf_pathname(&ctx->elfobj),
-	    "foo", "test1.c", 8, &laddr, &lsize) == false) {
-		fprintf(stderr, "shiva_dwarf_line_attribute() failed\n");
+	if (shiva_dwarf_init(ctx) == false) {
+		fprintf(stderr, "shiva_dwarf_init() failed\n");
 		return false;
 	}
-#endif
-	shiva_debug("address: %#lx size: %zu bytes\n", laddr, lsize);
+	shiva_dwarf_loc_t loc;
+
+	if (shiva_dwarf_resolve_variable(ctx, "foo", "str", 0x11bb, &loc) == false) {
+		fprintf(stderr, "shiva_dwarf_resolve_variable() failed to find 'str' in foo()'\n");
+		return false;
+	}
+	if (loc.type == SHIVA_DWARF_LOC_REG) {
+		shiva_debug("register: %d\n", loc.reg);
+	} else if (loc.type == SHIVA_DWARF_LOC_STACK) {
+		shiva_debug("rsp + (%d)\n", loc.stack_offset);
+	} else {
+		shiva_debug("Unknown location type\n");
+	}
 	if (elf_section_by_name(&ctx->elfobj, ".text", &section) == false) {
 		fprintf(stderr, "elf_section_by_name failed to find \".text\"\n");
 		return false;
