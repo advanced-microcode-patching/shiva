@@ -35,7 +35,7 @@ shiva_build_trace_data(struct shiva_ctx *ctx)
 	}
 	shiva_dwarf_loc_t loc;
 
-	if (shiva_dwarf_resolve_variable(ctx, "foo", "str", 0x11bb, &loc) == false) {
+	if (shiva_dwarf_resolve_variable(ctx, "foo", "str", 0x118c, &loc) == false) {
 		fprintf(stderr, "shiva_dwarf_resolve_variable() failed to find 'str' in foo()'\n");
 		return false;
 	}

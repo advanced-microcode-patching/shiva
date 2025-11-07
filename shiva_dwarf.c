@@ -9,7 +9,7 @@ shiva_dwarf_resolve_die_location(Dwarf_Debug dbg, Dwarf_Die var_die, Dwarf_Addr 
 	Dwarf_Error err = NULL;
 	Dwarf_Attribute loc_attr;
 	Dwarf_Off loc_offset;
-	int ret, i;
+	int ret, i, j;
         Dwarf_Unsigned entry_cnt = 0;
 	Dwarf_Loc_Head_c loclist = NULL;
 	bool res = false;
@@ -76,7 +76,7 @@ shiva_dwarf_resolve_die_location(Dwarf_Debug dbg, Dwarf_Die var_die, Dwarf_Addr 
 			shiva_debug("No location entries for PC %#lx\n", pc);
 			continue;
 		}
-		{
+		for (j = 0; j < cents; j++) {
 			Dwarf_Small atom;
 			Dwarf_Unsigned val, op1, op2, branch_offset;
 
@@ -88,12 +88,13 @@ shiva_dwarf_resolve_die_location(Dwarf_Debug dbg, Dwarf_Die var_die, Dwarf_Addr 
 			}
 #endif
 			shiva_debug("Calling dwarf_get_location_op_value_c\n");
-			ret = dwarf_get_location_op_value_c(ld, 0, &atom, &val, &op1, &op2, &branch_offset, &err);
+			ret = dwarf_get_location_op_value_c(ld, j, &atom, &val, &op1, &op2, &branch_offset, &err);
 			if (ret != DW_DLV_OK) {
 				shiva_debug("dwarf_get_location_op_value_c failed\n");
 				goto out;
 			}
 			if (atom >= DW_OP_reg0 && atom <= DW_OP_reg31) {
+				shiva_debug("Register location: reg=%u\n", atom - DW_OP_reg0);
 				location->type = SHIVA_DWARF_LOC_REG;
 				location->reg = atom - DW_OP_reg0;
 				res = true;
@@ -101,6 +102,7 @@ shiva_dwarf_resolve_die_location(Dwarf_Debug dbg, Dwarf_Die var_die, Dwarf_Addr 
 			}
 
 			if (atom == DW_OP_fbreg) {
+				shiva_debug("Stack location: [rbp + (%04x)]\n", val);
 				location->type = SHIVA_DWARF_LOC_STACK;
 				location->stack_offset = val;
 				res = true;
