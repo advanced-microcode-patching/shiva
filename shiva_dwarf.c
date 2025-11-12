@@ -80,13 +80,6 @@ shiva_dwarf_resolve_die_location(Dwarf_Debug dbg, Dwarf_Die var_die, Dwarf_Addr 
 			Dwarf_Small atom;
 			Dwarf_Unsigned val, op1, op2, branch_offset;
 
-#if 0
-			ret = dwarf_get_loclist_entry_c(ld, &loc_head, &err);
-			if (ret != DW_DLV_OK) {
-				shiva_debug("dwarf_get_loc_c() failed\n");
-				goto out;
-			}
-#endif
 			shiva_debug("Calling dwarf_get_location_op_value_c\n");
 			ret = dwarf_get_location_op_value_c(ld, j, &atom, &val, &op1, &op2, &branch_offset, &err);
 			if (ret != DW_DLV_OK) {
@@ -141,15 +134,6 @@ shiva_dwarf_resolve_variable(struct shiva_ctx *ctx, const char *funcname, const 
 	bool res = false;
 	fd = ctx->elfobj.fd;
 
-#if 0
-	int ret = dwarf_init_b(fd, 0, NULL, NULL, &dbg, &err);
-	if (ret != DW_DLV_OK) {
-		fprintf(stderr, "dwarf_init_b() failed: %s\n", dwarf_errmsg(err));
-		dwarf_dealloc_error(dbg, err);
-		close(fd);
-		return false;
-	}
-#endif
 	if (shiva_dwarf_find_function(dbg, funcname, &func_die) == false) {
 		fprintf(stderr, "failed to find dwarf die for function %s\n", funcname);
 		return false;
@@ -327,21 +311,6 @@ shiva_dwarf_line_attributes(struct shiva_ctx *ctx, const char *binpath, const ch
 	Dwarf_Die func_die;
 	Dwarf_Die cu_die;
 
-#if 0
-	fd = open(binpath, O_RDONLY);
-	if (fd < 0) {
-		fprintf(stderr, "failed to open: %s. %s\n", binpath, strerror(errno));
-		return false;
-	}
-
-	int ret = dwarf_init_b(fd, 0, NULL, NULL, &dbg, &err);
-	if (ret != DW_DLV_OK) {
-		fprintf(stderr, "dwarf_init_b() failed: %s\n", dwarf_errmsg(err));
-		dwarf_dealloc_error(dbg, err);
-		close(fd);
-		return false;
-	}
-#endif
 	/*
 	 * Iterate over each compilation unit (i.e. source files) until we find
 	 * the function specified by funcname

@@ -603,9 +603,10 @@ typedef enum shiva_dwarf_loc_type {
 } shiva_dwarf_loc_type_t;
 
 typedef struct shiva_dwarf_loc {
+	char *symname;
 	shiva_dwarf_loc_type_t type;
 	uint32_t reg;
-	uint64_t stack_offset;
+	int64_t stack_offset;
 } shiva_dwarf_loc_t;
 
 extern struct shiva_ctx *ctx_global;
