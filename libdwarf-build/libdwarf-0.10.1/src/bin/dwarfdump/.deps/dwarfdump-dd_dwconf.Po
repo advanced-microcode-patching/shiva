@@ -1,0 +1,32 @@
+dwarfdump-dd_dwconf.o: dd_dwconf.c ../../../config.h \
+ /usr/local/musl/include/ctype.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/stdlib.h \
+ /usr/local/musl/include/alloca.h /usr/local/musl/include/string.h \
+ /usr/local/musl/include/strings.h /usr/local/musl/include/stdio.h \
+ ../../../src/lib/libdwarf/dwarf.h ../../../src/lib/libdwarf/libdwarf.h \
+ ../../../src/lib/libdwarf/libdwarf_private.h dd_defined_types.h \
+ dd_checkutil.h dd_glflags.h dd_globals.h dd_dwconf.h \
+ dd_canonical_append.h dd_makename.h dd_sanitized.h dd_esb.h \
+ dd_safe_strcpy.h
+../../../config.h:
+/usr/local/musl/include/ctype.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+/usr/local/musl/include/stdio.h:
+../../../src/lib/libdwarf/dwarf.h:
+../../../src/lib/libdwarf/libdwarf.h:
+../../../src/lib/libdwarf/libdwarf_private.h:
+dd_defined_types.h:
+dd_checkutil.h:
+dd_glflags.h:
+dd_globals.h:
+dd_dwconf.h:
+dd_canonical_append.h:
+dd_makename.h:
+dd_sanitized.h:
+dd_esb.h:
+dd_safe_strcpy.h:

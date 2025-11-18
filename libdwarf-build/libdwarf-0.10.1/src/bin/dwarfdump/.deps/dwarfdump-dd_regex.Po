@@ -1,0 +1,15 @@
+dwarfdump-dd_regex.o: dd_regex.c ../../../config.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h \
+ ../../../src/lib/libdwarf/dwarf.h ../../../src/lib/libdwarf/libdwarf.h \
+ dd_regex.h dd_safe_strcpy.h dd_checkutil.h dd_glflags.h
+../../../config.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+../../../src/lib/libdwarf/dwarf.h:
+../../../src/lib/libdwarf/libdwarf.h:
+dd_regex.h:
+dd_safe_strcpy.h:
+dd_checkutil.h:
+dd_glflags.h:

@@ -1,0 +1,15 @@
+../../../src/bin/dwarfdump/attrform-dd_utf8.o: \
+ ../../../src/bin/dwarfdump/dd_utf8.c ../../../config.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h \
+ ../../../src/lib/libdwarf/dwarf.h ../../../src/lib/libdwarf/libdwarf.h \
+ ../../../src/bin/dwarfdump/dd_sanitized.h \
+ ../../../src/bin/dwarfdump/dd_utf8.h
+../../../config.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+../../../src/lib/libdwarf/dwarf.h:
+../../../src/lib/libdwarf/libdwarf.h:
+../../../src/bin/dwarfdump/dd_sanitized.h:
+../../../src/bin/dwarfdump/dd_utf8.h:

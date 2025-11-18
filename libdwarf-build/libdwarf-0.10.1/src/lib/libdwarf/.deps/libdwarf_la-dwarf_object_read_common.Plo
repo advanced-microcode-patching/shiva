@@ -1,0 +1,18 @@
+libdwarf_la-dwarf_object_read_common.lo: dwarf_object_read_common.c \
+ ../../../config.h /usr/local/musl/include/stddef.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/stdio.h \
+ /usr/local/musl/include/features.h dwarf.h libdwarf.h libdwarf_private.h \
+ dwarf_base_types.h dwarf_opaque.h dwarf_safe_strcpy.h \
+ dwarf_object_read_common.h
+../../../config.h:
+/usr/local/musl/include/stddef.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+dwarf.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_base_types.h:
+dwarf_opaque.h:
+dwarf_safe_strcpy.h:
+dwarf_object_read_common.h:

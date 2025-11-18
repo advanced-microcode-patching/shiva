@@ -1,0 +1,33 @@
+../../../src/bin/dwarfdump/tagtree-dd_makename.o: \
+ ../../../src/bin/dwarfdump/dd_makename.c ../../../config.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/stdlib.h \
+ /usr/local/musl/include/alloca.h /usr/local/musl/include/string.h \
+ /usr/local/musl/include/strings.h ../../../src/lib/libdwarf/dwarf.h \
+ ../../../src/lib/libdwarf/libdwarf.h \
+ ../../../src/lib/libdwarf/libdwarf_private.h \
+ ../../../src/bin/dwarfdump/dd_defined_types.h \
+ ../../../src/bin/dwarfdump/dd_checkutil.h \
+ ../../../src/bin/dwarfdump/dd_glflags.h \
+ ../../../src/bin/dwarfdump/dd_globals.h \
+ ../../../src/bin/dwarfdump/dd_tsearchbal.h \
+ ../../../src/bin/dwarfdump/dd_makename.h \
+ ../../../src/bin/dwarfdump/dd_minimal.h
+../../../config.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+../../../src/lib/libdwarf/dwarf.h:
+../../../src/lib/libdwarf/libdwarf.h:
+../../../src/lib/libdwarf/libdwarf_private.h:
+../../../src/bin/dwarfdump/dd_defined_types.h:
+../../../src/bin/dwarfdump/dd_checkutil.h:
+../../../src/bin/dwarfdump/dd_glflags.h:
+../../../src/bin/dwarfdump/dd_globals.h:
+../../../src/bin/dwarfdump/dd_tsearchbal.h:
+../../../src/bin/dwarfdump/dd_makename.h:
+../../../src/bin/dwarfdump/dd_minimal.h:

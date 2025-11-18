@@ -1,0 +1,14 @@
+libdwarf_la-dwarf_leb.lo: dwarf_leb.c ../../../config.h \
+ /usr/local/musl/include/stddef.h /usr/local/musl/include/bits/alltypes.h \
+ dwarf.h libdwarf.h libdwarf_private.h dwarf_base_types.h dwarf_opaque.h \
+ dwarf_error.h dwarf_util.h
+../../../config.h:
+/usr/local/musl/include/stddef.h:
+/usr/local/musl/include/bits/alltypes.h:
+dwarf.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_base_types.h:
+dwarf_opaque.h:
+dwarf_error.h:
+dwarf_util.h:

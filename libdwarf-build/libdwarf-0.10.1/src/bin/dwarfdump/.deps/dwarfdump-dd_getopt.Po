@@ -1,0 +1,14 @@
+dwarfdump-dd_getopt.o: dd_getopt.c ../../../config.h \
+ /usr/local/musl/include/stddef.h /usr/local/musl/include/bits/alltypes.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/string.h /usr/local/musl/include/strings.h \
+ dd_minimal.h dd_getopt.h
+../../../config.h:
+/usr/local/musl/include/stddef.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+dd_minimal.h:
+dd_getopt.h:

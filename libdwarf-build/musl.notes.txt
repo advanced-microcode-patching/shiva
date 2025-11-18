@@ -1,0 +1,8 @@
+LIBDWARF MUST BE COMPILED WITH MUSL-LIBC
+
+wget http://www.musl-libc.org/releases/musl-latest.tar.gz
+tar -xvf musl-latest.tar.gz
+cd musl-<version>
+./configure --prefix=/usr/local/musl
+make
+sudo make install

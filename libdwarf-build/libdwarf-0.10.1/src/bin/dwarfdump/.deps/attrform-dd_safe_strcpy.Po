@@ -1,0 +1,8 @@
+../../../src/bin/dwarfdump/attrform-dd_safe_strcpy.o: \
+ ../../../src/bin/dwarfdump/dd_safe_strcpy.c ../../../config.h \
+ /usr/local/musl/include/stddef.h /usr/local/musl/include/bits/alltypes.h \
+ ../../../src/bin/dwarfdump/dd_safe_strcpy.h
+../../../config.h:
+/usr/local/musl/include/stddef.h:
+/usr/local/musl/include/bits/alltypes.h:
+../../../src/bin/dwarfdump/dd_safe_strcpy.h:

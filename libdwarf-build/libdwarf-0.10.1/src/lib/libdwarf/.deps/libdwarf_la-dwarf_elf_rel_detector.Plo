@@ -1,0 +1,5 @@
+libdwarf_la-dwarf_elf_rel_detector.lo: dwarf_elf_rel_detector.c \
+ ../../../config.h dwarf_elf_defines.h dwarf_elf_rel_detector.h
+../../../config.h:
+dwarf_elf_defines.h:
+dwarf_elf_rel_detector.h:

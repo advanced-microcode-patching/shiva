@@ -1,0 +1,15 @@
+dwarfdump-dd_strstrnocase.o: dd_strstrnocase.c ../../../config.h \
+ /usr/local/musl/include/ctype.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h \
+ ../../../src/lib/libdwarf/dwarf.h ../../../src/lib/libdwarf/libdwarf.h \
+ dd_defined_types.h dd_checkutil.h dd_glflags.h dd_globals.h
+../../../config.h:
+/usr/local/musl/include/ctype.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+../../../src/lib/libdwarf/dwarf.h:
+../../../src/lib/libdwarf/libdwarf.h:
+dd_defined_types.h:
+dd_checkutil.h:
+dd_glflags.h:
+dd_globals.h:

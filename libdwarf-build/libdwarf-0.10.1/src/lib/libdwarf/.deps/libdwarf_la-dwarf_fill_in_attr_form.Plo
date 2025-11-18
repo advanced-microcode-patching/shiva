@@ -1,0 +1,24 @@
+libdwarf_la-dwarf_fill_in_attr_form.lo: dwarf_fill_in_attr_form.c \
+ ../../../config.h /usr/local/musl/include/stddef.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/stdlib.h \
+ /usr/local/musl/include/features.h /usr/local/musl/include/alloca.h \
+ dwarf.h libdwarf.h libdwarf_private.h dwarf_base_types.h dwarf_opaque.h \
+ dwarf_alloc.h dwarf_die_deliv.h dwarf_abbrev.h dwarf_error.h \
+ dwarf_util.h dwarf_string.h
+../../../config.h:
+/usr/local/musl/include/stddef.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/alloca.h:
+dwarf.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_base_types.h:
+dwarf_opaque.h:
+dwarf_alloc.h:
+dwarf_die_deliv.h:
+dwarf_abbrev.h:
+dwarf_error.h:
+dwarf_util.h:
+dwarf_string.h:

@@ -1,0 +1,26 @@
+libdwarf_la-dwarf_macro5.lo: dwarf_macro5.c ../../../config.h \
+ /usr/local/musl/include/stdlib.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/alloca.h \
+ /usr/local/musl/include/string.h /usr/local/musl/include/strings.h \
+ dwarf.h libdwarf.h libdwarf_private.h dwarf_base_types.h \
+ dwarf_safe_strcpy.h dwarf_opaque.h dwarf_alloc.h dwarf_error.h \
+ dwarf_util.h dwarf_macro5.h dwarf_string.h dwarf_str_offsets.h
+../../../config.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+dwarf.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_base_types.h:
+dwarf_safe_strcpy.h:
+dwarf_opaque.h:
+dwarf_alloc.h:
+dwarf_error.h:
+dwarf_util.h:
+dwarf_macro5.h:
+dwarf_string.h:
+dwarf_str_offsets.h:

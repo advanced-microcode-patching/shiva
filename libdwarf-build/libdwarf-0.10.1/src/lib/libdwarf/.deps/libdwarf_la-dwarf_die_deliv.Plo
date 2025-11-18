@@ -1,0 +1,31 @@
+libdwarf_la-dwarf_die_deliv.lo: dwarf_die_deliv.c ../../../config.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/string.h \
+ /usr/local/musl/include/strings.h /usr/local/musl/include/stdlib.h \
+ /usr/local/musl/include/alloca.h /usr/local/musl/include/stdint.h \
+ /usr/local/musl/include/bits/stdint.h dwarf.h libdwarf.h \
+ libdwarf_private.h dwarf_base_types.h dwarf_safe_strcpy.h dwarf_opaque.h \
+ dwarf_alloc.h dwarf_error.h dwarf_util.h dwarf_str_offsets.h \
+ dwarf_string.h dwarf_die_deliv.h
+../../../config.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/stdint.h:
+/usr/local/musl/include/bits/stdint.h:
+dwarf.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_base_types.h:
+dwarf_safe_strcpy.h:
+dwarf_opaque.h:
+dwarf_alloc.h:
+dwarf_error.h:
+dwarf_util.h:
+dwarf_str_offsets.h:
+dwarf_string.h:
+dwarf_die_deliv.h:

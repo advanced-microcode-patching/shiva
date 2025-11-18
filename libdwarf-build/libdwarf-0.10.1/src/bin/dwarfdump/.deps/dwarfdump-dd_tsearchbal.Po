@@ -1,0 +1,19 @@
+dwarfdump-dd_tsearchbal.o: dd_tsearchbal.c ../../../config.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/stddef.h \
+ /usr/local/musl/include/stdlib.h /usr/local/musl/include/alloca.h \
+ /usr/local/musl/include/stdint.h /usr/local/musl/include/bits/stdint.h \
+ ../../../src/lib/libdwarf/libdwarf.h \
+ ../../../src/lib/libdwarf/libdwarf_private.h dd_tsearchbal.h
+../../../config.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/stddef.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/stdint.h:
+/usr/local/musl/include/bits/stdint.h:
+../../../src/lib/libdwarf/libdwarf.h:
+../../../src/lib/libdwarf/libdwarf_private.h:
+dd_tsearchbal.h:

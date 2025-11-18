@@ -1,0 +1,7 @@
+builduritable-uritablebuild.o: uritablebuild.c \
+ /usr/local/musl/include/ctype.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/stdio.h
+/usr/local/musl/include/ctype.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/stdio.h:

@@ -1,0 +1,3 @@
+libdwarf_la-dwarf_names.lo: dwarf_names.c dwarf.h libdwarf.h
+dwarf.h:
+libdwarf.h:

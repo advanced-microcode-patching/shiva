@@ -1,0 +1,24 @@
+../../../src/bin/dwarfdump/tagattr-dd_sanitized.o: \
+ ../../../src/bin/dwarfdump/dd_sanitized.c ../../../config.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h \
+ ../../../src/lib/libdwarf/dwarf.h ../../../src/lib/libdwarf/libdwarf.h \
+ ../../../src/bin/dwarfdump/dd_defined_types.h \
+ ../../../src/bin/dwarfdump/dd_checkutil.h \
+ ../../../src/bin/dwarfdump/dd_glflags.h \
+ ../../../src/bin/dwarfdump/dd_globals.h \
+ ../../../src/bin/dwarfdump/dd_esb.h ../../../src/bin/dwarfdump/dd_utf8.h \
+ ../../../src/bin/dwarfdump/dd_sanitized.h
+../../../config.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+../../../src/lib/libdwarf/dwarf.h:
+../../../src/lib/libdwarf/libdwarf.h:
+../../../src/bin/dwarfdump/dd_defined_types.h:
+../../../src/bin/dwarfdump/dd_checkutil.h:
+../../../src/bin/dwarfdump/dd_glflags.h:
+../../../src/bin/dwarfdump/dd_globals.h:
+../../../src/bin/dwarfdump/dd_esb.h:
+../../../src/bin/dwarfdump/dd_utf8.h:
+../../../src/bin/dwarfdump/dd_sanitized.h:

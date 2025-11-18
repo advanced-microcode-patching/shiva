@@ -1,0 +1,12 @@
+dwarfdump-dd_canonical_append.o: dd_canonical_append.c ../../../config.h \
+ /usr/local/musl/include/stddef.h /usr/local/musl/include/bits/alltypes.h \
+ /usr/local/musl/include/string.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/strings.h dd_canonical_append.h dd_safe_strcpy.h
+../../../config.h:
+/usr/local/musl/include/stddef.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/strings.h:
+dd_canonical_append.h:
+dd_safe_strcpy.h:

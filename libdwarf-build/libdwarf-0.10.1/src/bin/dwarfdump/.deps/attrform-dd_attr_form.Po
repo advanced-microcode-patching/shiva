@@ -1,0 +1,32 @@
+../../../src/bin/dwarfdump/attrform-dd_attr_form.o: \
+ ../../../src/bin/dwarfdump/dd_attr_form.c ../../../config.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/stdlib.h \
+ /usr/local/musl/include/alloca.h ../../../src/lib/libdwarf/dwarf.h \
+ ../../../src/lib/libdwarf/libdwarf.h \
+ ../../../src/lib/libdwarf/libdwarf_private.h \
+ ../../../src/bin/dwarfdump/dd_defined_types.h \
+ ../../../src/bin/dwarfdump/dd_checkutil.h \
+ ../../../src/bin/dwarfdump/dd_glflags.h \
+ ../../../src/bin/dwarfdump/dd_globals.h \
+ ../../../src/bin/dwarfdump/dd_tsearchbal.h \
+ ../../../src/bin/dwarfdump/dd_naming.h \
+ ../../../src/bin/dwarfdump/dd_attr_form.h \
+ ../../../src/bin/dwarfdump/dwarfdump-af-table.h
+../../../config.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/alloca.h:
+../../../src/lib/libdwarf/dwarf.h:
+../../../src/lib/libdwarf/libdwarf.h:
+../../../src/lib/libdwarf/libdwarf_private.h:
+../../../src/bin/dwarfdump/dd_defined_types.h:
+../../../src/bin/dwarfdump/dd_checkutil.h:
+../../../src/bin/dwarfdump/dd_glflags.h:
+../../../src/bin/dwarfdump/dd_globals.h:
+../../../src/bin/dwarfdump/dd_tsearchbal.h:
+../../../src/bin/dwarfdump/dd_naming.h:
+../../../src/bin/dwarfdump/dd_attr_form.h:
+../../../src/bin/dwarfdump/dwarfdump-af-table.h:

@@ -1,0 +1,18 @@
+dwarfdump-dd_uri.o: dd_uri.c ../../../config.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h \
+ ../../../src/lib/libdwarf/dwarf.h ../../../src/lib/libdwarf/libdwarf.h \
+ dd_defined_types.h dd_checkutil.h dd_glflags.h dd_globals.h dd_esb.h \
+ dd_uri.h
+../../../config.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+../../../src/lib/libdwarf/dwarf.h:
+../../../src/lib/libdwarf/libdwarf.h:
+dd_defined_types.h:
+dd_checkutil.h:
+dd_glflags.h:
+dd_globals.h:
+dd_esb.h:
+dd_uri.h:

@@ -1,0 +1,24 @@
+libdwarf_la-dwarf_groups.lo: dwarf_groups.c ../../../config.h \
+ /usr/local/musl/include/stdlib.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/alloca.h \
+ /usr/local/musl/include/string.h /usr/local/musl/include/strings.h \
+ /usr/local/musl/include/stdint.h /usr/local/musl/include/bits/stdint.h \
+ dwarf.h libdwarf.h libdwarf_private.h dwarf_base_types.h dwarf_opaque.h \
+ dwarf_util.h dwarf_error.h dwarf_tsearch.h
+../../../config.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+/usr/local/musl/include/stdint.h:
+/usr/local/musl/include/bits/stdint.h:
+dwarf.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_base_types.h:
+dwarf_opaque.h:
+dwarf_util.h:
+dwarf_error.h:
+dwarf_tsearch.h:

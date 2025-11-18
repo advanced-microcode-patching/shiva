@@ -1,0 +1,36 @@
+
+option('dwarfgen',
+  type : 'boolean',
+  value : false,
+  description : 'enable dwarfgen compilation'
+)
+
+option('dwarfexample',
+  type : 'boolean',
+  value : false,
+  description : 'enable dwarf examples compilation'
+)
+
+option('doc',
+  type : 'boolean',
+  value : false,
+  description : 'build and install Doxygen documentation'
+)
+
+option('sanitize',
+  type : 'boolean',
+  value : false,
+  description : 'compile and link with -fsanitize options'
+)
+
+option('wall',
+  type : 'boolean',
+  value : false,
+  description : 'compile and link with compiler warning options'
+)
+
+option('decompression',
+  type : 'boolean',
+  value : true,
+  description : 'compile and link with zlib and zstd decompression libraries'
+)

@@ -1,0 +1,22 @@
+libdwarf_la-dwarf_arange.lo: dwarf_arange.c ../../../config.h \
+ /usr/local/musl/include/stddef.h /usr/local/musl/include/bits/alltypes.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/features.h \
+ dwarf.h libdwarf.h libdwarf_private.h dwarf_base_types.h dwarf_opaque.h \
+ dwarf_alloc.h dwarf_error.h dwarf_util.h dwarf_arange.h dwarf_global.h \
+ dwarf_string.h
+../../../config.h:
+/usr/local/musl/include/stddef.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+dwarf.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_base_types.h:
+dwarf_opaque.h:
+dwarf_alloc.h:
+dwarf_error.h:
+dwarf_util.h:
+dwarf_arange.h:
+dwarf_global.h:
+dwarf_string.h:

@@ -1,0 +1,14 @@
+prefix=/usr/local/musl
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=/usr/local/musl/include/libdwarf-2
+pkgincludedir=/usr/local/musl/include/libdwarf-2/libdwarf-0
+
+Name: libdwarfp
+Description: DWARF debug symbols producer library
+Version: 0.10.1
+Requires.private: @requirements_libdwarfp_pc@
+Requires: libdwarf
+Libs: -L${libdir} -ldwarfp
+Libs.private: @requirements_libdwarfp_libs@
+Cflags: -I${pkgincludedir}

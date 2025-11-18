@@ -1,0 +1,7 @@
+libdwarf_la-dwarf_safe_strcpy.lo: dwarf_safe_strcpy.c ../../../config.h \
+ /usr/local/musl/include/stddef.h /usr/local/musl/include/bits/alltypes.h \
+ dwarf_safe_strcpy.h
+../../../config.h:
+/usr/local/musl/include/stddef.h:
+/usr/local/musl/include/bits/alltypes.h:
+dwarf_safe_strcpy.h:

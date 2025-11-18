@@ -1,0 +1,45 @@
+libdwarf_la-dwarf_init_finish.lo: dwarf_init_finish.c ../../../config.h \
+ /usr/local/musl/include/stdlib.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/alloca.h \
+ /usr/local/musl/include/string.h /usr/local/musl/include/strings.h \
+ /usr/local/musl/include/stdio.h dwarf.h libdwarf.h libdwarf_private.h \
+ dwarf_base_types.h dwarf_opaque.h dwarf_alloc.h dwarf_error.h \
+ dwarf_util.h dwarf_memcpy_swap.h dwarf_harmless.h dwarf_string.h \
+ dwarf_secname_ck.h dwarf_setup_sections.h /usr/local/musl/include/zlib.h \
+ /usr/local/musl/include/zconf.h /usr/local/musl/include/stddef.h \
+ /usr/local/musl/include/limits.h /usr/local/musl/include/bits/limits.h \
+ /usr/local/musl/include/sys/types.h /usr/local/musl/include/endian.h \
+ /usr/local/musl/include/sys/select.h /usr/local/musl/include/stdarg.h \
+ /usr/local/musl/include/unistd.h /usr/local/musl/include/bits/posix.h
+../../../config.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+/usr/local/musl/include/stdio.h:
+dwarf.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_base_types.h:
+dwarf_opaque.h:
+dwarf_alloc.h:
+dwarf_error.h:
+dwarf_util.h:
+dwarf_memcpy_swap.h:
+dwarf_harmless.h:
+dwarf_string.h:
+dwarf_secname_ck.h:
+dwarf_setup_sections.h:
+/usr/local/musl/include/zlib.h:
+/usr/local/musl/include/zconf.h:
+/usr/local/musl/include/stddef.h:
+/usr/local/musl/include/limits.h:
+/usr/local/musl/include/bits/limits.h:
+/usr/local/musl/include/sys/types.h:
+/usr/local/musl/include/endian.h:
+/usr/local/musl/include/sys/select.h:
+/usr/local/musl/include/stdarg.h:
+/usr/local/musl/include/unistd.h:
+/usr/local/musl/include/bits/posix.h:

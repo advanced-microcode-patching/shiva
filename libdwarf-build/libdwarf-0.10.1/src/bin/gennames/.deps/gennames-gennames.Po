@@ -1,0 +1,27 @@
+gennames-gennames.o: gennames.c ../../../config.h \
+ /usr/local/musl/include/stddef.h /usr/local/musl/include/bits/alltypes.h \
+ /usr/local/musl/include/ctype.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/errno.h /usr/local/musl/include/bits/errno.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/stdlib.h \
+ /usr/local/musl/include/alloca.h /usr/local/musl/include/string.h \
+ /usr/local/musl/include/strings.h \
+ ../../../src/lib/libdwarf/libdwarf_private.h \
+ ../../../src/bin/dwarfdump/dd_getopt.h \
+ ../../../src/lib/libdwarf/dwarf_safe_strcpy.h \
+ ../../../src/bin/dwarfdump/dd_minimal.h
+../../../config.h:
+/usr/local/musl/include/stddef.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/ctype.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/errno.h:
+/usr/local/musl/include/bits/errno.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+../../../src/lib/libdwarf/libdwarf_private.h:
+../../../src/bin/dwarfdump/dd_getopt.h:
+../../../src/lib/libdwarf/dwarf_safe_strcpy.h:
+../../../src/bin/dwarfdump/dd_minimal.h:

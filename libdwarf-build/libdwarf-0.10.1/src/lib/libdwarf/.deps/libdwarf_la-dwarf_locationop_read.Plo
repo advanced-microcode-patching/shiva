@@ -1,0 +1,25 @@
+libdwarf_la-dwarf_locationop_read.lo: dwarf_locationop_read.c \
+ ../../../config.h /usr/local/musl/include/string.h \
+ /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h \
+ /usr/local/musl/include/strings.h /usr/local/musl/include/stdint.h \
+ /usr/local/musl/include/bits/stdint.h dwarf.h libdwarf.h \
+ libdwarf_private.h dwarf_base_types.h dwarf_opaque.h dwarf_alloc.h \
+ dwarf_error.h dwarf_util.h dwarf_loc.h dwarf_string.h
+../../../config.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/strings.h:
+/usr/local/musl/include/stdint.h:
+/usr/local/musl/include/bits/stdint.h:
+dwarf.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_base_types.h:
+dwarf_opaque.h:
+dwarf_alloc.h:
+dwarf_error.h:
+dwarf_util.h:
+dwarf_loc.h:
+dwarf_string.h:

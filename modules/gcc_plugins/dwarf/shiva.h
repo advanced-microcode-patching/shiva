@@ -1,0 +1,939 @@
+#ifndef __SHIVA_H_
+#define __SHIVA_H_
+
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#include <sys/types.h>
+#include <stdint.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/ptrace.h>
+#include <elf.h>
+#include <errno.h>
+#include <sys/prctl.h>
+#include <sys/wait.h>
+#include "/usr/local/musl/include/libdwarf-2/dwarf.h"
+#include "/usr/local/musl/include/libdwarf-2/libdwarf.h"
+
+#include "sys/queue.h"
+
+#include "include/capstone/capstone.h"
+
+#include "/opt/elfmaster/include/libelfmaster.h"
+#include "shiva_debug.h"
+#include "shiva_misc.h"
+
+#define SHIVA_SIGNATURE 0x31f64
+
+#ifndef PAGE_SIZE
+#define PAGE_SIZE 4096
+#endif
+
+#define ELF_MIN_ALIGN 4096
+#define ELF_PAGESTART(_v) ((_v) & ~(unsigned long)(ELF_MIN_ALIGN-1))
+#define ELF_PAGEOFFSET(_v) ((_v) & (ELF_MIN_ALIGN-1))
+#define ELF_PAGEALIGN(_v, _a) (((_v) + _a - 1) & ~(_a - 1))
+
+#define RUNTIME_BASE(addr) (addr + ctx->ulexec.base_vaddr)
+
+#define SHIVA_OPTS_F_MODULE_PATH		(1UL << 0)
+#define SHIVA_OPTS_F_ULEXEC_ONLY		(1UL << 1)
+#define SHIVA_OPTS_F_INTERP_MODE		(1UL << 2)
+#define SHIVA_OPTS_F_STATIC_ELF			(1UL << 3)
+
+#define SHIVA_F_ULEXEC_LDSO_NEEDED	(1UL << 0)
+#define SHIVA_F_LOAD_MODULE_INIT		(1UL << 1)
+#define SHIVA_F_HAS_JUMPTABLE_METADATA	(1UL << 2)
+
+#define SHIVA_STACK_SIZE	(PAGE_SIZE * 1000)
+
+#define SHIVA_LDSO_BASE		0x1000000
+#if defined(__x86_64__)
+#define SHIVA_TARGET_BASE	0x40000000
+#elif defined(__aarch64__)
+#define SHIVA_TARGET_BASE	0x8000000
+#endif
+
+/*
+ * These flags are set to indicate various attributes of the loaded
+ * shiva module. specific to flags in struct module.
+ */
+#define SHIVA_MODULE_F_RUNTIME	(1UL << 0) /* deprecated, meaningless */
+#define SHIVA_MODULE_F_INIT	(1UL << 1) /* deprecated, meaningless */
+#define SHIVA_MODULE_F_DUMMY_TEXT	(1UL << 2) /* Module has empty text region */
+#define SHIVA_MODULE_F_TRANSFORM	(1UL << 3) /* Module has transform records */
+#define SHIVA_MODULE_F_DELAYED_RELOCS	(1UL << 4) /* Module has delayed relocs to process */
+#define SHIVA_MODULE_F_HELPERS		(1UL << 5) /* Module has helper records */
+
+#define SHIVA_DT_NEEDED	(DT_LOOS + 10)
+#define SHIVA_DT_SEARCH (DT_LOOS + 11)
+#define SHIVA_DT_ORIG_INTERP (DT_LOOS + 12)
+
+#define SHIVA_DEFAULT_MODULE_PATH "/opt/shiva/modules/shakti.o"
+
+#define SHIVA_INIT_FUNC "shiva_init"
+/*
+ * Path to real dynamic linker.
+ * XXX this should be configurable via environment.
+ */
+#if defined(__x86_64__)
+#define SHIVA_LDSO_PATH "/lib64/ld-linux-x86-64.so.2"
+#elif defined(__aarch64__)
+#define SHIVA_LDSO_PATH "/lib/ld-linux-aarch64.so.1"
+#endif
+
+#if defined(__x86_64__)
+#define SHIVA_ULEXEC_LDSO_TRANSFER(stack, addr, entry) __asm__ __volatile__("mov %0, %%rsp\n" \
+					    "push %1\n" \
+					    "mov %2, %%rax\n" \
+					    "mov $0, %%rbx\n" \
+					    "mov $0, %%rcx\n" \
+					    "mov $0, %%rdx\n" \
+					    "mov $0, %%rsi\n" \
+					    "mov $0, %%rdi\n" \
+					    "mov $0, %%rbp\n" \
+					    "ret" :: "r" (stack), "g" (addr), "g"(entry))
+
+#elif defined(__aarch64__)
+#define SHIVA_ULEXEC_LDSO_TRANSFER(stack, addr, entry) __asm__ __volatile__("mov sp, %0\n" \
+						"mov x30, %1	\n"	\
+						"mov x0, #0	\n"	\
+						"ret		" \
+						:: "r" (stack), "r" (addr));
+
+#define SHIVA_ULEXEC_TARGET_TRANSFER2(entry) __asm__ __volatile__ ("mov x9, %0\n" \
+								   "br x9"	\
+								   :: "r"(entry));
+
+#define SHIVA_ULEXEC_TARGET_TRANSFER(entry) __asm__ __volatile__("mov x30, %0	\n"	\
+								 "ret		" \
+	 						 	:: "r"(entry));
+#define SHIVA_ULEXEC_TARGET_TRANSFER3(entry, arg0) __asm__ __volatile__ ("mov x0, %0\n"	\
+								   "mov x9, %1\n" \
+                                                                   "blr x9"      \
+                                                                   :: "r"(arg0), "r"(entry));
+
+#endif
+
+/*
+ * On ARM this flag isn't found in mman.h, but we need it. The kernel
+ * mmap respects it nonetheless.
+ */
+#ifndef MAP_32BIT
+#define MAP_32BIT 0x40
+#endif
+
+typedef struct shiva_addr_struct {
+	uint64_t addr;
+	TAILQ_ENTRY(shiva_addr_struct) _linkage;
+} shiva_addr_struct_t;
+
+typedef enum shiva_iterator_res {
+	SHIVA_ITER_OK = 0,
+	SHIVA_ITER_DONE,
+	SHIVA_ITER_ERROR
+} shiva_iterator_res_t;
+
+typedef struct shiva_maps_iterator {
+	struct shiva_ctx *ctx;
+	struct shiva_mmap_entry *current;
+} shiva_maps_iterator_t;
+
+typedef struct shiva_xref_iterator {
+	struct shiva_xref_site *current;
+	struct shiva_ctx *ctx;
+} shiva_xref_iterator_t;
+
+typedef struct shiva_callsite_iterator {
+	struct shiva_branch_site *current;
+	struct shiva_ctx *ctx;
+} shiva_callsite_iterator_t;
+
+typedef struct shiva_auxv_iterator {
+	unsigned int index;
+	struct shiva_ctx *ctx;
+	Elf64_auxv_t *auxv;
+} shiva_auxv_iterator_t;
+
+typedef struct shiva_auxv_entry {
+	uint64_t value;
+	int type;
+	char *string;
+} shiva_auxv_entry_t;
+
+typedef struct shiva_jumptable_iterator {
+	unsigned int index;
+	struct shiva_ctx *ctx;
+	uint8_t *jmptab;
+	size_t entry_count;
+} shiva_jumptable_iterator_t;
+
+#define SHIVA_TRACE_MAX_ERROR_STRLEN 4096
+
+typedef struct shiva_error {
+	char string[SHIVA_TRACE_MAX_ERROR_STRLEN];
+	int _errno;
+} shiva_error_t;
+
+typedef enum shiva_branch_type {
+	SHIVA_BRANCH_JMP= 0,
+	SHIVA_BRANCH_CALL,
+	SHIVA_BRANCH_RET
+} shiva_branch_type_t;
+
+#define SHIVA_BRANCH_F_PLTCALL  	(1UL << 0)
+#define SHIVA_BRANCH_F_SRC_SYMINFO	(1UL << 1) /* symbol info of the source function is present */
+#define SHIVA_BRANCH_F_DST_SYMINFO	(1UL << 2) /* symbol info of the dest function is present  */
+#define SHIVA_BRANCH_F_INDIRECT		(1UL << 3) /* Indirect jmp or call (i.e. func pointer) */
+
+struct shiva_branch_site {
+	/* Original instruction */
+#if __x86_64__
+	uint8_t o_insn[15];
+#elif __aarch64__
+	uint32_t o_insn;
+#endif
+	struct elf_symbol current_function; // source function of the branch
+	struct elf_symbol symbol; // symbol/func that is being called
+	shiva_branch_type_t branch_type;
+	uint64_t branch_flags;
+	uint64_t target_vaddr;
+	uint64_t branch_site;
+	uint64_t retaddr; /*
+			   * If this is a SHIVA_BRANCH_CALL then
+			   * retaddr will point to the return address
+			   * of the function being called. For now
+			   * retaddr is not used in any other branch
+			   * site type.
+			   */
+	char *insn_string; /* mnemonic string + op string */
+	TAILQ_ENTRY(shiva_branch_site) _linkage;
+};
+
+/*
+ * xref sites: code that references other code or data
+ * within the program. We don't consider a branch/call
+ * and xref, instead those are stored in shiva_branch_site
+ * structs. An xref is a reference to any code or data such
+ * as a memory access.
+ *
+ * In our aarch64 implementation of Shiva we utilize this
+ * xref information to figure out what objects (i.e. a variable
+ * in the .data section) are being referenced, and which of
+ * those xrefs need to be patched to reflect updated object information
+ * from a loaded patch. Often times these xrefs span over several
+ * instructions that need to be patched, i.e.
+ *
+ * adrp x0, #data_segment_offset
+ * add x0, x0, #variable_offset
+ */
+#ifdef __aarch64__
+#define SHIVA_XREF_TYPE_ADRP_LDR 1
+#define SHIVA_XREF_TYPE_ADRP_STR 2
+#define SHIVA_XREF_TYPE_ADRP_ADD 3
+#define SHIVA_XREF_TYPE_UNKNOWN 4
+#elif __x86_64__
+#define SHIVA_XREF_TYPE_IP_RELATIVE_LEA	1
+#define SHIVA_XREF_TYPE_IP_RELATIVE_MOV_LDR 2
+#define SHIVA_XREF_TYPE_IP_RELATIVE_MOV_STR 3
+#define SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_LDR 4
+#define SHIVA_XREF_TYPE_IP_RELATIVE_MOVAPS_STR 5
+#define SHIVA_XREF_TYPE_UNKNOWN 6
+#endif
+
+#define SHIVA_XREF_F_INDIRECT		(1UL << 0) /* i.e. got[entry] holds address to .bss variable */
+#define SHIVA_XREF_F_SRC_SYMINFO	(1UL << 1) /* we have src func symbol of xref */
+#define SHIVA_XREF_F_DST_SYMINFO	(1UL << 2) /* we have dst symbol info */
+#define SHIVA_XREF_F_DEREF_SYMINFO	(1UL << 3)
+#define SHIVA_XREF_F_TO_SECTION		(1UL << 4) /* xref to a section (i.e. .rodata) with no syminfo */
+#define SHIVA_XREF_F_TO_JUMPTABLE	(1UL << 5) /* xref to jumptable */
+
+struct shiva_xref_site {
+	uint32_t type;
+	uint64_t flags;
+	uint64_t *got; // indirect xrefs use a .got to hold a symbol value.
+#ifdef __aarch64__
+	uint64_t adrp_imm; /* imm value of adrp */
+	uint64_t adrp_site; /* site address of adrp */
+	uint64_t adrp_o_insn; /* original instruction bytes of adrp */
+	uint64_t next_imm; /* imm value of the add/str/ldr instruction */
+	uint64_t next_site; /* site address of the add/str/ldr instruction */
+	uint64_t next_o_insn; /* original instruction bytes of instruction after adrp */
+#elif __x86_64__
+	/*
+	 * IP relative instructions for loading/storing, getting pointer values etc.
+	 * i.e.
+	 * lea reg, qword ptr [rip + offset]
+	 * mov qword ptr [rip + offset], reg
+	 */
+	int64_t rip_rel_disp; /* imm value of: <insn> <reg>, qword ptr [rip + <offset>] */
+	uint64_t rip_rel_site; /* site address of ip relative instruction */
+	uint8_t  rip_rel_o_insn[16]; /* original instruction bytes */
+	size_t insn_len;
+	uint32_t addr_size; 	/* width of address being written/read */
+	size_t jumptable_count; /* only relevant if it's an xref to a jumptable */
+#endif
+	uint32_t reloc_type;
+	uint64_t target_vaddr; /* addr that is being xref'd. add to base_vaddr at runtime */
+	struct elf_symbol deref_symbol; /* Indirect symbol value pointed to by symbol.value */
+	struct elf_symbol symbol; /* symbol info for the symbol the xref goes to */
+	struct elf_symbol current_function; /* syminfo for src function if syminfo flag is set */
+	TAILQ_ENTRY(shiva_xref_site) _linkage;
+}; // shiva_xref_site_t;
+/*
+ * TODO: Change naming convention, LP_ may be
+ * left over from the original linker I made
+ * for tmp.0ut
+ */
+typedef enum shiva_module_section_map_attr {
+	LP_SECTION_TEXTSEGMENT = 0,
+	LP_SECTION_DATASEGMENT,
+	LP_SECTION_BSS_SEGMENT,
+	LP_SECTION_UNKNOWN
+} shiva_module_section_map_attr_t;
+
+struct shiva_module_section_mapping {
+	struct elf_section section;
+	shiva_module_section_map_attr_t map_attribute;
+	uint64_t vaddr; /* Which memory address the section contents is placed in */
+	uint64_t offset;
+	uint64_t size;
+	char *name;
+	TAILQ_ENTRY(shiva_module_section_mapping) _linkage;
+};
+
+#define SHIVA_MODULE_MAX_PLT_COUNT 4096
+
+struct shiva_module_plt_entry {
+	char *symname;
+	uint64_t vaddr;
+	size_t offset;
+	size_t plt_count;
+	TAILQ_ENTRY(shiva_module_plt_entry) _linkage;
+};
+
+struct shiva_module_got_entry {
+	char *symname;
+	uint64_t gotaddr; // address of GOT entry
+	uint64_t gotoff; // offset of GOT entry
+	TAILQ_ENTRY(shiva_module_got_entry) _linkage;
+};
+
+struct shiva_module_bss_entry {
+	char *symname;
+	uint64_t addr; // address of bss variable
+	uint64_t size;	   // size of variable
+	uint64_t offset; // offset of variable from bss_addr (end of initialized data).
+	TAILQ_ENTRY(shiva_module_bss_entry) _linkage;
+};
+
+typedef enum shiva_mmap_type {
+	SHIVA_MMAP_TYPE_HEAP = 0,
+	SHIVA_MMAP_TYPE_STACK,
+	SHIVA_MMAP_TYPE_VDSO,
+	SHIVA_MMAP_TYPE_SHIVA,
+	SHIVA_MMAP_TYPE_MISC
+} shiva_mmap_type_t;
+
+typedef struct shiva_mmap_entry {
+	uint64_t base;
+	size_t len;
+	uint32_t prot;	  // mapping prot
+	uint32_t mapping; // shared, private
+	shiva_mmap_type_t mmap_type;
+	bool debugger_mapping;
+	TAILQ_ENTRY(shiva_mmap_entry) _linkage;
+} shiva_mmap_entry_t;
+
+typedef struct shiva_jumptable_entry {
+	uint64_t base; // base of jump table;
+	uint64_t entries; // number of jump targets from the base
+} shiva_jumptable_entry_t;
+
+typedef enum shiva_linking_mode {
+	SHIVA_LINKING_MICROCODE_PATCH = 0,
+	SHIVA_LINKING_MODULE,
+	SHIVA_LINKING_UNKNOWN
+} shiva_linking_mode_t;
+
+typedef enum shiva_transform_type {
+	SHIVA_TRANSFORM_SPLICE_FUNCTION = 0,
+	SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE,
+	SHIVA_TRANSFORM_EMIT_BYTECODE,
+	SHIVA_TRANSFORM_UNKNOWN
+} shiva_transform_type_t;
+
+typedef enum shiva_helper_type {
+	SHIVA_HELPER_CALL_EXTERNAL = 0, // instruct linker to call external version of symbol
+	SHIVA_HELPER_UNKNOWN
+} shiva_helper_type_t;
+
+typedef struct shiva_helper {
+	shiva_helper_type_t type;
+	struct elf_symbol symbol;
+	TAILQ_ENTRY(shiva_helper) _linkage;
+} shiva_helper_t;
+
+typedef struct shiva_transform {
+	shiva_transform_type_t type;
+	struct elf_symbol target_symbol;
+	struct elf_symbol source_symbol;
+	struct elf_symbol next_func; /* symbol of next function after the one being spliced */
+	uint64_t offset; /* offset initial transformation */
+	uint64_t old_len; /* length of old code/data being inserted */
+	uint64_t new_len; /* length of new code/data being inserted */
+	uint64_t ext_len; /* Extra length of function to make room for .text rdonly relocs */
+	uint64_t ext_off; /* Offset of where extra .text area begins */
+	uint64_t insert_vaddr; /* address within function where the splice insertion should begin after */
+#define SHIVA_TRANSFORM_F_REPLACE		(1UL << 0)
+#define SHIVA_TRANSFORM_F_INJECT		(1UL << 1)
+#define SHIVA_TRANSFORM_F_NOP_PAD		(1UL << 2)
+#define SHIVA_TRANSFORM_F_EXTEND		(1UL << 3)
+	uint64_t flags; /* flags describe behavior, such as ovewrite, extend, etc. */
+	uint8_t *ptr; /* points to the new code or data that is apart of the transform */
+	char *name; /* simply points to target_symbol.name */
+	size_t segment_offset;
+	struct {
+		size_t copy_len1;
+		size_t copy_len2;
+		size_t copy_len3;
+	} splice;
+	TAILQ_HEAD(, shiva_branch_site) branch_list;
+	TAILQ_HEAD(, shiva_xref_site) xref_list;
+	TAILQ_ENTRY(shiva_transform) _linkage;
+} shiva_transform_t;
+
+/*
+ * Delayed relocatoin entries are not handled until
+ * after ld-linux.so is completely done and passes
+ * control back to Shiva AT_ENTRY, if needed.
+ */
+struct shiva_module_delayed_reloc {
+	uint8_t *rel_unit;
+	uint64_t rel_addr;
+	uint64_t symval;	   /* The symbols value */
+	struct elf_relocation rel; /* Original relocation: (May be updated/modified by Transforms though) */
+	uint64_t flags;
+	char *symname;
+	char so_path[PATH_MAX];
+	TAILQ_ENTRY(shiva_module_delayed_reloc) _linkage;
+};
+
+struct shiva_module {
+	int fd;
+	uint64_t flags;
+	uint8_t *text_mem;
+	uint8_t *data_mem; /* Includes .bss */
+	uintptr_t *pltgot;
+	uintptr_t *plt;
+	size_t pltgot_size;
+	size_t plt_size;
+	size_t plt_off;
+	size_t plt_count;
+	size_t pltgot_off;
+	size_t bss_off;
+	size_t text_size;
+	size_t data_size;
+	size_t bss_size;
+	uint64_t text_vaddr;
+	uint64_t data_vaddr;
+	uint64_t bss_vaddr;
+	uint64_t shiva_base; /* base address of shiva executable at runtime */
+	uint64_t target_base; /* base address of target executable at runtime */
+	size_t tf_text_offset; /* Offset of .text in module runtime image after transforms */
+	uint64_t entry_point; // only needed when loading a module vs. a patch
+	elfobj_t elfobj; /* elfobj to the module */
+	elfobj_t self; /* elfobj to self (Shiva binary) */
+	elfobj_t *target_elfobj; /* elfobj of target executable */
+	struct {
+		TAILQ_HEAD(, shiva_module_bss_entry) bss_list;
+		TAILQ_HEAD(, shiva_module_got_entry) got_list;
+		TAILQ_HEAD(, shiva_module_section_mapping) section_maplist;
+		TAILQ_HEAD(, shiva_module_plt_entry) plt_list;
+		TAILQ_HEAD(, shiva_transform) transform_list;
+		TAILQ_HEAD(, shiva_module_delayed_reloc) delayed_reloc_list;
+		TAILQ_HEAD(, shiva_helper) helper_list;
+	} tailq;
+	struct {
+		struct hsearch_data bss;
+		struct hsearch_data got;
+		struct hsearch_data helpers;
+	} cache;
+	shiva_linking_mode_t mode;
+	struct shiva_ctx *ctx; /* this is a pointer back to the main context */
+};
+
+typedef struct shiva_trace_regset_x86_64 {
+	uint64_t rax, rbx, rcx, rdx;
+	uint64_t rsi, rdi;
+	uint64_t rbp, rsp, rip;
+	uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
+	uint64_t flags, cs, ss, fs, ds;
+} shiva_trace_regset_x86_64_t;
+
+typedef struct shiva_trace_regset_x86_64 shiva_trace_jumpbuf_t;
+
+#define RAX_OFF 0
+#define RBX_OFF 8
+#define RCX_OFF 16
+#define RDX_OFF 24
+#define RSI_OFF 32
+#define RDI_OFF 40
+#define RBP_OFF 48
+#define RSP_OFF 56
+#define RIP_OFF 64
+#define R8_OFF	72
+#define R9_OFF	80
+#define R10_OFF 88
+#define R11_OFF 96
+#define R12_OFF 104
+#define R13_OFF 112
+#define R14_OFF 120
+#define R15_OFF 128
+
+/*
+ * Prelinking flags set by shiva-ld
+ */
+#define SHIVA_PRELINK_F_CFG_ENABLED 	(1UL << 0)
+
+typedef struct shiva_ctx {
+	char *path; // path to target executable
+	char module_path[PATH_MAX]; // TODO in the future add linked list of modules.
+	int argc;
+	char **args;
+	char **argv;
+	char **envp;
+	int argcount;
+	elfobj_t shiva_elfobj; // shiva executable
+	elfobj_t elfobj;	// target executable
+	elfobj_t ldsobj;	// ldso executable
+	uint64_t flags;
+	uint64_t prelink_flags; /* shiva-ld related flags set on binary */
+	int pid;
+	int duplicate_pid;
+	uint64_t duplicate_base;
+	char *shiva_path; // path to /bin/shiva
+	char orig_interp_path[PATH_MAX];
+	uint8_t *jmptab; // pointer to data in .llvm_jump_table_sizes section
+	size_t jmptab_size; // size of jump table section
+	union {
+		struct shiva_trace_regset_x86_64 regset_x86_64;
+	} regs;
+	struct {
+		struct shiva_module *runtime;
+		struct shiva_module *initcode;
+		uint64_t entry_point;
+	} module;
+	struct {
+		Elf64_Rela *jmprel;
+		size_t jmprel_count;
+	} altrelocs;
+	struct {
+
+		uint8_t *code_ptr;
+		uint64_t code_vaddr;
+		size_t code_len;
+		csh handle;
+		cs_insn *insn;
+		uint8_t *textptr;
+		uint64_t base;
+		size_t c; /* counter (Don't access directly) */
+		size_t insn_offset;
+		size_t prev_insn_size;
+	} disas;
+	struct {
+		uint64_t base;
+	} shiva;
+	struct {
+		Dwarf_Debug debug;
+		Dwarf_Error error;
+	} dwarf;
+	struct {
+		/*
+		 * basic runtime data created during
+		 * userland exec.
+		 */
+		uint8_t *stack;
+		uint8_t *mem;
+		uint64_t rsp_start;
+		uint64_t heap_vaddr;
+		uint64_t entry_point;
+		uint64_t base_vaddr;
+		uint64_t phdr_vaddr; // vaddr of phdr table for mapped binary
+		size_t arglen;
+		size_t envpcount;
+		size_t envplen;
+		char *envstr;
+		char *argstr;
+		struct {
+			size_t sz;
+			size_t count;
+			uint8_t *vector;
+		} auxv;
+		/*
+		 * mapped LDSO specific data
+		 */
+		struct {
+			uint64_t entry_point;
+			uint64_t base_vaddr;
+			uint64_t phdr_vaddr;
+		} ldso;
+		uint64_t flags; // SHIVA_F_ULEXEC_* flags
+	} ulexec;
+	struct {
+		TAILQ_HEAD(, shiva_trace_thread) thread_tqlist;
+		TAILQ_HEAD(, shiva_mmap_entry) mmap_tqlist;
+		TAILQ_HEAD(, shiva_branch_site) branch_tqlist;
+		TAILQ_HEAD(, shiva_xref_site) xref_tqlist;
+		TAILQ_HEAD(, shiva_trace_handler) trace_handlers_tqlist;
+	} tailq;
+} shiva_ctx_t;
+
+typedef enum shiva_dwarf_loc_type {
+	SHIVA_DWARF_LOC_REG = 0,
+	SHIVA_DWARF_LOC_STACK,
+	SHIVA_DWARF_LOC_UNKNOWN
+} shiva_dwarf_loc_type_t;
+
+typedef struct shiva_dwarf_loc {
+	char *symname;
+	shiva_dwarf_loc_type_t type;
+	uint32_t reg;
+	int64_t stack_offset;
+} shiva_dwarf_loc_t;
+
+extern struct shiva_ctx *ctx_global;
+
+/*
+ * util.c
+ */
+
+char * shiva_strdup(const char *);
+char * shiva_xfmtstrdup(char *, ...);
+void * shiva_malloc(size_t);
+
+/*
+ * signal.c
+ */
+
+void shiva_sighandle(int);
+
+/*
+ * shiva_iter.c
+ */
+bool shiva_auxv_iterator_init(struct shiva_ctx *, struct shiva_auxv_iterator *, void *);
+shiva_iterator_res_t shiva_auxv_iterator_next(struct shiva_auxv_iterator *, struct shiva_auxv_entry *);
+bool shiva_auxv_set_value(struct shiva_auxv_iterator *, long);
+
+/*
+ * shiva_ulexec.c
+ */
+bool shiva_ulexec_prep(shiva_ctx_t *);
+bool shiva_ulexec_load_elf_binary(struct shiva_ctx *, elfobj_t *, bool);
+uint8_t * shiva_ulexec_allocstack(struct shiva_ctx *);
+/*
+ * shiva_module.c
+ */
+bool shiva_module_loader(shiva_ctx_t *, const char *, struct shiva_module **, uint64_t);
+
+/*
+ * shiva_error.c
+ */
+bool shiva_error_set(shiva_error_t *, const char *, ...);
+const char * shiva_error_msg(shiva_error_t *);
+
+/*
+ * shiva_maps.c
+ */
+bool shiva_maps_prot_by_addr(struct shiva_ctx *, uint64_t, int *);
+bool shiva_maps_build_list(shiva_ctx_t *);
+bool shiva_maps_validate_addr(shiva_ctx_t *, uint64_t);
+void shiva_maps_iterator_init(shiva_ctx_t *, shiva_maps_iterator_t *);
+shiva_iterator_res_t shiva_maps_iterator_next(shiva_maps_iterator_t *, struct shiva_mmap_entry *);
+bool shiva_maps_get_base(shiva_ctx_t *, uint64_t *);
+bool shiva_maps_get_so_base(struct shiva_ctx *, char *,
+    uint64_t *);
+
+/*
+ * shiva_callsite.c
+ */
+void shiva_callsite_iterator_init(struct shiva_ctx *, struct shiva_callsite_iterator *);
+shiva_iterator_res_t shiva_callsite_iterator_next(shiva_callsite_iterator_t *, struct shiva_branch_site *);
+
+/*
+ * shiva_analyze.c
+ */
+bool shiva_analyze_find_calls(shiva_ctx_t *);
+bool shiva_analyze_run(shiva_ctx_t *);
+
+/*
+ * shiva_target.c
+ */
+bool shiva_target_dynamic_set(struct shiva_ctx *, uint64_t, uint64_t);
+bool shiva_target_dynamic_get(struct shiva_ctx *, uint64_t, uint64_t *);
+bool shiva_target_copy_string(struct shiva_ctx *, char *, const char *, size_t *);
+bool shiva_target_get_module_path(struct shiva_ctx *, char *);
+bool shiva_target_has_prelinking(struct shiva_ctx *);
+
+/*
+ * shiva_proc.c
+ */
+bool shiva_proc_duplicate_image(shiva_ctx_t *ctx);
+/*
+ * Shiva tracing functionality.
+ * shiva_trace.c
+ * shiva_trace_thread.c
+ */
+
+#define SHIVA_TRACE_THREAD_F_TRACED	(1UL << 0)	// thread is traced by SHIVA
+#define SHIVA_TRACE_THREAD_F_PAUSED	(1UL << 1)	// pause thread
+#define SHIVA_TRACE_THREAD_F_EXTERN_TRACER	(1UL << 2) // thread is traced by ptrace
+#define SHIVA_TRACE_THREAD_F_COREDUMPING	(1UL << 3)
+#define SHIVA_TRACE_THREAD_F_NEW		(1UL << 4) // newly added into thread list
+
+#define SHIVA_TRACE_HANDLER_F_CALL		(1UL << 0) // handler is invoked via  call
+#define SHIVA_TRACE_HANDLER_F_JMP		(1UL << 1) // handler is invoked via jmp
+#define SHIVA_TRACE_HANDLER_F_INT3		(1UL << 2) // handler is invoked via int3
+#define SHIVA_TRACE_HANDLER_F_TRAMPOLINE	(1UL << 3) // handler is invoked via function trampoline
+
+
+/*
+ * When your handler function executes, assuming is was invoked
+ * via a BP_CALL breakpoint, then it probably wants to call the
+ * original function and return. This macro allows you to do this,
+ * see modules/shakti_runtime.c
+ */
+#if defined(__x86_64__)
+#define SHIVA_TRACE_CALL_ORIGINAL(bp) { \
+	do {\
+		void * (*o_func)(void *, void *, void *, void *, \
+				 void *, void *, void *);	\
+		o_func = (void *)bp->o_target;				\
+		return o_func((void *)ctx_global->regs.regset_x86_64.rdi,	\
+		       (void *)ctx_global->regs.regset_x86_64.rsi,	\
+		       (void *)ctx_global->regs.regset_x86_64.rdx,	\
+		       (void *)ctx_global->regs.regset_x86_64.rcx,	\
+		       (void *)ctx_global->regs.regset_x86_64.r8,	\
+		       (void *)ctx_global->regs.regset_x86_64.r9,	\
+		       (void *)ctx_global->regs.regset_x86_64.r10);	\
+	} while(0); \
+}
+#elif defined(__aarch64__)
+#define SHIVA_TRACE_CALL_ORIGINAL(bp) { \
+	do {\
+		void * (*o_func)(void *, void *, void *, void *, \
+		    void *, void *, void *);	\
+		o_func = (void *)bp->o_target; \
+	} while(0); \
+}
+#endif
+
+typedef enum shiva_trace_bp_type {
+	SHIVA_TRACE_BP_JMP = 0,
+	SHIVA_TRACE_BP_CALL,
+	SHIVA_TRACE_BP_INT3,
+	SHIVA_TRACE_BP_SEGV,
+	SHIVA_TRACE_BP_SIGILL,
+	SHIVA_TRACE_BP_TRAMPOLINE,
+	SHIVA_TRACE_BP_PLTGOT
+} shiva_trace_bp_type_t;
+
+/*
+ * Get the breakpoint struct that correlates to the handler
+ * function that you are currently in.
+ * NOTE: Can ONLY be used from within a module callback/handler
+ */
+#define SHIVA_TRACE_BP_STRUCT(bp, handler) { \
+	do {\
+		void *__ret = __builtin_return_address(0); \
+		struct shiva_addr_struct *addr;			\
+		TAILQ_FOREACH(bp, &handler->bp_tqlist, _linkage)  { \
+			if (bp->bp_type == SHIVA_TRACE_BP_TRAMPOLINE) \
+				break;	\
+			if (bp->bp_type == SHIVA_TRACE_BP_PLTGOT) { \
+				TAILQ_FOREACH(addr, &bp->retaddr_list, _linkage) { \
+					if (addr->addr == __ret)	\
+						break;	\
+				}	\
+			}	\
+			if ((void *)bp->callsite_retaddr == __ret)	\
+				break;	\
+		} \
+	} while(0); \
+}
+
+/*
+ * A necessary longjmp from a trap handler back to the
+ * instruction that was trapped on. We must reset the
+ * registers and rewind the stack back. TODO: Need to handle
+ * issue with rbp restoration.
+ */
+#if defined(__x86_64__)
+#define SHIVA_TRACE_LONGJMP_RETURN(regptr, rip_target)	\
+			__asm__ __volatile__("movq %0, %%rdx\n" :: "r"(regptr)); \
+			__asm__ __volatile__(				\
+					"movq 0(%%rdx), %%r8\n\t" \
+					"movq 8(%%rdx), %%r9\n\t"	\
+					"movq 16(%%rdx), %%r10\n\t"	\
+					"movq 24(%%rdx), %%r11\n\t"	\
+					"movq 32(%%rdx), %%r12\n\t"	\
+					"movq 40(%%rdx), %%r13\n\t"	\
+					"movq 48(%%rdx), %%r14\n\t"	\
+					"movq 56(%%rdx), %%r15\n\t" \
+					"movq 64(%%rdx), %%rdi\n\t"	\
+					"movq 72(%%rdx), %%rsi\n\t"	\
+					"movq 88(%%rdx), %%rbx\n\t" \
+					"movq 104(%%rdx), %%rax\n\t" \
+					"movq 112(%%rdx), %%rcx\n\t" \
+					"movq 120(%%rdx), %%rsp\n\t" \
+					"jmp %0" :: "r"(rip_target));
+#elif defined(__aarch64__)
+#define SHIVA_TRACE_LONGJMP_RETURN(regptr, rip_target) __asm __volatile__("");
+#endif
+
+#if defined(__x86_64__)
+#define SHIVA_TRACE_SET_TRAPFLAG __asm__ __volatile__(	\
+				"pushfq\n\t"	\
+				"pop %rdx\n\t"	\
+				"or %rdx, 0x100\n\t"	\
+				"push %rdx\n\t"	\
+				"popfq");
+
+#endif
+
+typedef enum shiva_trace_op {
+	SHIVA_TRACE_OP_CONT = 0,
+	SHIVA_TRACE_OP_ATTACH,
+	SHIVA_TRACE_OP_POKE,
+	SHIVA_TRACE_OP_PEEK,
+	SHIVA_TRACE_OP_GETREGS,
+	SHIVA_TRACE_OP_SETREGS,
+	SHIVA_TRACE_OP_SETFPREGS,
+	SHIVA_TRACE_OP_GETSIGINFO,
+	SHIVA_TRACE_OP_SETSIGINFO
+} shiva_trace_op_t;
+
+#define SHIVA_MAX_INST_LEN 15
+
+typedef struct shiva_trace_insn
+{
+	uint8_t o_insn[SHIVA_MAX_INST_LEN];
+	uint8_t n_insn[SHIVA_MAX_INST_LEN];
+	size_t o_insn_len;
+	size_t n_insn_len;
+} shiva_trace_insn_t;
+
+typedef struct shiva_trace_bp {
+	shiva_trace_bp_type_t bp_type;
+	uint64_t bp_addr;
+	size_t bp_len;
+	uint8_t *inst_ptr;
+	uint64_t callsite_retaddr; // only used for CALL hooks
+	uint64_t plt_addr; // Only used for PLTGOT hooks. This holds the corresponding PLT stub address.
+	uint64_t o_target; // for CALL/JMP hooks this holds original target. For PLTGOT hooks it holds original gotptr
+	int64_t o_call_offset; // if this is a call or jmp breakpoint, o_offset holds the original target offset
+	struct elf_symbol symbol;
+	char *call_target_symname; // only used for SHIVA_TRACE_BP_CALL hooks
+	bool symbol_location;	// true if bp->symbol gets set
+	struct shiva_trace_insn insn;
+	struct hsearch_data valid_plt_retaddrs; // only used for SHIVA_TRACE_BP_PLTGOT hooks
+	TAILQ_HEAD(, shiva_addr_struct) retaddr_list;
+	TAILQ_ENTRY(shiva_trace_bp) _linkage;
+} shiva_trace_bp_t;
+
+typedef struct shiva_trace_handler {
+	shiva_trace_bp_type_t type;
+	void * (*handler_fn)(void *); // points to handler triggered by BP
+	struct sigaction sa;
+	TAILQ_HEAD(, shiva_trace_bp) bp_tqlist; // list of current bp's
+	TAILQ_ENTRY(shiva_trace_handler) _linkage;
+} shiva_trace_handler_t;
+
+typedef struct shiva_trace_regs {
+	struct shiva_trace_regset_x86_64 x86_64;
+} shiva_trace_regs_t;
+
+typedef struct shiva_trace_thread {
+	char *name;
+	uid_t uid;
+	gid_t gid;
+	pid_t pid;
+	pid_t ppid;
+	pid_t external_tracer_pid;
+	uint64_t flags;
+	TAILQ_ENTRY(shiva_trace_thread) _linkage;
+} shiva_trace_thread_t;
+
+bool shiva_trace(shiva_ctx_t *, pid_t, shiva_trace_op_t, void *, void *, size_t, shiva_error_t *);
+bool shiva_trace_register_handler(shiva_ctx_t *, void * (*)(void *), shiva_trace_bp_type_t,
+    shiva_error_t *);
+struct shiva_trace_handler * shiva_trace_find_handler(struct shiva_ctx *, void *);
+struct shiva_trace_bp * shiva_trace_bp_struct(void *);
+bool shiva_trace_set_breakpoint(shiva_ctx_t *, void * (*)(void *), uint64_t, void *, shiva_error_t *);
+bool shiva_trace_write(struct shiva_ctx *, pid_t, void *, const void *, size_t, shiva_error_t *);
+#if __x86_64__
+void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *);
+void __attribute__((naked)) shiva_trace_setjmp_x86_64(shiva_trace_jumpbuf_t *);
+void shiva_trace_longjmp_x86_64(shiva_trace_jumpbuf_t *jumpbuf, uint64_t ip);
+#endif
+uint64_t shiva_trace_base_addr(struct shiva_ctx *);
+/*
+ * shiva_trace_thread.c
+ */
+bool shiva_trace_thread_insert(shiva_ctx_t *, pid_t, uint64_t *);
+
+/*
+ * shiva_xref.c (Iterator function for xrefs)
+ */
+void shiva_xref_iterator_init(struct shiva_ctx *, struct shiva_xref_iterator *);
+shiva_iterator_res_t shiva_xref_iterator_next(struct shiva_xref_iterator *, struct shiva_xref_site *);
+
+/*
+ * shiva_transform.c
+ */
+bool shiva_tf_process_transforms(struct shiva_module *, uint8_t *,
+    struct elf_section section, uint64_t *segment_offset);
+
+/*
+ * shiva_so.c
+ */
+bool shiva_so_resolve_symbol(struct shiva_module *, char *, struct elf_symbol *,
+    char **);
+
+/*
+ * shiva_post_linker.c
+ */
+void shiva_post_linker(void);
+
+/*
+ * shiva_jumptable.c
+ */
+void shiva_jumptable_iterator_init(shiva_ctx_t *, shiva_jumptable_iterator_t *);
+shiva_iterator_res_t shiva_jumptable_iterator_next(shiva_jumptable_iterator_t *, struct shiva_jumptable_entry *);
+
+/*
+ * shiva_dwarf.c
+ */
+bool shiva_dwarf_line_attributes(shiva_ctx_t *, const char *, const char *,
+    unsigned int, uint64_t *, size_t *);
+bool shiva_dwarf_resolve_variable(shiva_ctx_t *, const char *, const char *,
+    Dwarf_Addr, shiva_dwarf_loc_t *);
+bool shiva_dwarf_init(shiva_ctx_t *);
+bool shiva_dwarf_fini(shiva_ctx_t *);
+
+#endif
+
+/*
+ * debug stub to set breakpoints on.
+ */
+int test_mark(void);

@@ -1,0 +1,31 @@
+../../../src/bin/dwarfdump/tagattr-dd_glflags.o: \
+ ../../../src/bin/dwarfdump/dd_glflags.c ../../../config.h \
+ /usr/local/musl/include/limits.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h \
+ /usr/local/musl/include/bits/limits.h /usr/local/musl/include/string.h \
+ /usr/local/musl/include/strings.h /usr/local/musl/include/stdio.h \
+ ../../../src/lib/libdwarf/dwarf.h ../../../src/lib/libdwarf/libdwarf.h \
+ ../../../src/bin/dwarfdump/dd_defined_types.h \
+ ../../../src/bin/dwarfdump/dd_checkutil.h \
+ ../../../src/bin/dwarfdump/dd_glflags.h \
+ ../../../src/bin/dwarfdump/dd_globals.h \
+ ../../../src/bin/dwarfdump/dd_esb.h \
+ ../../../src/bin/dwarfdump/dd_dwconf.h \
+ ../../../src/bin/dwarfdump/dd_safe_strcpy.h
+../../../config.h:
+/usr/local/musl/include/limits.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/bits/limits.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+/usr/local/musl/include/stdio.h:
+../../../src/lib/libdwarf/dwarf.h:
+../../../src/lib/libdwarf/libdwarf.h:
+../../../src/bin/dwarfdump/dd_defined_types.h:
+../../../src/bin/dwarfdump/dd_checkutil.h:
+../../../src/bin/dwarfdump/dd_glflags.h:
+../../../src/bin/dwarfdump/dd_globals.h:
+../../../src/bin/dwarfdump/dd_esb.h:
+../../../src/bin/dwarfdump/dd_dwconf.h:
+../../../src/bin/dwarfdump/dd_safe_strcpy.h:

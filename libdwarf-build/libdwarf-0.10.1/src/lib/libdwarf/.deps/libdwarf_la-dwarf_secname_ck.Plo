@@ -1,0 +1,14 @@
+libdwarf_la-dwarf_secname_ck.lo: dwarf_secname_ck.c ../../../config.h \
+ /usr/local/musl/include/stdlib.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/alloca.h \
+ /usr/local/musl/include/string.h /usr/local/musl/include/strings.h \
+ libdwarf_private.h dwarf_secname_ck.h
+../../../config.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+libdwarf_private.h:
+dwarf_secname_ck.h:

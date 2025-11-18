@@ -1,0 +1,34 @@
+dwarfdump-print_tag_attributes_usage.o: print_tag_attributes_usage.c \
+ ../../../config.h /usr/local/musl/include/stdio.h \
+ /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h \
+ ../../../src/lib/libdwarf/dwarf.h ../../../src/lib/libdwarf/libdwarf.h \
+ ../../../src/lib/libdwarf/libdwarf_private.h dd_defined_types.h \
+ dd_checkutil.h dd_glflags.h dd_globals.h dd_naming.h dd_esb.h \
+ dd_esb_using_functions.h dd_sanitized.h print_frames.h dd_macrocheck.h \
+ dd_helpertree.h dd_tag_common.h dd_attr_form.h dwarfdump-ta-table.h \
+ dwarfdump-ta-ext-table.h dwarfdump-tt-table.h dwarfdump-tt-ext-table.h
+../../../config.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+../../../src/lib/libdwarf/dwarf.h:
+../../../src/lib/libdwarf/libdwarf.h:
+../../../src/lib/libdwarf/libdwarf_private.h:
+dd_defined_types.h:
+dd_checkutil.h:
+dd_glflags.h:
+dd_globals.h:
+dd_naming.h:
+dd_esb.h:
+dd_esb_using_functions.h:
+dd_sanitized.h:
+print_frames.h:
+dd_macrocheck.h:
+dd_helpertree.h:
+dd_tag_common.h:
+dd_attr_form.h:
+dwarfdump-ta-table.h:
+dwarfdump-ta-ext-table.h:
+dwarfdump-tt-table.h:
+dwarfdump-tt-ext-table.h:

@@ -1,0 +1,31 @@
+libdwarf_la-dwarf_machoread.lo: dwarf_machoread.c ../../../config.h \
+ /usr/local/musl/include/stdlib.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/alloca.h \
+ /usr/local/musl/include/string.h /usr/local/musl/include/strings.h \
+ /usr/local/musl/include/stdio.h dwarf.h libdwarf.h libdwarf_private.h \
+ dwarf_base_types.h dwarf_safe_strcpy.h dwarf_opaque.h dwarf_error.h \
+ dwarf_reading.h dwarf_memcpy_swap.h dwarf_object_read_common.h \
+ dwarf_universal.h dwarf_machoread.h dwarf_object_detector.h \
+ dwarf_macho_loader.h
+../../../config.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+/usr/local/musl/include/stdio.h:
+dwarf.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_base_types.h:
+dwarf_safe_strcpy.h:
+dwarf_opaque.h:
+dwarf_error.h:
+dwarf_reading.h:
+dwarf_memcpy_swap.h:
+dwarf_object_read_common.h:
+dwarf_universal.h:
+dwarf_machoread.h:
+dwarf_object_detector.h:
+dwarf_macho_loader.h:

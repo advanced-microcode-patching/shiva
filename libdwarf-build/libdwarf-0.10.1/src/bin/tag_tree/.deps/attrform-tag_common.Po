@@ -1,0 +1,35 @@
+../../../src/bin/tag_tree/attrform-tag_common.o: \
+ ../../../src/bin/tag_tree/tag_common.c ../../../config.h \
+ ../../../src/lib/libdwarf/dwarf.h /usr/local/musl/include/stdio.h \
+ /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/stdarg.h \
+ /usr/local/musl/include/stdlib.h /usr/local/musl/include/alloca.h \
+ /usr/local/musl/include/string.h /usr/local/musl/include/strings.h \
+ /usr/local/musl/include/errno.h /usr/local/musl/include/bits/errno.h \
+ /usr/local/musl/include/ctype.h ../../../src/lib/libdwarf/libdwarf.h \
+ ../../../src/bin/dwarfdump/dd_defined_types.h \
+ ../../../src/bin/dwarfdump/dd_checkutil.h \
+ ../../../src/bin/dwarfdump/dd_glflags.h \
+ ../../../src/bin/dwarfdump/dd_globals.h \
+ ../../../src/bin/dwarfdump/dd_naming.h \
+ ../../../src/bin/dwarfdump/dd_tag_common.h
+../../../config.h:
+../../../src/lib/libdwarf/dwarf.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/stdarg.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+/usr/local/musl/include/errno.h:
+/usr/local/musl/include/bits/errno.h:
+/usr/local/musl/include/ctype.h:
+../../../src/lib/libdwarf/libdwarf.h:
+../../../src/bin/dwarfdump/dd_defined_types.h:
+../../../src/bin/dwarfdump/dd_checkutil.h:
+../../../src/bin/dwarfdump/dd_glflags.h:
+../../../src/bin/dwarfdump/dd_globals.h:
+../../../src/bin/dwarfdump/dd_naming.h:
+../../../src/bin/dwarfdump/dd_tag_common.h:

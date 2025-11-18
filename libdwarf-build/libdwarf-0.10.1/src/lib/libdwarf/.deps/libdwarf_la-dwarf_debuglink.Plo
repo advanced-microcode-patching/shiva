@@ -1,0 +1,34 @@
+libdwarf_la-dwarf_debuglink.lo: dwarf_debuglink.c ../../../config.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/stdlib.h \
+ /usr/local/musl/include/alloca.h /usr/local/musl/include/string.h \
+ /usr/local/musl/include/strings.h /usr/local/musl/include/stdint.h \
+ /usr/local/musl/include/bits/stdint.h /usr/local/musl/include/unistd.h \
+ /usr/local/musl/include/bits/posix.h dwarf.h libdwarf.h \
+ libdwarf_private.h dwarf_base_types.h dwarf_safe_strcpy.h dwarf_opaque.h \
+ dwarf_global.h dwarf_alloc.h dwarf_error.h dwarf_util.h dwarf_string.h \
+ dwarf_debuglink.h
+../../../config.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+/usr/local/musl/include/stdint.h:
+/usr/local/musl/include/bits/stdint.h:
+/usr/local/musl/include/unistd.h:
+/usr/local/musl/include/bits/posix.h:
+dwarf.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_base_types.h:
+dwarf_safe_strcpy.h:
+dwarf_opaque.h:
+dwarf_global.h:
+dwarf_alloc.h:
+dwarf_error.h:
+dwarf_util.h:
+dwarf_string.h:
+dwarf_debuglink.h:

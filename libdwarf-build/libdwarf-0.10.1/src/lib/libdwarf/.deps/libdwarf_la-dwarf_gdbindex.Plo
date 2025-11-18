@@ -1,0 +1,26 @@
+libdwarf_la-dwarf_gdbindex.lo: dwarf_gdbindex.c ../../../config.h \
+ /usr/local/musl/include/string.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h \
+ /usr/local/musl/include/strings.h /usr/local/musl/include/stdint.h \
+ /usr/local/musl/include/bits/stdint.h dwarf.h libdwarf.h \
+ libdwarf_private.h dwarf_base_types.h dwarf_opaque.h dwarf_alloc.h \
+ dwarf_error.h dwarf_util.h dwarf_string.h dwarf_memcpy_swap.h \
+ dwarf_gdbindex.h
+../../../config.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/strings.h:
+/usr/local/musl/include/stdint.h:
+/usr/local/musl/include/bits/stdint.h:
+dwarf.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_base_types.h:
+dwarf_opaque.h:
+dwarf_alloc.h:
+dwarf_error.h:
+dwarf_util.h:
+dwarf_string.h:
+dwarf_memcpy_swap.h:
+dwarf_gdbindex.h:

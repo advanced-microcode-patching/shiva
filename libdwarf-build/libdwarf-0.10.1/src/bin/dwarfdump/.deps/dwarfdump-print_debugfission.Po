@@ -1,0 +1,26 @@
+dwarfdump-print_debugfission.o: print_debugfission.c ../../../config.h \
+ /usr/local/musl/include/string.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h \
+ /usr/local/musl/include/strings.h /usr/local/musl/include/stdio.h \
+ ../../../src/lib/libdwarf/dwarf.h ../../../src/lib/libdwarf/libdwarf.h \
+ ../../../src/lib/libdwarf/libdwarf_private.h dd_defined_types.h \
+ dd_checkutil.h dd_glflags.h dd_globals.h dd_naming.h dd_esb.h \
+ dd_esb_using_functions.h dd_sanitized.h print_sections.h
+../../../config.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/strings.h:
+/usr/local/musl/include/stdio.h:
+../../../src/lib/libdwarf/dwarf.h:
+../../../src/lib/libdwarf/libdwarf.h:
+../../../src/lib/libdwarf/libdwarf_private.h:
+dd_defined_types.h:
+dd_checkutil.h:
+dd_glflags.h:
+dd_globals.h:
+dd_naming.h:
+dd_esb.h:
+dd_esb_using_functions.h:
+dd_sanitized.h:
+print_sections.h:

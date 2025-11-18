@@ -1,0 +1,23 @@
+dwarfdump-print_section_groups.o: print_section_groups.c \
+ ../../../config.h /usr/local/musl/include/stdio.h \
+ /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/stdlib.h \
+ /usr/local/musl/include/alloca.h ../../../src/lib/libdwarf/dwarf.h \
+ ../../../src/lib/libdwarf/libdwarf.h \
+ ../../../src/lib/libdwarf/libdwarf_private.h dd_defined_types.h \
+ dd_checkutil.h dd_glflags.h dd_globals.h dd_sanitized.h dd_naming.h
+../../../config.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/alloca.h:
+../../../src/lib/libdwarf/dwarf.h:
+../../../src/lib/libdwarf/libdwarf.h:
+../../../src/lib/libdwarf/libdwarf_private.h:
+dd_defined_types.h:
+dd_checkutil.h:
+dd_glflags.h:
+dd_globals.h:
+dd_sanitized.h:
+dd_naming.h:

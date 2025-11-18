@@ -1,0 +1,4 @@
+libdwarf_la-dwarf_form_class_names.lo: dwarf_form_class_names.c \
+ ../../../config.h libdwarf.h
+../../../config.h:
+libdwarf.h:

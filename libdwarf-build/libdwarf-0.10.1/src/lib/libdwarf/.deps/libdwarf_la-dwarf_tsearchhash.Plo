@@ -1,0 +1,18 @@
+libdwarf_la-dwarf_tsearchhash.lo: dwarf_tsearchhash.c ../../../config.h \
+ /usr/local/musl/include/stddef.h /usr/local/musl/include/bits/alltypes.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/stdlib.h /usr/local/musl/include/alloca.h \
+ /usr/local/musl/include/stdint.h /usr/local/musl/include/bits/stdint.h \
+ libdwarf.h libdwarf_private.h dwarf_tsearch.h
+../../../config.h:
+/usr/local/musl/include/stddef.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/stdint.h:
+/usr/local/musl/include/bits/stdint.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_tsearch.h:

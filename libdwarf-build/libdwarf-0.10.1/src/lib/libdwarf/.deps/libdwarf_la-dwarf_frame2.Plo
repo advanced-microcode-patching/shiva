@@ -1,0 +1,29 @@
+libdwarf_la-dwarf_frame2.lo: dwarf_frame2.c ../../../config.h \
+ /usr/local/musl/include/stdlib.h /usr/local/musl/include/features.h \
+ /usr/local/musl/include/bits/alltypes.h /usr/local/musl/include/alloca.h \
+ /usr/local/musl/include/stdio.h /usr/local/musl/include/string.h \
+ /usr/local/musl/include/strings.h /usr/local/musl/include/stdint.h \
+ /usr/local/musl/include/bits/stdint.h dwarf.h libdwarf.h \
+ libdwarf_private.h dwarf_base_types.h dwarf_opaque.h dwarf_alloc.h \
+ dwarf_error.h dwarf_util.h dwarf_frame.h dwarf_arange.h dwarf_string.h
+../../../config.h:
+/usr/local/musl/include/stdlib.h:
+/usr/local/musl/include/features.h:
+/usr/local/musl/include/bits/alltypes.h:
+/usr/local/musl/include/alloca.h:
+/usr/local/musl/include/stdio.h:
+/usr/local/musl/include/string.h:
+/usr/local/musl/include/strings.h:
+/usr/local/musl/include/stdint.h:
+/usr/local/musl/include/bits/stdint.h:
+dwarf.h:
+libdwarf.h:
+libdwarf_private.h:
+dwarf_base_types.h:
+dwarf_opaque.h:
+dwarf_alloc.h:
+dwarf_error.h:
+dwarf_util.h:
+dwarf_frame.h:
+dwarf_arange.h:
+dwarf_string.h:
