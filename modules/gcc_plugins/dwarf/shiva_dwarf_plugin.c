@@ -395,7 +395,6 @@ bool
 shiva_dwarf_init(struct shiva_ctx *ctx)
 {
 	int fd;
-	fd = ctx->elfobj.fd; /* already open file desriptor on ELF target */
 	Dwarf_Error err;
 	bool res;
 	elf_error_t elf_error;
@@ -408,6 +407,7 @@ shiva_dwarf_init(struct shiva_ctx *ctx)
 		    elf_path, elf_error_msg(&elf_error));
 		return false;
 	}
+	fd = ctx->elfobj.fd;
 	int ret = dwarf_init_b(fd, 0, NULL, NULL, &ctx->dwarf.debug, &err);
 	if (ret != DW_DLV_OK) {
 		fprintf(stderr, "dwarf_init_b() failed: %s\n", dwarf_errmsg(err));
@@ -449,6 +449,7 @@ parse_arguments(void)
 		else if (strcmp(arg->key, "extend") == 0)
 			extend_addr = strtoull(arg->value, NULL, 0);
 	}
+	shiva_debug("elf_path: %s\n", elf_path);
 }
 
 #if 0
@@ -754,7 +755,9 @@ namespace {
             struct cgraph_node *node;
             basic_block bb;
 
+	shiva_debug("Side of gimple pass\n");
             FOR_EACH_DEFINED_FUNCTION(node) {
+		shiva_debug("Iterating over function\n");
                 if (!gimple_has_body_p(node->decl))
                     continue;
 
@@ -957,6 +960,7 @@ int plugin_init(struct plugin_name_args *plugin_info, struct plugin_gcc_version 
     pass_info.ref_pass_instance_number = 1;
     pass_info.pos_op = PASS_POS_INSERT_AFTER;
 
+	shiva_debug("Callback registered\n");
     register_callback(plugin_info->base_name, PLUGIN_PASS_MANAGER_SETUP, NULL, &pass_info);
 
     return 0;

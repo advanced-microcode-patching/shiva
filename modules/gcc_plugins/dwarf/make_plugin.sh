@@ -5,7 +5,7 @@ MUSL_PREFIX=/usr/local/musl
 ELFMASTER_PREFIX=/opt/elfmaster
 GCC_DIR=/usr/lib/gcc/x86_64-linux-gnu/11
 
-g++ -std=c++11 -shared -o shiva_dwarf_plugin.so \
+g++ -DDEBUG -std=c++11 -shared -o shiva_dwarf_plugin.so \
     -fPIC -fno-rtti -fvisibility=hidden \
     -I"${MUSL_PREFIX}/include/libdwarf-2/" \
     -I"${ELFMASTER_PREFIX}/include" \
