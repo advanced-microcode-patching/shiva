@@ -989,17 +989,23 @@ got_entry_by_name(struct shiva_module *linker, char *name, struct shiva_module_g
 }
 
 /*
- * Shiva Module's have a .got.plt section at the end
+ * Shiva Module's have a .got section at the end
  * of the data segment in memory.
  * 
  * "Shiva Module layout"
  * [text segment]: 0x8000000 (.text, .rodata)
  * [data segment]: 0x9000000 (.data, .got, .bss)
  *
- * We patch the .got with the correct address to
- * either a libc function (That is resolved to
- * the musl-libc within the Shiva executable) or
- * a function native to the Shiva module itself.
+ * We patch the .got entries with:
+ * 1. Symbol values from within the loaded Shiva module
+ * 2. Symbol values from the target executable
+ * 3. Symbol values from dynamically linked libraries
+ *
+ * In the event that we are setting up a microprogram vs. a patch
+ * then an extra step is added before step 3. that checks the
+ * /lib/shiva binary symbol table because the module may be using
+ * symbols from the libelfmaster API that are statically
+ * linked to /lib/shiva
  */
 static bool
 resolve_pltgot_entries(struct shiva_module *linker)
