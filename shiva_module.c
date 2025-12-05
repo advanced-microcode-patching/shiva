@@ -86,10 +86,10 @@ module_symbol_shndx_str(struct shiva_module *linker, struct elf_symbol *symbol)
 	return section->name;
 }
 
-static void
-transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
+static inline void
+transfer_to_module(struct shiva_ctx *ctx)
 {
-	void (*fn)(void *arg) = (void (*)(void *))entry;
+	void (*fn)(void *arg) = (void (*)(void *))ctx->module.runtime->entry_point;
 
 	return fn(ctx);
 }
@@ -3689,6 +3689,24 @@ apply_memory_protection(struct shiva_module *linker)
 	return true;
 }
 
+bool
+validate_microprogram(struct shiva_module *linker)
+{
+	struct elf_symbol sym;
+
+	if (elf_symbol_by_name(&linker->elfobj,
+	    "__shiva_module_pre_exec_phase", &sym) == true) {
+		shiva_debug("Shiva MicroProgram phase: PRE RTLD\n");
+		linker->flags |= SHIVA_MODULE_F_PRE_EXEC;
+	} else if (elf_symbol_by_name(&linker->elfobj,
+	    "__shiva_module_post_exec_phase", &sym) == true) {
+		shiva_debug("Shiva MicroProgram phase: POST RTLD\n");
+		linker->flags |= SHIVA_MODULE_F_POST_EXEC;
+	} else {
+		shiva_debug("Microprogram phase will be selected by Shiva\n");
+	}
+	return true;
+}
 /*
  * NOTE: const char *path: path to the ELF module
  */
@@ -3700,6 +3718,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	bool res;
 	uint64_t entry;
 	char *shiva_path;
+	struct elf_symbol sym;
 
 	linker = malloc(sizeof(struct shiva_module));
 	if (linker == NULL) {
@@ -3722,6 +3741,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	TAILQ_INIT(&linker->tailq.plt_list);
 	TAILQ_INIT(&linker->tailq.delayed_reloc_list);
 
+	
 	shiva_debug("elf_open_object(%s, ...)\n", path);
 
 	/*
@@ -3750,10 +3770,15 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	set_linker_mode(linker);
 	switch(linker->mode) {
 	case SHIVA_LINKING_MODULE:
-		shiva_debug("Shiva linker mode: Loadable Module\n");
+		if (validate_microprogram(linker) == false) {
+			fprintf("Failed to validate Shiva module: '%s'\n",
+			    elf_pathname(&ctx->elfobj));
+			return false;
+		}
+		shiva_debug("Shiva linker mode: MicroProgram\n");
 		break;
 	case SHIVA_LINKING_MICROCODE_PATCH:
-		shiva_debug("Shiva linker mode: Micropatching\n");
+		shiva_debug("Shiva linker mode: Patch\n");
 		break;
 	case SHIVA_LINKING_UNKNOWN:
 		shiva_debug("Unknown linking mode, quitting\n");
@@ -3824,16 +3849,30 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		return false;
 	}
 	shiva_debug("ModuleEntry point address: %#lx\n", ctx->module.runtime->entry_point);
-	
+
 	/*
-	 * XXX TODO
 	 * We must call transfer_to_module() in the event that the target program
 	 * uses no external linkage. This has to do with the fact that external linkage
 	 * triggers the post_linker to set the AT_ENTRY hook to shiva_init() so that
-	 * once ldlinux.so is done it passes control back to shiva_init(). On programs
-	 * without ...
+	 * once ldlinux.so is done it passes control back to shiva_init().
+	 * On Shiva microprograms (modules) that do are defined _SHIVA_MODULE_PRE_RTLD
+	 * we call transfer_to_module(). It means that they are compiled (hopefully)
+	 * without external linkage beyond the musl-libc, libcapstone, and libelfmaster
+	 * functions that are embedded within the /lib/shiva static executable.
 	 */
-	//transfer_to_module(ctx, entry);
-	//shiva_debug("Successfully executed module\n");
+	
+	if (linker->mode == SHIVA_LINKING_MODULE) {
+		/*
+		 * If we made it all the way here and we're in microprogram
+		 * mode (i.e. mode == SHIVA_LINKING_MODULE) and the module is
+		 * set to be running in pre-execution mode then we immediately
+		 * pass control to the module with transfer_to_module() --
+		 */
+		printf("linker->flags: %x\n", linker->flags);
+		if (linker->flags & SHIVA_MODULE_F_PRE_EXEC) {
+			shiva_debug("Transfering control to module\n");
+			transfer_to_module(ctx);
+		}
+	}
 	return true;
 }
