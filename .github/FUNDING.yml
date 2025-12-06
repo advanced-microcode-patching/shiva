@@ -1,0 +1,9 @@
+# These are supported funding model platforms
+
+title: Help support Shiva development
+description: Donations to help continue raising the state of the art in binary patching
+
+tiers:
+  - title: Shiva Elf Supporter
+    description: Monthly support for Shiva development
+    
