@@ -808,14 +808,14 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 					break;
 				case SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE:
 					shiva_debug("Comparing %s and %s\n",
-                                            transform->source_symbol.name +
-                                            strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID), be.symbol.name);
-                                        if (strcmp(transform->source_symbol.name +
-                                            strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID), be.symbol.name) == 0) {
-                                                symname = transform->source_symbol.name;
-                                                shiva_debug("Transform source found: %s\n", symname);
-                                                tfptr = transform;
-                                        }
+					    transform->source_symbol.name +
+					    strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID), be.symbol.name);
+					if (strcmp(transform->source_symbol.name +
+					    strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID), be.symbol.name) == 0) {
+						symname = transform->source_symbol.name;
+						shiva_debug("Transform source found: %s\n", symname);
+						tfptr = transform;
+					}
 
 				default:
 					break;
@@ -1086,7 +1086,19 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				shiva_debug("Looking up symbol: '%s' in target\n", real_symname);
 				if (elf_symbol_by_name(linker->target_elfobj, real_symname,
 				    &symbol) == true) {
-					if (symbol.value == 0 || symbol.type != STT_FUNC) {
+					if (symbol.value == 0 && symbol.type == STT_FUNC) {
+						if (elf_plt_by_name(linker->target_elfobj, real_symname,
+						    &plt_entry) == false) {
+							fprintf(stderr, "external symbol '%s' is invalid and has no related PLT entry\n",
+							    real_symname);
+							return false;
+						} else {
+							shiva_debug("Resolving helper function '%s' to external symbol via PLT entry %s@PLT\n",
+							    symbol.name, real_symname);
+							*(uint64_t *)GOT = plt_entry.addr + linker->target_base;
+							continue;
+						}
+					} else if (symbol.value == 0 && symbol.type != STT_FUNC) {
 						fprintf(stderr, "external symbol is invalid: %s\n",
 						    symbol.name);
 						return false;
@@ -1117,6 +1129,17 @@ resolve_pltgot_entries(struct shiva_module *linker)
 
 						shiva_debug("Symbol '%s' is a %s, let's look it up in the shared libraries\n",
 						    symbol.name, res1 == true ? "GLOBAL_DATA entry" : "PLT entry");
+
+						if (linker->mode == SHIVA_LINKING_MODULE) {
+							shiva_debug("Checking for symbol %s inside of shiva binary first\n", current->symname);
+							if (elf_symbol_by_name(&linker->self, current->symname,
+							    &symbol) == true) {
+								shiva_debug("found symbol value within shiva binary, setting GOT(%p)[%s] to %#lx\n",
+								    GOT, current->symname, symbol.value);
+								*(uint64_t *)GOT = symbol.value;
+								continue;
+							}
+						}
 
 						res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 						if (res == false) {
@@ -1177,6 +1200,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				 * API, which can be resolved from the shiva binary itself.
 				 */
 				if (linker->mode == SHIVA_LINKING_MODULE) {
+					shiva_debug("Checking for symbol %s inside of shiva binary first\n", current->symname);
 					if (elf_symbol_by_name(&linker->self, current->symname,
 						 &symbol) == true) {
 						shiva_debug("found symbol value within shiva binary, setting GOT(%p)[%s] to %#lx\n",
@@ -3855,12 +3879,11 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	 * uses no external linkage. This has to do with the fact that external linkage
 	 * triggers the post_linker to set the AT_ENTRY hook to shiva_init() so that
 	 * once ldlinux.so is done it passes control back to shiva_init().
-	 * On Shiva microprograms (modules) that do are defined _SHIVA_MODULE_PRE_RTLD
+	 * On Shiva microprograms (modules) that do are defined SHIVA_MODULE_PRE_RTLD
 	 * we call transfer_to_module(). It means that they are compiled (hopefully)
 	 * without external linkage beyond the musl-libc, libcapstone, and libelfmaster
 	 * functions that are embedded within the /lib/shiva static executable.
 	 */
-	
 	if (linker->mode == SHIVA_LINKING_MODULE) {
 		/*
 		 * If we made it all the way here and we're in microprogram
@@ -3868,10 +3891,25 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		 * set to be running in pre-execution mode then we immediately
 		 * pass control to the module with transfer_to_module() --
 		 */
-		printf("linker->flags: %x\n", linker->flags);
 		if (linker->flags & SHIVA_MODULE_F_PRE_EXEC) {
 			shiva_debug("Transfering control to module\n");
 			transfer_to_module(ctx);
+		} else {
+			/*
+			 * The module is configured to run post-rtld (e.g.
+			 * should execute the module after ld-linux.so). This
+			 * means we must enable the post linker, even though
+			 * there are no delayed relocs set, the post linker
+			 * will hook AT_ENTRY in the auxiliary vector so that
+			 * ld-linux.so passes control to shiva_init() when it
+			 * is finished. Then once done the module will pass
+			 * control to the real entry point of the target
+			 * executable.
+			 */
+			if (enable_post_linker(linker) == false) {
+				fprintf(stderr, "enable_post_linker() failed\n");
+				return false;
+			}
 		}
 	}
 	return true;
