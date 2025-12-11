@@ -3,7 +3,7 @@
 #include "shiva_module.h"
 
 
-SHIVA_T_SPLICE_FUNCTION(foo, 0x114c, 0x115a)
+SHIVA_T_SPLICE_FUNCTION_REPLACE_SRCLINE(foo, 5)
 {
 	/*
 	 * Attach x0 (arg1) to a use-able variable. (Which
