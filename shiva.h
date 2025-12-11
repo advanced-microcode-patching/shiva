@@ -19,8 +19,8 @@
 #include <errno.h>
 #include <sys/prctl.h>
 #include <sys/wait.h>
-#include "/usr/local/musl/include/libdwarf-2/dwarf.h"
-#include "/usr/local/musl/include/libdwarf-2/libdwarf.h"
+#include "/usr/local/musl/include/libdwarf-0/dwarf.h"
+#include "/usr/local/musl/include/libdwarf-0/libdwarf.h"
 
 #include "sys/queue.h"
 
