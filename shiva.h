@@ -467,6 +467,7 @@ struct shiva_module {
 		struct hsearch_data bss;
 		struct hsearch_data got;
 		struct hsearch_data helpers;
+		struct hsearch_data plt_interposers;
 	} cache;
 	shiva_linking_mode_t mode;
 	struct shiva_ctx *ctx; /* this is a pointer back to the main context */

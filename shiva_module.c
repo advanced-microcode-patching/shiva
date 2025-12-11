@@ -701,7 +701,15 @@ install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
 	uint64_t target_vaddr = patch_symbol->value + linker->text_vaddr;
 	uint8_t trampcode[12] = "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x50\xc3";
 	shiva_error_t trace_error;
+	ENTRY e, *ep;
 
+	e.key = (char *)b->symbol.name;
+	e.data = NULL;
+
+	if (hsearch_r(e, ENTER, &ep, &linker->cache.plt_interposers) == 0) {
+		fprintf(stderr, "failed to add PLT entry %s into plt_interposition cache\n");
+		return false;
+	}
 	/*
 	 * In the event of a transform, we are re-linking the executable to a function
 	 * that has been transformed with a splice, which requires that we don't use
@@ -988,6 +996,18 @@ got_entry_by_name(struct shiva_module *linker, char *name, struct shiva_module_g
 	return false;
 }
 
+static bool
+plt_interposer_exists(struct shiva_module *linker, const char *symname)
+{
+	ENTRY e, *ep;
+
+	e.key = symname;
+	e.data = NULL;
+	if (hsearch_r(e, FIND, &ep, &linker->cache.plt_interposers) != 0)
+		return true;
+	return false;
+}
+
 /*
  * Shiva Module's have a .got section at the end
  * of the data segment in memory.
@@ -1093,10 +1113,18 @@ resolve_pltgot_entries(struct shiva_module *linker)
 							    real_symname);
 							return false;
 						} else {
-							shiva_debug("Resolving helper function '%s' to external symbol via PLT entry %s@PLT\n",
-							    symbol.name, real_symname);
-							*(uint64_t *)GOT = plt_entry.addr + linker->target_base;
-							continue;
+							/*
+							 * Only do this if we haven't already installed a trampoline into the
+							 * PLT for this entry :) -- if that's the case we have to resolve the
+							 * symbol to it's actual shared library definition and not the executables
+							 * local PLT stub :) -- Otherwise it will create a linking loop
+							 */
+							if (plt_interposer_exists(linker, real_symname) == false) {
+								shiva_debug("Resolving helper function '%s' to external symbol via PLT entry %s@PLT\n",
+								    symbol.name, real_symname);
+								*(uint64_t *)GOT = plt_entry.addr + linker->target_base;
+								continue;
+							}
 						}
 					} else if (symbol.value == 0 && symbol.type != STT_FUNC) {
 						fprintf(stderr, "external symbol is invalid: %s\n",
@@ -3731,6 +3759,8 @@ validate_microprogram(struct shiva_module *linker)
 	}
 	return true;
 }
+#define MAX_PLT_TRAMPOLINES 4096
+
 /*
  * NOTE: const char *path: path to the ELF module
  */
@@ -3765,6 +3795,10 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	TAILQ_INIT(&linker->tailq.plt_list);
 	TAILQ_INIT(&linker->tailq.delayed_reloc_list);
 
+	if (hcreate_r(MAX_PLT_TRAMPOLINES, &linker->cache.plt_interposers) == 0) {
+		perror("hcreate_r");
+		return false;
+	}
 	
 	shiva_debug("elf_open_object(%s, ...)\n", path);
 
