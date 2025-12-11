@@ -7,5 +7,6 @@ all:
 	$(SHIVA-LD_PATH) -e fsplice_host -p fsplice_patch.o -i /lib/shiva -s /opt/shiva/modules -o fsplice_host.patched
 install:
 	cp fsplice_patch.o /opt/shiva/modules/
+	cp fsplice_patch2.o /opt/shiva/modules/
 clean:
 	rm -f fsplice_host fsplice_host.patched fsplice_patch.o
