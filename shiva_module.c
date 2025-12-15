@@ -1554,6 +1554,9 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
 		shiva_debug("strrchr failed\n");
 		return false;
 	}
+	if (strcmp(rel.shdrname, ".rela.data.rel.ro") == 0) {
+		shdrname = ".rodata";
+	}
 	if (get_section_mapping(linker, shdrname, &smap) == false) {
 		shiva_debug("Failed to retrieve section data for %s\n", rel.shdrname);
 		return false;
