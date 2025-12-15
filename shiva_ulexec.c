@@ -475,7 +475,7 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 		}
 		if (interp != NULL) {
 			shiva_debug("Interp path: %s\n", interp);
-			ctx->ulexec.flags |= SHIVA_F_ULEXEC_LDSO_NEEDED;
+			ctx->flags |= SHIVA_F_ULEXEC_LDSO_NEEDED;
 			if (elf_open_object(interp, &ctx->ldsobj, ELF_LOAD_F_STRICT, &error)
 			    == false) {
 				fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n",
@@ -490,7 +490,7 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 		    ctx, elf_pathname(&ctx->elfobj));
 		return false;
 	}
-	if (ctx->ulexec.flags & SHIVA_F_ULEXEC_LDSO_NEEDED) {
+	if (ctx->flags & SHIVA_F_ULEXEC_LDSO_NEEDED) {
 		shiva_debug("Loading LDSO: %s\n", elf_pathname(&ctx->ldsobj));
 		if (shiva_ulexec_load_elf_binary(ctx, &ctx->ldsobj, true) == false) {
 			fprintf(stderr, "shiva_ulexec_load_elf_binary(%p, %s, true) failed\n",
