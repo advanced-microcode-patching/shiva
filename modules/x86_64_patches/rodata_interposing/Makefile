@@ -1,5 +1,5 @@
 INTERP_PATH="/lib/shiva"
-SHIVA-LD_PATH="../../../tools/shiva-ld/shiva-ld"
+SHIVA-LD_PATH="`which shiva-ld`"
 all: patch prog prelink
 patch:
 	# Build the module ro_patch.c with a large code model
@@ -9,7 +9,7 @@ prog:
 	gcc -O0 test_rodata.c -o test_rodata
 prelink:
 	# Pre-link the program we are patching with the proper interpreter and patch meta-data
-	$(SHIVA-LD_PATH) -e test_rodata -p ro_patch.o -i /lib/shiva -s /opt/shiva/modules -o test_rodata.patched -d
+	$(SHIVA-LD_PATH) -e test_rodata -p ro_patch.o -i /lib/shiva -s /opt/shiva/modules -o test_rodata.patched
 
 install:
 	sudo cp ro_patch.o /opt/shiva/modules/

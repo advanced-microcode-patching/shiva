@@ -42,8 +42,9 @@
 #include "/opt/elfmaster/include/libelfmaster.h"
 #include "../../include/capstone/capstone.h"
 
-#define SHIVA_LD_F_NO_CFG	(1UL << 0)
+#define SHIVA_LD_F_NO_CFG		(1UL << 0)
 #define SHIVA_LD_F_NEEDED_INJECTION	(1UL << 1)
+#define SHIVA_LD_F_CFS_BINARY		(1UL << 2) // super edge-case
 
 #define SHIVA_DT_NEEDED	DT_LOOS + 10
 #define SHIVA_DT_SEARCH DT_LOOS + 11
@@ -453,8 +454,26 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	uint8_t *old_dynamic_segment;
 	size_t old_dynamic_size, dynamic_index;
 	size_t old_shstrtab_len, old_e_shoff, old_e_shnum;
-	struct elf_section dynstr_shdr;
+	struct elf_section dynstr_shdr, last_shdr;
+	size_t appended_shstrtab_len;
 
+	/*
+	 * Get the last section header
+	 */
+	if (elf_section_by_index(&ctx->bin.elfobj, elf_shnum(&ctx->bin.elfobj) - 1,
+	    &last_shdr) == false) {
+		fprintf(stderr, "elf_section_by_index(%p, %d, ...) failed\n",
+		    &ctx->bin.elfobj, elf_shnum(&ctx->bin.elfobj) - 1);
+		return false;
+	}
+	if (strcmp(last_shdr.name, ".note.ABI-tag") == 0) {
+		/*
+		 * The last section header should be .shstrtab... ???
+		 * except in rare edge-cases such as with the x86_64 NASA cFS binary
+		 */
+		shiva_debug("Enabling support for NASA cFS binary\n");
+		ctx->flags |= SHIVA_LD_F_CFS_BINARY;
+	}
 	ctx->orig_interp_path = elf_interpreter_path(&ctx->bin.elfobj);
 	if (ctx->orig_interp_path == NULL) {
 		fprintf(stderr, "elf_interpreter_path() failed\n");
@@ -641,7 +660,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 
 			memcpy(&tmp, &shdr, sizeof(tmp));
 			old_shstrtab_len = tmp.size;
-			tmp.size += strlen(".shiva.strtab") + 1 +
+			tmp.size += appended_shstrtab_len = strlen(".shiva.strtab") + 1 +
 			    strlen(".shiva.xref") + 1 + strlen(".shiva.branch") + 1;
 			shiva_pl_debug("Increased .shstrtab size by %zu bytes\n", tmp.size - old_shstrtab_len);
 			res = elf_section_modify(&ctx->bin.elfobj, shdr_iter.index - 1,
@@ -656,11 +675,11 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	/*
 	 * Commit the changes to the section header data on the backend.
 	 */
-	 elf_section_commit(&ctx->bin.elfobj);
+	elf_section_commit(&ctx->bin.elfobj);
 
 	/*
 	 * Write out
-	 * 1. Original ELF executable up until .shstrtab section
+	 * 1. Original ELF executable up until .shstrtab section (Or up until .note.ABI-tag section when -c is used)
 	 * 2. Add additional string data for 3 new sections ".shiva.xref, .shiva.branch, .shiva.strtab"
 	 * 2. New dynamic segment (With additional SHIVA_DT_ entries)
 	 * 3. Strings table '.shiva.strtab' for searchpath, module, cfg symbols
@@ -678,12 +697,93 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	}
 
 	if ((ctx->flags & SHIVA_LD_F_NO_CFG) == 0) {
+		struct elf_section note_abi_shdr;
+
+		if ((ctx->flags & SHIVA_LD_F_CFS_BINARY)) {
+			size_t shdr_size = elf_class(&ctx->bin.elfobj) == elfclass32	
+			    ? sizeof(Elf32_Shdr) : sizeof(Elf64_Shdr);
+
+			shiva_debug("Detected cFS binary re-linking\n");
+			if (elf_section_by_name(&ctx->bin.elfobj, ".note.ABI-tag", &note_abi_shdr) == false) {
+				fprintf(stderr, "elf_section_by_name(%p, \"%s\", ...) failed\n",
+				    &ctx->bin.elfobj, ".note.ABI-tag");
+				return false;
+			}
+			elf_section_iterator_t shdr_iter;
+			struct elf_section shdr, tmp;
+			bool strtab_found = false;
+
+			/*
+			 * shift .strtab forward by the new added .shstrtab bytes.
+			 * shift all sections after .strtab by the new added .shstrtab bytes + (sizeof(Elf64_Shdr) * 3); to account for the
+			 * new sections added to the shdr table, which in the cfs binary is strangely between the .strtab and .dynamic section
+			 * rather than at the end of the file like with conventional (non-tampered with) ELF's.
+			 */
+			elf_section_iterator_init(&ctx->bin.elfobj, &shdr_iter);
+			while (elf_section_iterator_next(&shdr_iter, &shdr) == ELF_ITER_OK) {
+				if (strcmp(shdr.name, ".strtab") == 0) {
+					tmp = shdr;
+					tmp.offset += appended_shstrtab_len;
+					res = elf_section_modify(&ctx->bin.elfobj, shdr_iter.index - 1,
+					    &tmp, &error);
+					if (res == false) {
+						fprintf(stderr, "[!] elf_section_modify "
+						    "failed: %s\n", elf_error_msg(&error));
+						return false;
+					}
+					elf_section_commit(&ctx->bin.elfobj);
+					strtab_found = true;
+					continue;
+				} else if (strtab_found == true) {
+					if (strcmp(shdr.name, ".dynamic") == 0) // we skip shifting this section forward
+						continue;			// because it has been moved to our newly added PT_LOAD
+					/*
+					 * The last section headers after .strtab
+					 [50] .dynamic		   DYNAMIC	0000000000300000 00300000 000001d0 16 WA    51	 0  8
+					 [51] .dynstr		   STRTAB	00000000002f01b0 002f01b0 000073a5  0 A      0	 0  8
+					 [52] .dynsym		   DYNSYM	00000000002f7558 002f7558 000084c0 24 A     51	 1  8
+					 [53] .interp		   PROGBITS	00000000002ffa18 002ffa18 0000001c  0 A      0	 0  8
+					 [54] .note.ABI-tag	   NOTE		00000000002ffa38 002ffa38 00000020  0 A      0	 0  4
+					*/
+					tmp = shdr;
+					tmp.offset += appended_shstrtab_len + (shdr_size * 3);
+					tmp.address += appended_shstrtab_len + (shdr_size * 3);
+					res = elf_section_modify(&ctx->bin.elfobj, shdr_iter.index - 1,
+					    &tmp, &error);
+					if (res == false) {
+						 fprintf(stderr, "[!] elf_section_modify "
+						    "failed: %s\n", elf_error_msg(&error));
+						return false;
+					}
+					elf_section_commit(&ctx->bin.elfobj);
+				}
+			}
+			elf_segment_iterator_t phdr_iter;
+			struct elf_segment phdr, tmp_phdr;
+
+			elf_segment_iterator_init(&ctx->bin.elfobj, &phdr_iter);
+			while (elf_segment_iterator_next(&phdr_iter, &phdr) == ELF_ITER_OK) {
+				if (phdr.type == PT_INTERP) {
+					tmp_phdr = phdr;
+					tmp_phdr.offset += appended_shstrtab_len + (shdr_size * 3);
+					tmp_phdr.vaddr += appended_shstrtab_len + (shdr_size * 3);
+					tmp_phdr.paddr += appended_shstrtab_len + (shdr_size * 3);
+					res = elf_segment_modify(&ctx->bin.elfobj, phdr_iter.index - 1,
+					    &tmp_phdr, &error);
+					if (res == false) {
+ 						fprintf(stderr, "elf_segment_modify() failed on phdr %d: %s\n",
+						    phdr_iter.index - 1, elf_error_msg(&error));
+						return false;
+					}
+					break;
+				}
+			}
+		}
 		if (elf_section_by_name(&ctx->bin.elfobj, ".shstrtab", &shstrtab_shdr) == false) {
 			fprintf(stderr, "elf_section_by_name(%p, \"%s\", ...) failed\n",
 			    &ctx->bin.elfobj, ".shstrtab");
 			return false;
 		}
-
 		size_t shentsize;
 
 		if (elf_class(&ctx->bin.elfobj) == elfclass32) {
@@ -709,11 +809,9 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			perror("write 1.");
 			return false;
 		}
-
 		/*
 		 * write out three new strings into .shstrtab
 		 */
-
 		if (write(fd, (char *)".shiva.strtab", strlen(".shiva.strtab") + 1) < 0) {
 			perror("write 2.");
 			return false;
@@ -728,17 +826,17 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			perror("write 4.");
 			return false;
 		}
+
 		size_t off = shstrtab_shdr.offset + old_shstrtab_len;
 
 		/*
-		 * Write out rest of executable up until the end of where the section header table.
+		 * Write up until the end of the section header table.
 		 */
 		if (write(fd, &ctx->bin.elfobj.mem[off],
 		    old_e_shoff + (old_e_shnum * shentsize) - off) < 0) {
 			perror("write 5.");
 			return false;
 		}
-
 		loff_t section_offset;
 
 		section_offset = lseek(fd, 0, SEEK_CUR);
@@ -802,6 +900,30 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			perror("write 8");
 			return false;
 		}
+
+		if (ctx->flags & SHIVA_LD_F_CFS_BINARY) {
+			/*
+			 * If this is the X86_64 cFS ELF binary (NASA's core-flight)
+			 * the section header table is not at the end of the binary it's
+			 * strangely in between .strtab and .dynamic. So at this point
+			 * we must continue writing out the rest of the executable:
+			 * which seems to include .dynstr, .dynsym, .interp ,and .note-ABI-.tag
+			 */
+			size_t len = (note_abi_shdr.offset + note_abi_shdr.size) -
+			    (old_e_shoff + (old_e_shnum * shentsize));
+			/*
+			 * Starting off at the end of the original section header table
+			 * and from there writing out the rest of the original executable.
+			 */
+			shiva_debug("writing from out %#lx bytes in between .strtab and .dynamic\n",
+			    len);
+			if (write(fd,
+			    &ctx->bin.elfobj.mem[old_e_shoff + (old_e_shnum * shentsize)], len) < 0) {
+				perror("write 9.");
+				return false;
+			}
+		}
+
 		/*
 		 * Lseek to the offset of where our new segment begins.
 		 */
@@ -856,14 +978,15 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		 */
 		shiva_pl_debug("Writing out strtab\n");
 		int i;
-
-#if DEBUG
+#if 0
+#if debug
 		for (i = 0; i < get_shiva_strtab_offset(ctx); i++) {
 			printf("%c", ctx->shiva_strtab.strtab[i]);
 			fflush(stdout);
 		}
 		printf("\n");
 		fflush(stdout);
+#endif
 #endif
 
 		if (write(fd, ctx->shiva_strtab.strtab, ctx->shiva_strtab.current_offset) < 0) {
@@ -900,7 +1023,8 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				return false;
 			}
 		}
-	} else { /* 
+	} else {
+		 /* 
 		  *  We are not generating a CFG... so we re-write the ELF binary
 		  *  with all of the changes, except without adding in the .shiva.xref, .shiva.branch
 		  *  and .shiva.strtab sections.
@@ -1103,6 +1227,42 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	 * interpreter path (i.e. "/lib/shiva").
 	 */
 	strcpy(path, ctx->interp_path);
+#if 0
+	if ((ctx->flags & SHIVA_LD_F_CFS_BINARY && ((ctx->flags & SHIVA_LD_F_NO_CFG) == 0))) {
+		elf_section_iterator_t shdr_iter;
+		struct elf_section shdr;
+		bool found_shstrtab = false;
+
+		elf_section_iterator_init(&ctx->bin.elfobj, &shdr_iter);
+		while (elf_section_iterator_next(&shdr_iter, &shdr) == ELF_ITER_OK) {
+			if (strcmp(shdr.name, ".shstrtab") == 0) {
+				found_shstrtab = true;
+				continue;
+			}
+			/*
+			 * All other sections after .shstrtab should be shifted forward by
+			 * the length of bytes added to .shstrtab (To accompany room for our new custom sections)
+			 */
+			if (found_shstrtab == true) {
+				struct elf_section tmp = shdr;
+				elf_error_t error;
+				size_t shdr_size = elf_class(&ctx->bin.elfobj) == elfclass32
+				    ? sizeof(Elf32_Shdr) : sizeof(Elf64_Shdr);
+
+				shiva_debug("Shifting section %s forward by %lx bytes (updating sh_offset)\n", tmp.name, appended_shstrtab_len);
+				tmp.offset += appended_shstrtab_len + (shdr_size * 3);
+				res = elf_section_modify(&ctx->bin.elfobj, shdr_iter.index - 1,
+				    &tmp, &error);
+				if (res == false) {
+					fprintf(stderr, "[!] elf_section_modify "
+					    "failed: %s\n", elf_error_msg(&error));
+					return false;
+				}
+				elf_section_commit(&ctx->bin.elfobj);
+			}
+		}
+	}
+#endif
 	elf_close_object(&ctx->bin.elfobj);
 	return true;
 }
@@ -2268,25 +2428,30 @@ int main(int argc, char **argv)
 		{"output_exec", required_argument, 0, 'o'},
 		{"search_path", required_argument, 0, 's'},
 		{"interp_path", required_argument, 0, 'i'},
+		{"disable-cflow", no_argument,	   0, 'd'},
+		{"cfs-binary"	, no_argument,	   0, 'c'},
+		{"needed-injection", no_argument,  0, 'N'},
 		{0,	0,	0,	0}
 	};
 
 	if (argc < 3) {
 usage:
 		printf("Usage: %s -e test_bin -p patch1.o -i /lib/shiva"
-		    " -s /opt/shiva/modules/ -o test_bin_final\n", argv[0]);
+		    " -s /opt/shiva/modules/ -o test_bin_final [-cdN]\n", argv[0]);
 		printf("[-e] --input_exec	Input ELF executable\n");
-		printf("[-p] --input_patch	Input ELF patch\n");
+		printf("[-p] --input_patch	Input ELF patch (NOTE: should be a .so patch when the -N flag is used)\n");
 		printf("[-i] --interp_path	Interpreter search path, i.e. \"/lib/shiva\"\n");
 		printf("[-s] --search_path	Module search path (For patch object)\n");
 		printf("[-o] --output_exec	Output executable\n");
-		printf("[-d] --disable-cfg-gen	Do not generate CFG data (i.e. .shiva.xref and .shiva.branch)\n");
+		printf("[-d] --disable-cflow	Do not generate CFG data (i.e. .shiva.xref and .shiva.branch)\n");
+		printf("[-c] --cfs-binary	Necessary when prelinking cFS (NASA's core flight software)\n");
+		printf("[-N] --needed-injection	Injects shared object dependency via DT_NEEDED entry\n");
 		exit(0);
 	}
 
 	memset(&ctx, 0, sizeof(ctx));
 
-	while ((opt = getopt_long(argc, argv, "Ne:p:i:s:o:d",
+	while ((opt = getopt_long(argc, argv, "Ne:p:i:s:o:dc",
 	    long_options, &long_index)) != -1) {
 		switch(opt) {
 		case 'e':
@@ -2335,6 +2500,9 @@ usage:
 			break;
 		case 'd':
 			ctx.flags |= SHIVA_LD_F_NO_CFG;
+			break;
+		case 'c':
+			ctx.flags |= SHIVA_LD_F_CFS_BINARY;
 			break;
 		default:
 			break;
