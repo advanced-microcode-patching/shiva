@@ -426,6 +426,7 @@ set_dtag(struct shiva_prelink_ctx *ctx, ElfW(Dyn) *dyn, int d_tag, uint64_t valu
 
 	for (i = 0; dyn[i].d_tag != DT_NULL; i++) {
 		if (dyn[i].d_tag == d_tag) {
+			shiva_debug("Setting DTAG ptr to %#lx\n", value);
 			dyn[i].d_un.d_val = value;
 			return true;
 		}
@@ -514,11 +515,11 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 					return false;
 				}
 			} else {
-				ctx->new_segment.dyn_size += (sizeof(ElfW(Dyn)) * NEW_DYN_COUNT);
+				ctx->new_segment.dyn_size += (sizeof(ElfW(Dyn)) * (NEW_DYN_COUNT + 1));
 			}
 			ctx->new_segment.dyn_offset = 0;
 
-			old_dynamic_size = elf_dtag_count(&ctx->bin.elfobj) * sizeof(ElfW(Dyn));
+			old_dynamic_size = (elf_dtag_count(&ctx->bin.elfobj) + 1) * sizeof(ElfW(Dyn));
 			old_dynamic_segment = calloc(1, segment.filesz);
 			if (old_dynamic_segment == NULL) {
 				perror("calloc");
@@ -528,6 +529,10 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			    segment) == false) {
 				fprintf(stderr, "Failed to copy original dynamic segment\n");
 				return false;
+			}
+			Elf64_Dyn *dptr = (Elf64_Dyn *)old_dynamic_segment;
+			while (dptr->d_tag != DT_NULL) {
+				dptr++;
 			}
 			ctx->new_segment.filesz = segment.filesz;
 
@@ -771,7 +776,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 					res = elf_segment_modify(&ctx->bin.elfobj, phdr_iter.index - 1,
 					    &tmp_phdr, &error);
 					if (res == false) {
- 						fprintf(stderr, "elf_segment_modify() failed on phdr %d: %s\n",
+						fprintf(stderr, "elf_segment_modify() failed on phdr %d: %s\n",
 						    phdr_iter.index - 1, elf_error_msg(&error));
 						return false;
 					}
@@ -909,6 +914,8 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			 * we must continue writing out the rest of the executable:
 			 * which seems to include .dynstr, .dynsym, .interp ,and .note-ABI-.tag
 			 */
+			size_t shdr_size = elf_class(&ctx->bin.elfobj) == elfclass32
+			    ? sizeof(Elf32_Shdr) : sizeof(Elf64_Shdr);
 			size_t len = (note_abi_shdr.offset + note_abi_shdr.size) -
 			    (old_e_shoff + (old_e_shnum * shentsize));
 			/*
@@ -920,6 +927,21 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			if (write(fd,
 			    &ctx->bin.elfobj.mem[old_e_shoff + (old_e_shnum * shentsize)], len) < 0) {
 				perror("write 9.");
+				return false;
+			}
+			/*
+			 * Earlier in the code we updated the offset and address value of
+			 * several section header (including .dynstr) moving them forward.
+			 * This will get the latest (new) address for .dynstr before updating
+			 * DT_STRTAB in the dynamic segment with this new value.
+			 */
+			if (elf_section_by_name(&ctx->bin.elfobj, ".dynstr", &dynstr_shdr) == false) {
+				fprintf(stderr, "elf_section_by_name() failed on .dynstr\n");
+				return false;
+			}
+			if (set_dtag(ctx, (ElfW(Dyn) *)old_dynamic_segment, DT_STRTAB,
+			    dynstr_shdr.address) == false) {
+				fprintf(stderr, "Failed to set DT_STRTAB value\n");
 				return false;
 			}
 		}
@@ -937,7 +959,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		 * which will be DT_NULL
 		 */
 		if (write(fd, old_dynamic_segment,
-		    old_dynamic_size - sizeof(ElfW(Dyn))) < 0) {
+		    old_dynamic_size - sizeof(Elf64_Dyn)) < 0) {
 			perror("write 9.");
 			return false;
 		}
@@ -1133,7 +1155,6 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			elf_close_object(&ctx->bin.elfobj);
 			return true;
 		}
-
 		if (write(fd, old_dynamic_segment,
 		    old_dynamic_size - sizeof(ElfW(Dyn))) < 0) {
 			perror("write");
