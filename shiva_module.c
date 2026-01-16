@@ -707,7 +707,7 @@ install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
 	e.data = NULL;
 
 	if (hsearch_r(e, ENTER, &ep, &linker->cache.plt_interposers) == 0) {
-		fprintf(stderr, "failed to add PLT entry %s into plt_interposition cache\n");
+		fprintf(stderr, "failed to add PLT entry %s into plt_interposition cache\n", b->symbol.name);
 		return false;
 	}
 	/*
@@ -1001,7 +1001,7 @@ plt_interposer_exists(struct shiva_module *linker, const char *symname)
 {
 	ENTRY e, *ep;
 
-	e.key = symname;
+	e.key = (char *)symname;
 	e.data = NULL;
 	if (hsearch_r(e, FIND, &ep, &linker->cache.plt_interposers) != 0)
 		return true;
