@@ -6,6 +6,24 @@
 #define SHIVA_AUXV_COUNT 21
 #endif
 
+static bool
+shiva_ulexec_auxv_count(struct shiva_ctx *ctx, size_t *out)
+{
+	shiva_auxv_iterator_t a_iter;
+	struct shiva_auxv_entry a_entry;
+	shiva_iterator_res_t res;
+
+	*out = 0; // zero it before counting
+
+	shiva_auxv_iterator_init(ctx, &a_iter, NULL);
+	while ((res = shiva_auxv_iterator_next(&a_iter, &a_entry)) != SHIVA_ITER_DONE) {
+		if (res == SHIVA_ITER_ERROR)
+			return false;
+		(*out)++;
+	}
+	return true;
+}
+
 uint8_t *
 shiva_ulexec_allocstack(struct shiva_ctx *ctx)
 {
@@ -34,13 +52,20 @@ shiva_ulexec_build_auxv_stack(struct shiva_ctx *ctx, uint64_t *out, Elf64_auxv_t
 	shiva_auxv_iterator_t a_iter;
 	struct shiva_auxv_entry a_entry;
 	size_t count = 0;
+	size_t auxv_count;
 
+	if (shiva_ulexec_auxv_count(ctx, &auxv_count) == false) {
+		shiva_debug("shiva_ulexec_auxv_count() failed to calculate auxv length\n");
+		auxv_count = SHIVA_AUXV_COUNT; // make our best guess
+	}
+	shiva_debug("auxv_count: %zu\n", auxv_count);
 	count += sizeof(argc);
 	count += ctx->argc * sizeof(char *);
 	count += sizeof(void *);
 	count += ctx->ulexec.envpcount * sizeof(char *);
 	count += sizeof(void *);
-	count += (SHIVA_AUXV_COUNT + 1) * sizeof(Elf64_auxv_t);
+
+	count += (auxv_count + 1) * sizeof(Elf64_auxv_t);
 	count = (count + 16) & ~(16 - 1);
 	totalsize = count + ctx->ulexec.envplen + ctx->ulexec.arglen;
 	totalsize = (totalsize + 16) & ~(16 - 1);
@@ -475,7 +500,7 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 		}
 		if (interp != NULL) {
 			shiva_debug("Interp path: %s\n", interp);
-			ctx->ulexec.flags |= SHIVA_F_ULEXEC_LDSO_NEEDED;
+			ctx->flags |= SHIVA_F_ULEXEC_LDSO_NEEDED;
 			if (elf_open_object(interp, &ctx->ldsobj, ELF_LOAD_F_STRICT, &error)
 			    == false) {
 				fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n",
@@ -490,7 +515,7 @@ shiva_ulexec_prep(struct shiva_ctx *ctx)
 		    ctx, elf_pathname(&ctx->elfobj));
 		return false;
 	}
-	if (ctx->ulexec.flags & SHIVA_F_ULEXEC_LDSO_NEEDED) {
+	if (ctx->flags & SHIVA_F_ULEXEC_LDSO_NEEDED) {
 		shiva_debug("Loading LDSO: %s\n", elf_pathname(&ctx->ldsobj));
 		if (shiva_ulexec_load_elf_binary(ctx, &ctx->ldsobj, true) == false) {
 			fprintf(stderr, "shiva_ulexec_load_elf_binary(%p, %s, true) failed\n",

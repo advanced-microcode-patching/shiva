@@ -983,7 +983,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 
 			printf("Opening file %s\n", ctx->output_exec);
 			if (elf_open_object(ctx->output_exec, &ctx->bin.elfobj,
-			    ELF_LOAD_F_MODIFY|ELF_LOAD_F_STRICT, &error) == false) {
+			    ELF_LOAD_F_MODIFY|ELF_LOAD_F_FORENSICS, &error) == false) {
 				fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n",
 				    ctx->output_exec, elf_error_msg(&error));
 				return false;
@@ -1080,7 +1080,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	rename(template, ctx->output_exec);
 
 	if (elf_open_object(ctx->output_exec, &ctx->bin.elfobj,
-	    ELF_LOAD_F_MODIFY|ELF_LOAD_F_STRICT, &error) == false) {
+	    ELF_LOAD_F_MODIFY|ELF_LOAD_F_FORENSICS, &error) == false) {
 		fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n",
 		    ctx->output_exec, elf_error_msg(&error));
 		free(target_path);
@@ -2354,7 +2354,7 @@ usage:
 	 * Open the target executable, with modification privileges.
 	 */
 	if (elf_open_object(ctx.input_exec, &ctx.bin.elfobj,
-		ELF_LOAD_F_STRICT|ELF_LOAD_F_MODIFY|ELF_LOAD_F_PRIV_MAP, &error) == false) {
+		ELF_LOAD_F_FORENSICS|ELF_LOAD_F_MODIFY|ELF_LOAD_F_PRIV_MAP, &error) == false) {
 		fprintf(stderr, "elf_open_object(%s, ...) failed: %s\n",
 		    ctx.input_exec, elf_error_msg(&error));
 		exit(EXIT_FAILURE);

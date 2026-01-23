@@ -268,7 +268,7 @@
 #define SHIVA_HELPER_CALL_EXTERNAL_ARGS2(name, arg1, arg2)	\
 	__shiva_helper_orig_func_##name(arg1, arg2);
 
-#define SHIVA_HELPER_CALL_EXTERNAL_ARGS3(name, arg1, arg2)	\
+#define SHIVA_HELPER_CALL_EXTERNAL_ARGS3(name, arg1, arg2, arg3)	\
 	__shiva_helper_orig_func_##name(arg1, arg2, arg3)
 
 #define SHIVA_HELPER_CALL_EXTERNAL_ARGS4(name, arg1, arg2, arg3, arg4)	      \

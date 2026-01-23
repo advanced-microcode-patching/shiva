@@ -2574,11 +2574,11 @@ create_data_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	size_t count = 0;
 
 	uint64_t mmap_flags = 
-	    (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
+	    (ctx->flags & SHIVA_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS :
 	    MAP_PRIVATE|MAP_ANONYMOUS;
 	uint64_t mmap_base = 0;
 
-	if (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) {
+	if (ctx->flags & SHIVA_F_INTERP_MODE) {
 		mmap_base = ELF_PAGEALIGN(linker->text_vaddr + linker->text_size, PAGE_SIZE);
 	} else {
 		mmap_base = ELF_PAGEALIGN(linker->text_vaddr + linker->text_size, PAGE_SIZE);
@@ -2680,7 +2680,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	 * to load the target executable to a much higher address space.
 	 * In this case we won't use the MAP_32BIT.
 	 */
-	uint64_t mmap_flags = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE :
+	uint64_t mmap_flags = (ctx->flags & SHIVA_F_INTERP_MODE) ? MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE :
 	    MAP_PRIVATE|MAP_ANONYMOUS;
 	uint64_t mmap_base = 0;
 
@@ -2693,7 +2693,7 @@ create_text_image(struct shiva_ctx *ctx, struct shiva_module *linker)
 	 * module is mapped to an address space right after the heap, to ensure
 	 * that the module is within a 4GB range of the target executable.
 	 */
-	if (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) {
+	if (ctx->flags & SHIVA_F_INTERP_MODE) {
 
 		shiva_maps_iterator_t maps_iter;
 		struct shiva_mmap_entry mmap_entry;
@@ -3814,7 +3814,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	/*
 	 * Open our self (The debugger/interpreter) ELF object.
 	 */
-	shiva_path = (ctx->flags & SHIVA_OPTS_F_INTERP_MODE) ?
+	shiva_path = (ctx->flags & SHIVA_F_INTERP_MODE) ?
 	    elf_interpreter_path(&ctx->elfobj) : "/proc/self/exe";
 
 	if (elf_open_object(shiva_path, &linker->self, ELF_LOAD_F_STRICT,

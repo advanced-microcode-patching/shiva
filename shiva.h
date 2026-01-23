@@ -19,8 +19,8 @@
 #include <errno.h>
 #include <sys/prctl.h>
 #include <sys/wait.h>
-#include "/usr/local/musl/include/libdwarf-2/dwarf.h"
-#include "/usr/local/musl/include/libdwarf-2/libdwarf.h"
+#include "/usr/local/musl/include/libdwarf-0/dwarf.h"
+#include "/usr/local/musl/include/libdwarf-0/libdwarf.h"
 
 #include "sys/queue.h"
 
@@ -43,14 +43,13 @@
 
 #define RUNTIME_BASE(addr) (addr + ctx->ulexec.base_vaddr)
 
-#define SHIVA_OPTS_F_MODULE_PATH		(1UL << 0)
-#define SHIVA_OPTS_F_ULEXEC_ONLY		(1UL << 1)
-#define SHIVA_OPTS_F_INTERP_MODE		(1UL << 2)
-#define SHIVA_OPTS_F_STATIC_ELF			(1UL << 3)
-
-#define SHIVA_F_ULEXEC_LDSO_NEEDED	(1UL << 0)
-#define SHIVA_F_LOAD_MODULE_INIT		(1UL << 1)
-#define SHIVA_F_HAS_JUMPTABLE_METADATA	(1UL << 2)
+#define SHIVA_F_MODULE_PATH		(1UL << 0)
+#define SHIVA_F_ULEXEC_ONLY		(1UL << 1)
+#define SHIVA_F_INTERP_MODE		(1UL << 2)
+#define SHIVA_F_STATIC_ELF		(1UL << 3)
+#define SHIVA_F_ULEXEC_LDSO_NEEDED	(1UL << 4)
+#define SHIVA_F_LOAD_MODULE_INIT	(1UL << 5)
+#define SHIVA_F_HAS_JUMPTABLE_METADATA	(1UL << 6)
 
 #define SHIVA_STACK_SIZE	(PAGE_SIZE * 1000)
 

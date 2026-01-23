@@ -370,7 +370,7 @@ __attribute__ ((visibility("hidden"))) int main(int argc, char **argv, char **en
 		ctx.argv = argv;
 		ctx.argc = argc;
 		ctx.path = target_path;
-		ctx.flags |= SHIVA_OPTS_F_INTERP_MODE;
+		ctx.flags |= SHIVA_F_INTERP_MODE;
 		if (shiva_interp_mode(&ctx) == false) {
 			fprintf(stderr, "shiva_interp_mode failed\n");
 			exit(EXIT_FAILURE);
@@ -420,10 +420,10 @@ __attribute__ ((visibility("hidden"))) int main(int argc, char **argv, char **en
 		for (p = &(*(*(argv + 1) + 1)); *p != '\0'; p++) {
 			switch (*p) {
 			case 'u':
-				ctx.flags |= SHIVA_OPTS_F_ULEXEC_ONLY;
+				ctx.flags |= SHIVA_F_ULEXEC_ONLY;
 				break;
 			case 's':
-				ctx.flags |= SHIVA_OPTS_F_STATIC_ELF;
+				ctx.flags |= SHIVA_F_STATIC_ELF;
 				break;
 			default:
 				break;
@@ -489,7 +489,7 @@ __attribute__ ((visibility("hidden"))) int main(int argc, char **argv, char **en
 	 * This flag tells Shiva to ul_exec the target binary without installing
 	 * any patches at runtime.
 	 */
-	if (ctx.flags & SHIVA_OPTS_F_ULEXEC_ONLY)
+	if (ctx.flags & SHIVA_F_ULEXEC_ONLY)
 		goto transfer_control;
 
 	if (shiva_target_has_prelinking(&ctx) == true) {
@@ -509,11 +509,11 @@ __attribute__ ((visibility("hidden"))) int main(int argc, char **argv, char **en
 			 * any modules. it will simply pass control to ld-linux.so
 			 * and effectively ulexec the target ELF binary.
 			 */
-			ctx.flags |= SHIVA_OPTS_F_ULEXEC_ONLY;
+			ctx.flags |= SHIVA_F_ULEXEC_ONLY;
 		}
 	}
 
-	if (ctx.flags & SHIVA_OPTS_F_ULEXEC_ONLY)
+	if (ctx.flags & SHIVA_F_ULEXEC_ONLY)
 		goto transfer_control;
 
 	if (shiva_module_loader(&ctx, ctx.module_path,
