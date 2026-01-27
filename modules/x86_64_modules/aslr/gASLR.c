@@ -68,6 +68,13 @@ typedef struct aslr_ctx {
 
 struct elf_section text_section, got_section;
 
+/*
+ * Our modules shiva_init() function should run after ld-linux.so.
+ * This phase is implicit if you don't define this so it's technically
+ * not necessary, but it's important to be explicit.
+ */
+SHIVA_MODULE_POST_EXEC_PHASE;
+
 bool
 build_func_list(struct shiva_ctx *ctx, struct aslr_ctx *aslr,
     size_t *fn_count)

@@ -86,10 +86,10 @@ module_symbol_shndx_str(struct shiva_module *linker, struct elf_symbol *symbol)
 	return section->name;
 }
 
-static void
-transfer_to_module(struct shiva_ctx *ctx, uint64_t entry)
+static inline void
+transfer_to_module(struct shiva_ctx *ctx)
 {
-	void (*fn)(void *arg) = (void (*)(void *))entry;
+	void (*fn)(void *arg) = (void (*)(void *))ctx->module.runtime->entry_point;
 
 	return fn(ctx);
 }
@@ -693,6 +693,7 @@ install_x86_64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
  * Add support for PLT redirection in AArch64 Shiva
  * Currently only a feature added in x86_64, allowing users to
  * hook functions within the PLT via symbol interposition.
+ * TODO check cache first before entering to save unnecessary duplicates
  */
 static bool
 install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
@@ -701,7 +702,15 @@ install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
 	uint64_t target_vaddr = patch_symbol->value + linker->text_vaddr;
 	uint8_t trampcode[12] = "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x50\xc3";
 	shiva_error_t trace_error;
+	ENTRY e, *ep;
 
+	e.key = (char *)b->symbol.name;
+	e.data = NULL;
+
+	if (hsearch_r(e, ENTER, &ep, &linker->cache.plt_interposers) == 0) {
+		fprintf(stderr, "failed to add PLT entry %s into plt_interposition cache\n", b->symbol.name);
+		return false;
+	}
 	/*
 	 * In the event of a transform, we are re-linking the executable to a function
 	 * that has been transformed with a splice, which requires that we don't use
@@ -808,14 +817,14 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 					break;
 				case SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE:
 					shiva_debug("Comparing %s and %s\n",
-                                            transform->source_symbol.name +
-                                            strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID), be.symbol.name);
-                                        if (strcmp(transform->source_symbol.name +
-                                            strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID), be.symbol.name) == 0) {
-                                                symname = transform->source_symbol.name;
-                                                shiva_debug("Transform source found: %s\n", symname);
-                                                tfptr = transform;
-                                        }
+					    transform->source_symbol.name +
+					    strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID), be.symbol.name);
+					if (strcmp(transform->source_symbol.name +
+					    strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID), be.symbol.name) == 0) {
+						symname = transform->source_symbol.name;
+						shiva_debug("Transform source found: %s\n", symname);
+						tfptr = transform;
+					}
 
 				default:
 					break;
@@ -988,6 +997,18 @@ got_entry_by_name(struct shiva_module *linker, char *name, struct shiva_module_g
 	return false;
 }
 
+static bool
+plt_interposer_exists(struct shiva_module *linker, const char *symname)
+{
+	ENTRY e, *ep;
+
+	e.key = (char *)symname;
+	e.data = NULL;
+	if (hsearch_r(e, FIND, &ep, &linker->cache.plt_interposers) == 0)
+		return true;
+	return false;
+}
+
 /*
  * Shiva Module's have a .got section at the end
  * of the data segment in memory.
@@ -1086,7 +1107,71 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				shiva_debug("Looking up symbol: '%s' in target\n", real_symname);
 				if (elf_symbol_by_name(linker->target_elfobj, real_symname,
 				    &symbol) == true) {
-					if (symbol.value == 0 || symbol.type != STT_FUNC) {
+					if (symbol.value == 0 && symbol.type == STT_FUNC) {
+						if (elf_plt_by_name(linker->target_elfobj, real_symname,
+						    &plt_entry) == false) {
+							fprintf(stderr, "external symbol '%s' is invalid and has no related PLT entry\n",
+							    real_symname);
+							return false;
+						} else {
+							char path_out[PATH_MAX];
+							struct elf_symbol tmp;
+
+							/*
+							 * Only do this if we haven't already installed a trampoline into the
+							 * PLT for this entry :) -- if that's the case we have to resolve the
+							 * symbol to it's actual shared library definition and not the executables
+							 * local PLT stub :) -- Otherwise it will create a linking loop
+							 */
+							if (plt_interposer_exists(linker, real_symname) == false) {
+								shiva_debug("Resolving helper function '%s' to external symbol via PLT entry %s@PLT\n",
+								    symbol.name, real_symname);
+								*(uint64_t *)GOT = plt_entry.addr + linker->target_base;
+								continue;
+							}
+							shiva_debug("Helper function is resolving PLT interposed function to %#lx\n", symbol.value + linker->target_base);
+							/*
+							 * RE: SHIVA_HELPER_CALL_EXTERNAL macros
+							 * If a PLT entry has been interposed (Which works by patching .plt directly)
+							 * then we must patch GOT with address of the shared library function
+							 * and not the address to it's local PLT stub in the executable.
+							 * -- But we cannot know the address of connect since ld-linux.so hasn't
+							 * loaded yet... so we must create a delayed relocation for this :)
+							 */
+							res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
+							if (res == false) {
+								fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
+								    symbol.name);
+								return false;
+							}
+							if (realpath(so_path, path_out) == NULL) {
+								perror("realpath");
+								return false;
+							}
+							delay_rel = shiva_malloc(sizeof(*delay_rel));
+							delay_rel->rel_unit = (uint8_t *)GOT;
+							delay_rel->rel_addr = (uint64_t)GOT;
+							delay_rel->symval = tmp.value;
+							delay_rel->symname = shiva_strdup(symbol.name);
+							strncpy(delay_rel->so_path, path_out, PATH_MAX);
+							delay_rel->so_path[PATH_MAX - 1] = '\0';
+							shiva_debug("Delayed relocation for GOT[%s] -> lookup %s\n",
+							    symbol.name, delay_rel->so_path);
+							/*
+							 * We don't fill out the value of the GOT. The shared library
+							 * whom the symbol lives in hasn't even been loaded by the
+							 * ld-linux.so yes. Once ld-linux.so is finished it will pass
+							 * control to shiva_post_linker() function once the base address
+							 * can be known of the library. We must insert a delayed relocation
+							 * entry.
+							 */
+							if (enable_post_linker(linker) == false) {
+								fprintf(stderr, "failed to enable delayed relocs\n");
+								return false;
+							}
+							TAILQ_INSERT_TAIL(&linker->tailq.delayed_reloc_list, delay_rel, _linkage);
+						}
+					} else if (symbol.value == 0 && symbol.type != STT_FUNC) {
 						fprintf(stderr, "external symbol is invalid: %s\n",
 						    symbol.name);
 						return false;
@@ -1117,6 +1202,17 @@ resolve_pltgot_entries(struct shiva_module *linker)
 
 						shiva_debug("Symbol '%s' is a %s, let's look it up in the shared libraries\n",
 						    symbol.name, res1 == true ? "GLOBAL_DATA entry" : "PLT entry");
+
+						if (linker->mode == SHIVA_LINKING_MODULE) {
+							shiva_debug("Checking for symbol %s inside of shiva binary first\n", current->symname);
+							if (elf_symbol_by_name(&linker->self, current->symname,
+							    &symbol) == true) {
+								shiva_debug("found symbol value within shiva binary, setting GOT(%p)[%s] to %#lx\n",
+								    GOT, current->symname, symbol.value);
+								*(uint64_t *)GOT = symbol.value;
+								continue;
+							}
+						}
 
 						res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 						if (res == false) {
@@ -1177,6 +1273,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				 * API, which can be resolved from the shiva binary itself.
 				 */
 				if (linker->mode == SHIVA_LINKING_MODULE) {
+					shiva_debug("Checking for symbol %s inside of shiva binary first\n", current->symname);
 					if (elf_symbol_by_name(&linker->self, current->symname,
 						 &symbol) == true) {
 						shiva_debug("found symbol value within shiva binary, setting GOT(%p)[%s] to %#lx\n",
@@ -3689,6 +3786,26 @@ apply_memory_protection(struct shiva_module *linker)
 	return true;
 }
 
+bool
+validate_microprogram(struct shiva_module *linker)
+{
+	struct elf_symbol sym;
+
+	if (elf_symbol_by_name(&linker->elfobj,
+	    "__shiva_module_pre_exec_phase", &sym) == true) {
+		shiva_debug("Shiva MicroProgram phase: PRE RTLD\n");
+		linker->flags |= SHIVA_MODULE_F_PRE_EXEC;
+	} else if (elf_symbol_by_name(&linker->elfobj,
+	    "__shiva_module_post_exec_phase", &sym) == true) {
+		shiva_debug("Shiva MicroProgram phase: POST RTLD\n");
+		linker->flags |= SHIVA_MODULE_F_POST_EXEC;
+	} else {
+		shiva_debug("Microprogram phase will be selected by Shiva\n");
+	}
+	return true;
+}
+#define MAX_PLT_TRAMPOLINES 4096
+
 /*
  * NOTE: const char *path: path to the ELF module
  */
@@ -3700,6 +3817,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	bool res;
 	uint64_t entry;
 	char *shiva_path;
+	struct elf_symbol sym;
 
 	linker = malloc(sizeof(struct shiva_module));
 	if (linker == NULL) {
@@ -3722,6 +3840,11 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	TAILQ_INIT(&linker->tailq.plt_list);
 	TAILQ_INIT(&linker->tailq.delayed_reloc_list);
 
+	if (hcreate_r(MAX_PLT_TRAMPOLINES, &linker->cache.plt_interposers) == 0) {
+		perror("hcreate_r");
+		return false;
+	}
+	
 	shiva_debug("elf_open_object(%s, ...)\n", path);
 
 	/*
@@ -3750,10 +3873,15 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	set_linker_mode(linker);
 	switch(linker->mode) {
 	case SHIVA_LINKING_MODULE:
-		shiva_debug("Shiva linker mode: Loadable Module\n");
+		if (validate_microprogram(linker) == false) {
+			fprintf("Failed to validate Shiva module: '%s'\n",
+			    elf_pathname(&ctx->elfobj));
+			return false;
+		}
+		shiva_debug("Shiva linker mode: MicroProgram\n");
 		break;
 	case SHIVA_LINKING_MICROCODE_PATCH:
-		shiva_debug("Shiva linker mode: Micropatching\n");
+		shiva_debug("Shiva linker mode: Patch\n");
 		break;
 	case SHIVA_LINKING_UNKNOWN:
 		shiva_debug("Unknown linking mode, quitting\n");
@@ -3824,16 +3952,44 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		return false;
 	}
 	shiva_debug("ModuleEntry point address: %#lx\n", ctx->module.runtime->entry_point);
-	
+
 	/*
-	 * XXX TODO
 	 * We must call transfer_to_module() in the event that the target program
 	 * uses no external linkage. This has to do with the fact that external linkage
 	 * triggers the post_linker to set the AT_ENTRY hook to shiva_init() so that
-	 * once ldlinux.so is done it passes control back to shiva_init(). On programs
-	 * without ...
+	 * once ldlinux.so is done it passes control back to shiva_init().
+	 * On Shiva microprograms (modules) that do are defined SHIVA_MODULE_PRE_RTLD
+	 * we call transfer_to_module(). It means that they are compiled (hopefully)
+	 * without external linkage beyond the musl-libc, libcapstone, and libelfmaster
+	 * functions that are embedded within the /lib/shiva static executable.
 	 */
-	//transfer_to_module(ctx, entry);
-	//shiva_debug("Successfully executed module\n");
+	if (linker->mode == SHIVA_LINKING_MODULE) {
+		/*
+		 * If we made it all the way here and we're in microprogram
+		 * mode (i.e. mode == SHIVA_LINKING_MODULE) and the module is
+		 * set to be running in pre-execution mode then we immediately
+		 * pass control to the module with transfer_to_module() --
+		 */
+		if (linker->flags & SHIVA_MODULE_F_PRE_EXEC) {
+			shiva_debug("Transfering control to module\n");
+			transfer_to_module(ctx);
+		} else {
+			/*
+			 * The module is configured to run post-rtld (e.g.
+			 * should execute the module after ld-linux.so). This
+			 * means we must enable the post linker, even though
+			 * there are no delayed relocs set, the post linker
+			 * will hook AT_ENTRY in the auxiliary vector so that
+			 * ld-linux.so passes control to shiva_init() when it
+			 * is finished. Then once done the module will pass
+			 * control to the real entry point of the target
+			 * executable.
+			 */
+			if (enable_post_linker(linker) == false) {
+				fprintf(stderr, "enable_post_linker() failed\n");
+				return false;
+			}
+		}
+	}
 	return true;
 }
