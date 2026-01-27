@@ -693,6 +693,7 @@ install_x86_64_xref_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
  * Add support for PLT redirection in AArch64 Shiva
  * Currently only a feature added in x86_64, allowing users to
  * hook functions within the PLT via symbol interposition.
+ * TODO check cache first before entering to save unnecessary duplicates
  */
 static bool
 install_plt_redirect(struct shiva_ctx *ctx, struct shiva_module *linker,
@@ -1003,7 +1004,7 @@ plt_interposer_exists(struct shiva_module *linker, const char *symname)
 
 	e.key = (char *)symname;
 	e.data = NULL;
-	if (hsearch_r(e, FIND, &ep, &linker->cache.plt_interposers) != 0)
+	if (hsearch_r(e, FIND, &ep, &linker->cache.plt_interposers) == 0)
 		return true;
 	return false;
 }
@@ -1113,6 +1114,9 @@ resolve_pltgot_entries(struct shiva_module *linker)
 							    real_symname);
 							return false;
 						} else {
+							char path_out[PATH_MAX];
+							struct elf_symbol tmp;
+
 							/*
 							 * Only do this if we haven't already installed a trampoline into the
 							 * PLT for this entry :) -- if that's the case we have to resolve the
@@ -1125,6 +1129,47 @@ resolve_pltgot_entries(struct shiva_module *linker)
 								*(uint64_t *)GOT = plt_entry.addr + linker->target_base;
 								continue;
 							}
+							shiva_debug("Helper function is resolving PLT interposed function to %#lx\n", symbol.value + linker->target_base);
+							/*
+							 * RE: SHIVA_HELPER_CALL_EXTERNAL macros
+							 * If a PLT entry has been interposed (Which works by patching .plt directly)
+							 * then we must patch GOT with address of the shared library function
+							 * and not the address to it's local PLT stub in the executable.
+							 * -- But we cannot know the address of connect since ld-linux.so hasn't
+							 * loaded yet... so we must create a delayed relocation for this :)
+							 */
+							res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
+							if (res == false) {
+								fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
+								    symbol.name);
+								return false;
+							}
+							if (realpath(so_path, path_out) == NULL) {
+								perror("realpath");
+								return false;
+							}
+							delay_rel = shiva_malloc(sizeof(*delay_rel));
+							delay_rel->rel_unit = (uint8_t *)GOT;
+							delay_rel->rel_addr = (uint64_t)GOT;
+							delay_rel->symval = tmp.value;
+							delay_rel->symname = shiva_strdup(symbol.name);
+							strncpy(delay_rel->so_path, path_out, PATH_MAX);
+							delay_rel->so_path[PATH_MAX - 1] = '\0';
+							shiva_debug("Delayed relocation for GOT[%s] -> lookup %s\n",
+							    symbol.name, delay_rel->so_path);
+							/*
+							 * We don't fill out the value of the GOT. The shared library
+							 * whom the symbol lives in hasn't even been loaded by the
+							 * ld-linux.so yes. Once ld-linux.so is finished it will pass
+							 * control to shiva_post_linker() function once the base address
+							 * can be known of the library. We must insert a delayed relocation
+							 * entry.
+							 */
+							if (enable_post_linker(linker) == false) {
+								fprintf(stderr, "failed to enable delayed relocs\n");
+								return false;
+							}
+							TAILQ_INSERT_TAIL(&linker->tailq.delayed_reloc_list, delay_rel, _linkage);
 						}
 					} else if (symbol.value == 0 && symbol.type != STT_FUNC) {
 						fprintf(stderr, "external symbol is invalid: %s\n",
