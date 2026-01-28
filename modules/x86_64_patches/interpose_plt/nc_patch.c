@@ -1,3 +1,4 @@
+#include <arpa/inet.h>
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -5,6 +6,8 @@
 #include <stdlib.h>
 
 #include "../../include/shiva_module.h"
+
+SHIVA_MODULE_POST_EXEC_PHASE;
 
 int
 connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)

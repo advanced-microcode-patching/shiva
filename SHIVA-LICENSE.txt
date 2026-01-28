@@ -1,7 +1,12 @@
-This is the software license for the Shiva micro-patching engine.
-Brought to you by the DARPA AMP program and Ryan O'Neill
+This is the software license for the Shiva micro-patching engine.  This work is
+brought to you by Ryan O'Neill through the DARPA AMP program and the DARPA
+EBOSS program (Contract No. HR001124C0488)
 
-Copyright (c) 2022-2023 Ryan O'Neill
+Any opinions, findings, and conclusions or recommendations expressed in this
+material are those of the author and do not necessarily reflect the views of
+the defense advanced research project agency (DARPA).
+
+Copyright (c) 2022-2026 Ryan O'Neill
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the

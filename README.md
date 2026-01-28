@@ -10,6 +10,13 @@ AMP project and currently supports the AArch64 architecture.
 Patches are written in C and compiled into ELF relocatable objects. Shiva loads,
 links, and patches the new code into memory.
 
+### DARPA
+
+Shiva has continued to evolve through the DARPA AMP and DARPA EBOSS (Contract No. HR001124C0488)
+programs. Any opinions, findings and conclusions or recommendations expressed in this material
+are those of the author and do not necessarily reflect the views of the Defense Advanced Research
+Project Agency (DARPA).
+
 ## Support
 
 OS: Linux
