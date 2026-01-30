@@ -12,7 +12,7 @@ int foo(void)
 
 int bar(void)
 {
-	printf("I am a function that won't be patched\n");
+	printf("I am bar()\n");
 	printf("I'm accessing bss_var and its value is %#x\n", bss_var);
 	return 0;
 }

@@ -72,6 +72,7 @@
 #define SHIVA_MODULE_F_HELPERS		(1UL << 5) /* Module has helper records */
 #define SHIVA_MODULE_F_PRE_EXEC		(1UL << 6) /* Module must execute before ld-linux.so */
 #define SHIVA_MODULE_F_POST_EXEC	(1UL << 7) /* Module must execute after ld-linux.so */
+#define SHIVA_MODULE_F_FORCE_MUSL_RESOLUTION (1UL << 8) /* Check musl-libc before shared libs */
 
 #define SHIVA_DT_NEEDED	(DT_LOOS + 10)
 #define SHIVA_DT_SEARCH (DT_LOOS + 11)
