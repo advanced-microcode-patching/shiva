@@ -1140,8 +1140,8 @@ resolve_pltgot_entries(struct shiva_module *linker)
 							 */
 							res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 							if (res == false) {
-								fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
-								    symbol.name);
+								fprintf(stderr, "Failed to resolve symbol '%s' in shared libs:%s\n",
+								    symbol.name, tmp.type == STT_GNU_IFUNC ? " unsupported STT_GNU_IFUNC symbol" : "");
 								return false;
 							}
 							if (realpath(so_path, path_out) == NULL) {
@@ -1193,9 +1193,8 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				bool res1, res2;
 
 				shiva_debug("Found symbol '%s' value %d\n", symbol.name, symbol.value);
+
 				if (symbol.value == 0 && (symbol.type == STT_FUNC || symbol.type == STT_OBJECT)) {
-					//res1 = symbol_is_glob_dat(linker->target_elfobj, symbol.name);
-					//res2 = elf_plt_by_name(linker->target_elfobj, symbol.name, &plt_entry);
 					if (1) {
 						struct elf_symbol tmp;
 						char path_out[PATH_MAX];
@@ -1217,8 +1216,8 @@ resolve_pltgot_entries(struct shiva_module *linker)
 
 						res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 						if (res == false) {
-							fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
-							    symbol.name);
+							fprintf(stderr, "Failed to resolve symbol '%s' in shared libs:%s\n",
+							    symbol.name, tmp.type == STT_GNU_IFUNC ? " unsupported STT_GNU_IFUNC symbol" : "");
 							return false;
 						}
 						if (realpath(so_path, path_out) == NULL) {
@@ -1287,10 +1286,11 @@ resolve_pltgot_entries(struct shiva_module *linker)
 
 				res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 				if (res == false) {
-					fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
-					    symbol.name);
-					return false;
-				}
+					fprintf(stderr, "Failed to resolve symbol '%s' in shared libs:%s\n",
+                                            symbol.name, tmp.type == STT_GNU_IFUNC ? " unsupported STT_GNU_IFUNC symbol" : "");
+                                        return false;
+                                }
+
 				if (realpath(so_path, path_out) == NULL) {
 					perror("realpath");
 					return false;
@@ -3891,7 +3891,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	switch(linker->mode) {
 	case SHIVA_LINKING_MODULE:
 		if (validate_microprogram(linker) == false) {
-			fprintf("Failed to validate Shiva module: '%s'\n",
+			fprintf(stderr, "Failed to validate Shiva module: '%s'\n",
 			    elf_pathname(&ctx->elfobj));
 			return false;
 		}
@@ -3899,7 +3899,7 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 		break;
 	case SHIVA_LINKING_MICROCODE_PATCH:
 		if (validate_micropatch(linker) == false) {
-			fprintf("Failed to validate Shiva micropatch: '%s'\n",
+			fprintf(stderr, "Failed to validate Shiva micropatch: '%s'\n",
 			    elf_pathname(&ctx->elfobj));
 			return false;
 		}
