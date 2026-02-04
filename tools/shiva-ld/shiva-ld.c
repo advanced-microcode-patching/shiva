@@ -1,5 +1,5 @@
 /*
- * Shiva Prelinker v1. AMP (Advanced microcode patching)
+ * Shiva Prelinker v2.0
  *
  * The Shiva Prelinker "/bin/shiva-ld" applies patch meta-data to the executable that
  * is being patched. The actual microcode patching doesn't take place until runtime.
@@ -2471,6 +2471,7 @@ int main(int argc, char **argv)
 
 	if (argc < 3) {
 usage:
+		printf("-=[Shiva Prelinker v2.0.]=-");
 		printf("Usage: %s -e test_bin -p patch1.o -i /lib/shiva"
 		    " -s /opt/shiva/modules/ -o test_bin_final [-cdN]\n", argv[0]);
 		printf("[-e] --input_exec	Input ELF executable\n");
@@ -2479,7 +2480,6 @@ usage:
 		printf("[-s] --search_path	Module search path (For patch object)\n");
 		printf("[-o] --output_exec	Output executable\n");
 		printf("[-d] --disable-cflow	Do not generate CFG data (i.e. .shiva.xref and .shiva.branch)\n");
-		printf("[-c] --cfs-binary	Necessary when prelinking cFS (NASA's core flight software)\n");
 		printf("[-N] --needed-injection	Injects shared object dependency via DT_NEEDED entry\n");
 		exit(0);
 	}
@@ -2535,9 +2535,6 @@ usage:
 			break;
 		case 'd':
 			ctx.flags |= SHIVA_LD_F_NO_CFG;
-			break;
-		case 'c':
-			ctx.flags |= SHIVA_LD_F_CFS_BINARY;
 			break;
 		default:
 			break;
