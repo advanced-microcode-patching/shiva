@@ -455,7 +455,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	uint8_t *old_dynamic_segment;
 	size_t old_dynamic_size, dynamic_index;
 	size_t old_shstrtab_len, old_e_shoff, old_e_shnum;
-	struct elf_section dynstr_shdr, last_shdr;
+	struct elf_section dynstr_shdr, dynsym_shdr, last_shdr;
 	size_t appended_shstrtab_len;
 
 	/*
@@ -934,6 +934,9 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			 * several section header (including .dynstr) moving them forward.
 			 * This will get the latest (new) address for .dynstr before updating
 			 * DT_STRTAB in the dynamic segment with this new value.
+			 * The reason we write it into old_dynamic_segment is because that
+			 * memory will be copied into our new dynamic segment within the new
+			 * PT_LOAD (that we converted the PT_NOTE phdr into).
 			 */
 			if (elf_section_by_name(&ctx->bin.elfobj, ".dynstr", &dynstr_shdr) == false) {
 				fprintf(stderr, "elf_section_by_name() failed on .dynstr\n");
@@ -944,8 +947,19 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				fprintf(stderr, "Failed to set DT_STRTAB value\n");
 				return false;
 			}
+			/*
+			 * Do the same same for .dynsym so that DT_SYMTAB is updated.
+			 */
+			if (elf_section_by_name(&ctx->bin.elfobj, ".dynsym", &dynsym_shdr) == false) {
+				fprintf(stderr, "elf_section_by_name() failed on .dynsym\n");
+				return false;
+			}
+			if (set_dtag(ctx, (ElfW(Dyn) *)old_dynamic_segment, DT_SYMTAB,
+			    dynsym_shdr.address) == false) {
+				fprintf(stderr, "Failed to set DT_SYMTAB value\n");
+				return false;
+			}
 		}
-
 		/*
 		 * Lseek to the offset of where our new segment begins.
 		 */
