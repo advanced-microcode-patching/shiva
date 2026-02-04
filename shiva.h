@@ -70,6 +70,8 @@
 #define SHIVA_MODULE_F_TRANSFORM	(1UL << 3) /* Module has transform records */
 #define SHIVA_MODULE_F_DELAYED_RELOCS	(1UL << 4) /* Module has delayed relocs to process */
 #define SHIVA_MODULE_F_HELPERS		(1UL << 5) /* Module has helper records */
+#define SHIVA_MODULE_F_PRE_EXEC		(1UL << 6) /* Module must execute before ld-linux.so */
+#define SHIVA_MODULE_F_POST_EXEC	(1UL << 7) /* Module must execute after ld-linux.so */
 
 #define SHIVA_DT_NEEDED	(DT_LOOS + 10)
 #define SHIVA_DT_SEARCH (DT_LOOS + 11)
@@ -464,6 +466,7 @@ struct shiva_module {
 		struct hsearch_data bss;
 		struct hsearch_data got;
 		struct hsearch_data helpers;
+		struct hsearch_data plt_interposers;
 	} cache;
 	shiva_linking_mode_t mode;
 	struct shiva_ctx *ctx; /* this is a pointer back to the main context */

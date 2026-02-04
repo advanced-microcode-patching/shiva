@@ -4,6 +4,9 @@
  */
 #include <stdint.h>
 
+#define SHIVA_MODULE_PRE_EXEC_PHASE 	int __shiva_module_pre_exec_phase;
+#define SHIVA_MODULE_POST_EXEC_PHASE	int __shiva_module_post_exec_phase;
+
 /*
  * These are the mnemonics for identifying the function
  * name, and the patch start/end address.
@@ -265,7 +268,7 @@
 #define SHIVA_HELPER_CALL_EXTERNAL_ARGS2(name, arg1, arg2)	\
 	__shiva_helper_orig_func_##name(arg1, arg2);
 
-#define SHIVA_HELPER_CALL_EXTERNAL_ARGS3(name, arg1, arg2)	\
+#define SHIVA_HELPER_CALL_EXTERNAL_ARGS3(name, arg1, arg2, arg3)	\
 	__shiva_helper_orig_func_##name(arg1, arg2, arg3)
 
 #define SHIVA_HELPER_CALL_EXTERNAL_ARGS4(name, arg1, arg2, arg3, arg4)	      \

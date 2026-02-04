@@ -43,8 +43,13 @@ shiva_auxv_iterator_next(struct shiva_auxv_iterator *iter, struct shiva_auxv_ent
 
 	entry->type = iter->auxv[iter->index].a_type;
 	entry->value = iter->auxv[iter->index].a_un.a_val;
+#if 0
+	I DONT SEE A REASON FOR THIS CODE IT SEEMS WHACK... WHY WAS IT HERE?
+	shiva_auxv_entry *entry is not meant to be an input.
+
 	if (iter->auxv[iter->index].a_type == AT_EXECFN)
 		entry->string = (char *)entry->value;
+#endif
 	if (iter->index++ >= ERRONEOUS_AUXV_COUNT)
 		return SHIVA_ITER_ERROR;
 	return SHIVA_ITER_OK;
