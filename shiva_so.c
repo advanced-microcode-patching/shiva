@@ -39,6 +39,10 @@ shiva_so_resolve_symbol(struct shiva_module *linker, char *symname, struct elf_s
 			continue;
 		if (out->bind != STB_GLOBAL && out->bind != STB_WEAK)
 			continue;
+		if (out->type == STT_GNU_IFUNC) {
+			shiva_debug("Skipping unsupported STT_IFUNC symbol type for %s\n", symname);
+			return false;
+		}
 		/*
 		 * Fill in the pathname to the shared object that this symbol
 		 * lives within.

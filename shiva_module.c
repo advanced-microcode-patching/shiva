@@ -1140,8 +1140,8 @@ resolve_pltgot_entries(struct shiva_module *linker)
 							 */
 							res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 							if (res == false) {
-								fprintf(stderr, "1. Failed to resolve symbol '%s' in shared libs\n",
-								    symbol.name);
+								fprintf(stderr, "Failed to resolve symbol '%s' in shared libs:%s\n",
+								    symbol.name, tmp.type == STT_GNU_IFUNC ? " unsupported STT_GNU_IFUNC symbol" : "");
 								return false;
 							}
 							if (realpath(so_path, path_out) == NULL) {
@@ -1193,9 +1193,8 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				bool res1, res2;
 
 				shiva_debug("Found symbol '%s' value %d\n", symbol.name, symbol.value);
+
 				if (symbol.value == 0 && (symbol.type == STT_FUNC || symbol.type == STT_OBJECT)) {
-					//res1 = symbol_is_glob_dat(linker->target_elfobj, symbol.name);
-					//res2 = elf_plt_by_name(linker->target_elfobj, symbol.name, &plt_entry);
 					if (1) {
 						struct elf_symbol tmp;
 						char path_out[PATH_MAX];
@@ -1203,7 +1202,8 @@ resolve_pltgot_entries(struct shiva_module *linker)
 						shiva_debug("Symbol '%s' is a %s, let's look it up in the shared libraries\n",
 						    symbol.name, res1 == true ? "GLOBAL_DATA entry" : "PLT entry");
 
-						if (linker->mode == SHIVA_LINKING_MODULE) {
+						if (linker->mode == SHIVA_LINKING_MODULE ||
+						    (linker->flags & SHIVA_MODULE_F_FORCE_MUSL_RESOLUTION)) {
 							shiva_debug("Checking for symbol %s inside of shiva binary first\n", current->symname);
 							if (elf_symbol_by_name(&linker->self, current->symname,
 							    &symbol) == true) {
@@ -1216,8 +1216,8 @@ resolve_pltgot_entries(struct shiva_module *linker)
 
 						res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 						if (res == false) {
-							fprintf(stderr, "2. Failed to resolve symbol '%s' in shared libs\n",
-							    symbol.name);
+							fprintf(stderr, "Failed to resolve symbol '%s' in shared libs:%s\n",
+							    symbol.name, tmp.type == STT_GNU_IFUNC ? " unsupported STT_GNU_IFUNC symbol" : "");
 							return false;
 						}
 						if (realpath(so_path, path_out) == NULL) {
@@ -1272,7 +1272,8 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				 * table within the shiva binary itself, since the modules use libelfmaster
 				 * API, which can be resolved from the shiva binary itself.
 				 */
-				if (linker->mode == SHIVA_LINKING_MODULE) {
+				if (linker->mode == SHIVA_LINKING_MODULE ||
+				   (linker->flags & SHIVA_MODULE_F_FORCE_MUSL_RESOLUTION)) {
 					shiva_debug("Checking for symbol %s inside of shiva binary first\n", current->symname);
 					if (elf_symbol_by_name(&linker->self, current->symname,
 						 &symbol) == true) {
@@ -1285,10 +1286,10 @@ resolve_pltgot_entries(struct shiva_module *linker)
 
 				res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 				if (res == false) {
-					fprintf(stderr, "3. Failed to resolve symbol '%s' in shared libs\n",
-					    symbol.name);
-					return false;
-				}
+					fprintf(stderr, "Failed to resolve symbol '%s' in shared libs:%s\n",
+                                            symbol.name, tmp.type == STT_GNU_IFUNC ? " unsupported STT_GNU_IFUNC symbol" : "");
+                                        return false;
+                                }
 				if (realpath(so_path, path_out) == NULL) {
 					perror("realpath");
 					return false;
@@ -3786,7 +3787,22 @@ apply_memory_protection(struct shiva_module *linker)
 	return true;
 }
 
-bool
+static bool
+validate_micropatch(struct shiva_module *linker)
+{
+	struct elf_symbol sym;
+
+	if (elf_symbol_by_name(&linker->elfobj,
+	    "__shiva_module_musl_resolution", &sym) == true) {
+		shiva_debug("Shiva MicroPatch: Enabled MUSL resolution\n");
+		linker->flags |= SHIVA_MODULE_F_FORCE_MUSL_RESOLUTION;
+	} else {
+		shiva_debug("Shiva MicroPatch: Normal linking process\n");
+	}
+	return true;
+}
+
+static bool
 validate_microprogram(struct shiva_module *linker)
 {
 	struct elf_symbol sym;
@@ -3874,13 +3890,18 @@ shiva_module_loader(struct shiva_ctx *ctx, const char *path, struct shiva_module
 	switch(linker->mode) {
 	case SHIVA_LINKING_MODULE:
 		if (validate_microprogram(linker) == false) {
-			fprintf("Failed to validate Shiva module: '%s'\n",
+			fprintf(stderr, "Failed to validate Shiva module: '%s'\n",
 			    elf_pathname(&ctx->elfobj));
 			return false;
 		}
 		shiva_debug("Shiva linker mode: MicroProgram\n");
 		break;
 	case SHIVA_LINKING_MICROCODE_PATCH:
+		if (validate_micropatch(linker) == false) {
+			fprintf(stderr, "Failed to validate Shiva micropatch: '%s'\n",
+			    elf_pathname(&ctx->elfobj));
+			return false;
+		}
 		shiva_debug("Shiva linker mode: Patch\n");
 		break;
 	case SHIVA_LINKING_UNKNOWN:
