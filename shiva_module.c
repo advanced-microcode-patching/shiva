@@ -1140,7 +1140,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 							 */
 							res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 							if (res == false) {
-								fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
+								fprintf(stderr, "1. Failed to resolve symbol '%s' in shared libs\n",
 								    symbol.name);
 								return false;
 							}
@@ -1216,7 +1216,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 
 						res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 						if (res == false) {
-							fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
+							fprintf(stderr, "2. Failed to resolve symbol '%s' in shared libs\n",
 							    symbol.name);
 							return false;
 						}
@@ -1285,7 +1285,7 @@ resolve_pltgot_entries(struct shiva_module *linker)
 
 				res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 				if (res == false) {
-					fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
+					fprintf(stderr, "3. Failed to resolve symbol '%s' in shared libs\n",
 					    symbol.name);
 					return false;
 				}
@@ -1739,7 +1739,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
 						 */
 						res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 						if (res == false) {
-							fprintf(stderr, "Failed to resolve symbol '%s' in shared libs\n",
+							fprintf(stderr, "4. Failed to resolve symbol '%s' in shared libs\n",
 							    symbol.name);
 							return false;
 						}
@@ -1757,7 +1757,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
 						delay_rel->so_path[PATH_MAX - 1] = '\0';
 
 						if (enable_post_linker(linker) == false) {
-							fprintf(stderr, "Failed to enable delayed relocs\n");
+							fprintf(stderr, "5. Failed to enable delayed relocs\n");
 							return false;
 						}
 						shiva_debug("Delayed relocation for symbol '%s', must resolve in %s\n",
