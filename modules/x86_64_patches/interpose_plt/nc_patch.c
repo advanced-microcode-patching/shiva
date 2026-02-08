@@ -7,8 +7,6 @@
 
 #include "../../include/shiva_module.h"
 
-SHIVA_MODULE_POST_EXEC_PHASE;
-
 int
 connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 {
@@ -17,9 +15,6 @@ connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 	if (port == 31337) {
 		printf("Suspicious activity... connect to port 31337?\n");
 	}
-	/*
-	 * Now call the original pow() :)
-	 */
 	int ret = SHIVA_HELPER_CALL_EXTERNAL_ARGS3(connect, sockfd, addr, addrlen);
 	return ret;
 }
