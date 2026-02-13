@@ -23,7 +23,7 @@ void my_idle(void)
 {
 	frighten = true;
 	frightenTick = 0;
-	_Z4idlev();
+	_Z4idlev(); // C++ mangled name for idle()
 }
 
 void glutIdleFunc(void)
