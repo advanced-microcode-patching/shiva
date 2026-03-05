@@ -53,8 +53,8 @@
 				asm volatile ("lea 24(%%rbp), %0" : "=g"(var));
 #define SHIVA_T_LEA_BP_32(var)	register int64_t var;	\
 				asm volatile ("lea 32(%%rbp), %0" : "=g"(var));
-
-
+#define SHIVA_T_LEA_BP(var, offset)  \
+	register int64_t var = (int64_t)((char*)__builtin_frame_address(0) + (offset));
 
 #elif __aarch64__
 

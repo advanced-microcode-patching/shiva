@@ -474,7 +474,7 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 			}
 			break;
 		default:
-			printf("Unhandled relocation type %d: %s\n", rel_entry->rel.type,
+			aslr_debug("Unhandled relocation type %d: %s\n", rel_entry->rel.type,
 			    elf_reloc_type_string(&ctx->elfobj, rel_entry->rel.type));
 			break;
 	}
@@ -525,22 +525,15 @@ remove_old_function(struct shiva_ctx *ctx, struct func_entry *fe)
 	size_t pgoff;
 
 	/*
-	 * Simply zero it out
+	 * Scrub old binary with zeroes. Perhaps this should be random
+	 * bytes in the future.
 	 */
-	aslr_debug("removing old code/data\n");
-	aslr_debug("fe: %p\n", fe);
-	aslr_debug("fe->runtime_vaddr: %#lx\n", fe->runtime_vaddr);
-
 	pgoff = ELF_PAGEOFFSET(fe->runtime_vaddr);
-	aslr_debug("pgoff: %zu\n", pgoff);
 
 	ret = mprotect((void *)(fe->runtime_vaddr & ~4095), fe->func_len + pgoff, PROT_READ|PROT_WRITE|PROT_EXEC);
-	aslr_debug("Calling memset on %#lx of %d bytes\n", fe->runtime_vaddr, fe->func_len - 1);
 	memset((void *)fe->runtime_vaddr, 0, fe->func_len - 1);
-	aslr_debug("Done calling memset\n");
 	ret = mprotect((void *)(fe->runtime_vaddr & ~4095), fe->func_len + pgoff, PROT_READ|PROT_EXEC);
 
-	aslr_debug("Returning... \n");
 	return ret ? false : true;
 }
 
@@ -603,3 +596,4 @@ shiva_init(struct shiva_ctx *ctx)
 	}
 	aslr_debug("Leaving module\n");
 }
+
