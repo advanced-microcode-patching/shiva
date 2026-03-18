@@ -17,6 +17,9 @@
 #include <libelf.h>
 */
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Werror=implicit-function-declaration"
+#pragma GCC diagnostic ignored "-Werror=undeclared-identifier"	 // may not exist, try without
 #include "shiva.h"
 
 #include <gcc-plugin.h>
@@ -240,6 +243,7 @@ shiva_dwarf_resolve_die_location(Dwarf_Debug dbg, Dwarf_Die var_die, Dwarf_Addr 
 		}
 	}
 out:
+	shiva_debug("returning true!\n");
 	dwarf_dealloc(dbg, loc_attr, DW_DLA_ATTR);
 	dwarf_dealloc(dbg, loclist, DW_DLA_BLOCK);
 	return res;
@@ -301,6 +305,7 @@ shiva_dwarf_resolve_variable(struct shiva_ctx *ctx, const char *funcname, const 
 				dwarf_dealloc(dbg, name, DW_DLA_STRING);
 				dwarf_dealloc(dbg, attr, DW_DLA_ATTR);
 				res = shiva_dwarf_resolve_die_location(dbg, child, pc, location);
+				shiva_debug("shiva_dwarf_resolve_die_location() sucessful!\n");
 				dwarf_dealloc(dbg, child, DW_DLA_DIE);
 				dwarf_dealloc(dbg, func_die, DW_DLA_DIE);
 				return res;
@@ -745,159 +750,176 @@ splice_gimple_pass(void)
 namespace {
     class splice_pass : public gimple_opt_pass {
     public:
-        splice_pass(gcc::context *ctxt)
-            : gimple_opt_pass(splice_pass_data_constructor, ctxt) {}
+	splice_pass(gcc::context *ctxt)
+	    : gimple_opt_pass(splice_pass_data_constructor, ctxt) {}
 
-        virtual unsigned int execute(function *) override {
-            // Your original splice_gimple_pass logic goes here (the entire body)
-            // Iterate over cgraph nodes, DWARF resolution, GIMPLE rewriting, etc.
-            // Return 0 on success
-            struct cgraph_node *node;
-            basic_block bb;
+	virtual unsigned int execute(function *) override {
+	    // Your original splice_gimple_pass logic goes here (the entire body)
+	    // Iterate over cgraph nodes, DWARF resolution, GIMPLE rewriting, etc.
+	    // Return 0 on success
+	    struct cgraph_node *node;
+	    basic_block bb;
+	    static char *processed_target = NULL;
 
-	shiva_debug("Side of gimple pass\n");
-            FOR_EACH_DEFINED_FUNCTION(node) {
+	shiva_debug("Inside of gimple pass\n");
+	    FOR_EACH_DEFINED_FUNCTION(node) {
 		shiva_debug("Iterating over function\n");
-                if (!gimple_has_body_p(node->decl))
-                    continue;
+		if (!gimple_has_body_p(node->decl))
+		    continue;
 
-                const char *funcname = IDENTIFIER_POINTER(DECL_NAME(node->decl));
+		const char *funcname = IDENTIFIER_POINTER(DECL_NAME(node->decl));
 
-                if (strncmp(funcname, "__shiva_splice_fn_name_", 23) != 0)
-                    continue;
+		if (strncmp(funcname, "__shiva_splice_fn_name_", 23) != 0)
+		    continue;
 
-                const char *target_func = funcname + 23;
+		const char *target_func = funcname + 23;
+		if (processed_target && strcmp(target_func, processed_target) == 0) {
+			shiva_debug("Target %s already processed\n", target_func);
+			continue;
+		}
+		free(processed_target);
+		processed_target = xstrdup(target_func);
 
-                shiva_dwarf_loc_t *vars = NULL;
-                int var_count = 0;
-                Dwarf_Die func_die = NULL;
+#if 0
+		char expected_name[256];
+		snprintf(expected_name, sizeof(expected_name),
+		    "__shiva_splice_fn_name_%s", target_func);
+		if (strcmp(funcname, expected_name) == 0) {
+			shiva_debug("Skipping self-splicing of %s\n", funcname);
+			continue;
+		}
+#endif
+		shiva_dwarf_loc_t *vars = NULL;
+		int var_count = 0;
+		Dwarf_Die func_die = NULL;
 
-                if (shiva_dwarf_find_function(shiva_ctx.dwarf.debug, target_func, &func_die)) {
-                    Dwarf_Die child = NULL, sibling = NULL;
-                    Dwarf_Error err;
-                    int ret = dwarf_child(func_die, &child, &err);
+		if (shiva_dwarf_find_function(shiva_ctx.dwarf.debug, target_func, &func_die)) {
+		    Dwarf_Die child = NULL, sibling = NULL;
+		    Dwarf_Error err;
+		    int ret = dwarf_child(func_die, &child, &err);
 
-                    if (ret == DW_DLV_OK) {
-                        while (child != NULL) {
-                            Dwarf_Half tag;
+		    if (ret == DW_DLV_OK) {
+			while (child != NULL) {
+			    Dwarf_Half tag;
 
-                            if (dwarf_tag(child, &tag, &err) == DW_DLV_OK &&
-                                (tag == DW_TAG_variable || tag == DW_TAG_formal_parameter)) {
-                                Dwarf_Attribute attr;
-                                char *var_name = NULL;
+			    if (dwarf_tag(child, &tag, &err) == DW_DLV_OK &&
+				(tag == DW_TAG_variable || tag == DW_TAG_formal_parameter)) {
+				Dwarf_Attribute attr;
+				char *var_name = NULL;
 
-                                if (dwarf_attr(child, DW_AT_name, &attr, &err) == DW_DLV_OK) {
-                                    if (dwarf_formstring(attr, &var_name, &err) == DW_DLV_OK) {
-                                        shiva_dwarf_loc_t loc = {0};
+				if (dwarf_attr(child, DW_AT_name, &attr, &err) == DW_DLV_OK) {
+				    if (dwarf_formstring(attr, &var_name, &err) == DW_DLV_OK) {
+					shiva_dwarf_loc_t loc = {0};
 
-                                        loc.symname = xstrdup(var_name);
+					loc.symname = xstrdup(var_name);
 
-                                        if (shiva_dwarf_resolve_variable(&shiva_ctx, target_func, var_name, insert_addr, &loc)) {
-                                            vars = (shiva_dwarf_loc_t *)xrealloc(vars, (var_count + 1) * sizeof(shiva_dwarf_loc_t));
-                                            vars[var_count] = loc;
-                                            var_count++;
-                                        } else {
-                                            free(loc.symname);
-                                        }
-                                        dwarf_dealloc(shiva_ctx.dwarf.debug, var_name, DW_DLA_STRING);
-                                    }
-                                    dwarf_dealloc(shiva_ctx.dwarf.debug, attr, DW_DLA_ATTR);
-                                }
-                            }
-                            ret = dwarf_siblingof_b(shiva_ctx.dwarf.debug, child, true, &sibling, &err);
-                            dwarf_dealloc(shiva_ctx.dwarf.debug, child, DW_DLA_DIE);
-                            child = sibling;
-                        }
-                    }
-                    dwarf_dealloc(shiva_ctx.dwarf.debug, func_die, DW_DLA_DIE);
-                }
+					if (shiva_dwarf_resolve_variable(&shiva_ctx, target_func, var_name, insert_addr, &loc)) {
+					    vars = (shiva_dwarf_loc_t *)xrealloc(vars, (var_count + 1) * sizeof(shiva_dwarf_loc_t));
+					    vars[var_count] = loc;
+					    var_count++;
+					    shiva_debug("Sucessfully located %s at %#lx\n", var_name, insert_addr);
+					} else {
+					    free(loc.symname);
+					}
+					dwarf_dealloc(shiva_ctx.dwarf.debug, var_name, DW_DLA_STRING);
+				    }
+				    dwarf_dealloc(shiva_ctx.dwarf.debug, attr, DW_DLA_ATTR);
+				}
+			    }
+			    ret = dwarf_siblingof_b(shiva_ctx.dwarf.debug, child, true, &sibling, &err);
+			    dwarf_dealloc(shiva_ctx.dwarf.debug, child, DW_DLA_DIE);
+			    child = sibling;
+			}
+		    }
+		    dwarf_dealloc(shiva_ctx.dwarf.debug, func_die, DW_DLA_DIE);
+		}
 
-                push_cfun(DECL_STRUCT_FUNCTION(node->decl));
+		push_cfun(DECL_STRUCT_FUNCTION(node->decl));
 
-                gimple_seq body = gimple_body(node->decl);
-                gimple_stmt_iterator gsi;
+		gimple_seq body = gimple_body(node->decl);
+		gimple_stmt_iterator gsi;
 
-                FOR_EACH_BB_FN(bb, cfun) {
-                    for (gsi = gsi_start_bb(bb); !gsi_end_p(gsi); gsi_next(&gsi)) {
-                        gimple *stmt = gsi_stmt(gsi);
+		FOR_EACH_BB_FN(bb, cfun) {
+		    for (gsi = gsi_start_bb(bb); !gsi_end_p(gsi); gsi_next(&gsi)) {
+			gimple *stmt = gsi_stmt(gsi);
 
-                        if (gimple_code(stmt) == GIMPLE_ASSIGN || gimple_code(stmt) == GIMPLE_COND) {
-                            tree lhs = gimple_num_ops(stmt) > 1 ? gimple_op(stmt, 0) : NULL;
-                            tree rhs = gimple_num_ops(stmt) > 1 ? gimple_op(stmt, 1) : NULL;
+			if (gimple_code(stmt) == GIMPLE_ASSIGN || gimple_code(stmt) == GIMPLE_COND) {
+			    tree lhs = gimple_num_ops(stmt) > 1 ? gimple_op(stmt, 0) : NULL;
+			    tree rhs = gimple_num_ops(stmt) > 1 ? gimple_op(stmt, 1) : NULL;
 
-                            for (int i = 0; i < var_count; i++) {
-                                // Handle LHS
-                                if (lhs && TREE_CODE(lhs) == VAR_DECL && strcmp(IDENTIFIER_POINTER(DECL_NAME(lhs)), vars[i].symname) == 0) {
-                                    if (vars[i].type == SHIVA_DWARF_LOC_STACK) {
-                                        tree mem_ref = build2(MEM_REF, TREE_TYPE(lhs), build_int_cst(ptr_type_node, vars[i].stack_offset), build_int_cst(ptr_type_node, 0));
-                                        gimple_set_op(stmt, 0, mem_ref);
-                                    } else if (vars[i].type == SHIVA_DWARF_LOC_REG) {
-                                        char asm_str[64];
-                                        const char *reg_name = shiva_reg_names[vars[i].reg];
-                                        snprintf(asm_str, sizeof(asm_str), "movl %%%s, %%eax", reg_name);
-                                        gimple *asm_stmt = gimple_build_asm_vec(asm_str, NULL, NULL, NULL, NULL);
-                                        gsi_insert_after(&gsi, asm_stmt, GSI_SAME_STMT);
-                                        tree temp = create_tmp_var(TREE_TYPE(lhs), "temp");
-                                        gimple_set_op(stmt, 0, temp);
-                                    }
-                                }
-                                // Handle RHS (similar for rhs, ADDR_EXPR)
-                                if (rhs && TREE_CODE(rhs) == VAR_DECL && strcmp(IDENTIFIER_POINTER(DECL_NAME(rhs)), vars[i].symname) == 0) {
-                                    if (vars[i].type == SHIVA_DWARF_LOC_STACK) {
-                                        tree mem_ref = build2(MEM_REF, TREE_TYPE(rhs), build_int_cst(ptr_type_node, vars[i].stack_offset), build_int_cst(ptr_type_node, 0));
-                                        gimple_set_op(stmt, 1, mem_ref);
-                                    } else if (vars[i].type == SHIVA_DWARF_LOC_REG) {
-                                        char asm_str[64];
-                                        const char *reg_name = shiva_reg_names[vars[i].reg];
-                                        snprintf(asm_str, sizeof(asm_str), "movl %%%s, %%eax", reg_name);
-                                        gimple *asm_stmt = gimple_build_asm_vec(asm_str, NULL, NULL, NULL, NULL);
-                                        gsi_insert_after(&gsi, asm_stmt, GSI_SAME_STMT);
-                                        tree temp = create_tmp_var(TREE_TYPE(rhs), "temp");
-                                        gimple_set_op(stmt, 1, temp);
-                                    }
-                                }
-                                // Handle ADDR_EXPR (similar, add your code)
-                            }
-                        }
-                    }
-                }
+			    for (int i = 0; i < var_count; i++) {
+				// Handle LHS
+				if (lhs && TREE_CODE(lhs) == VAR_DECL && strcmp(IDENTIFIER_POINTER(DECL_NAME(lhs)), vars[i].symname) == 0) {
+				    if (vars[i].type == SHIVA_DWARF_LOC_STACK) {
+					tree mem_ref = build2(MEM_REF, TREE_TYPE(lhs), build_int_cst(ptr_type_node, vars[i].stack_offset), build_int_cst(ptr_type_node, 0));
+					gimple_set_op(stmt, 0, mem_ref);
+				    } else if (vars[i].type == SHIVA_DWARF_LOC_REG) {
+					char asm_str[64];
+					const char *reg_name = shiva_reg_names[vars[i].reg];
+					snprintf(asm_str, sizeof(asm_str), "movl %%%s, %%eax", reg_name);
+					gimple *asm_stmt = gimple_build_asm_vec(asm_str, NULL, NULL, NULL, NULL);
+					gsi_insert_after(&gsi, asm_stmt, GSI_SAME_STMT);
+					tree temp = create_tmp_var(TREE_TYPE(lhs), "temp");
+					gimple_set_op(stmt, 0, temp);
+				    }
+				}
+				// Handle RHS (similar for rhs, ADDR_EXPR)
+				if (rhs && TREE_CODE(rhs) == VAR_DECL && strcmp(IDENTIFIER_POINTER(DECL_NAME(rhs)), vars[i].symname) == 0) {
+				    if (vars[i].type == SHIVA_DWARF_LOC_STACK) {
+					tree mem_ref = build2(MEM_REF, TREE_TYPE(rhs), build_int_cst(ptr_type_node, vars[i].stack_offset), build_int_cst(ptr_type_node, 0));
+					gimple_set_op(stmt, 1, mem_ref);
+				    } else if (vars[i].type == SHIVA_DWARF_LOC_REG) {
+					char asm_str[64];
+					const char *reg_name = shiva_reg_names[vars[i].reg];
+					snprintf(asm_str, sizeof(asm_str), "movl %%%s, %%eax", reg_name);
+					gimple *asm_stmt = gimple_build_asm_vec(asm_str, NULL, NULL, NULL, NULL);
+					gsi_insert_after(&gsi, asm_stmt, GSI_SAME_STMT);
+					tree temp = create_tmp_var(TREE_TYPE(rhs), "temp");
+					gimple_set_op(stmt, 1, temp);
+				    }
+				}
+				// Handle ADDR_EXPR (similar, add your code)
+			    }
+			}
+		    }
+		}
 
-                // Register preservation at entry
-                basic_block entry_bb = ENTRY_BLOCK_PTR_FOR_FN(cfun);
-                gimple_seq prelude = NULL;
-                gimple *push_rax = gimple_build_asm_vec("push %rax", NULL, NULL, NULL, NULL);
-                gimple *push_rbx = gimple_build_asm_vec("push %rbx", NULL, NULL, NULL, NULL);
-                gimple_seq_add_stmt(&prelude, push_rax);
-                gimple_seq_add_stmt(&prelude, push_rbx);
-                gimple_seq_add_seq(&entry_bb->il.gimple.seq, prelude);
+		// Register preservation at entry
+		basic_block entry_bb = ENTRY_BLOCK_PTR_FOR_FN(cfun);
+		gimple_seq prelude = NULL;
+		gimple *push_rax = gimple_build_asm_vec("push %rax", NULL, NULL, NULL, NULL);
+		gimple *push_rbx = gimple_build_asm_vec("push %rbx", NULL, NULL, NULL, NULL);
+		gimple_seq_add_stmt(&prelude, push_rax);
+		gimple_seq_add_stmt(&prelude, push_rbx);
+		gimple_seq_add_seq(&entry_bb->il.gimple.seq, prelude);
 
-                // Register restoration and jump at exit
-                basic_block exit_bb = EXIT_BLOCK_PTR_FOR_FN(cfun);
-                basic_block last_bb = exit_bb->prev_bb;
-                gimple_seq postlude = NULL;
-                gimple *pop_rbx = gimple_build_asm_vec("pop %rbx", NULL, NULL, NULL, NULL);
-                gimple *pop_rax = gimple_build_asm_vec("pop %rax", NULL, NULL, NULL, NULL);
-                char jmp_str[64];
-                snprintf(jmp_str, sizeof(jmp_str), "jmp 0x%llx", (unsigned long long)extend_addr);
-                gimple *jmp = gimple_build_asm_vec(jmp_str, NULL, NULL, NULL, NULL);
-                gimple_seq_add_stmt(&postlude, pop_rbx);
-                gimple_seq_add_stmt(&postlude, pop_rax);
-                gimple_seq_add_stmt(&postlude, jmp);
-                gimple_seq_add_seq(&last_bb->il.gimple.seq, postlude);
+		// Register restoration and jump at exit
+		basic_block exit_bb = EXIT_BLOCK_PTR_FOR_FN(cfun);
+		basic_block last_bb = exit_bb->prev_bb;
+		gimple_seq postlude = NULL;
+		gimple *pop_rbx = gimple_build_asm_vec("pop %rbx", NULL, NULL, NULL, NULL);
+		gimple *pop_rax = gimple_build_asm_vec("pop %rax", NULL, NULL, NULL, NULL);
+		char jmp_str[64];
+		snprintf(jmp_str, sizeof(jmp_str), "jmp 0x%llx", (unsigned long long)extend_addr);
+		gimple *jmp = gimple_build_asm_vec(jmp_str, NULL, NULL, NULL, NULL);
+		gimple_seq_add_stmt(&postlude, pop_rbx);
+		gimple_seq_add_stmt(&postlude, pop_rax);
+		gimple_seq_add_stmt(&postlude, jmp);
+		gimple_seq_add_seq(&last_bb->il.gimple.seq, postlude);
 
-                pop_cfun();
+		pop_cfun();
 
-                for (int i = 0; i < var_count; i++)
-                    free(vars[i].symname);
-                free(vars);
-            }
+		for (int i = 0; i < var_count; i++)
+		    free(vars[i].symname);
+		free(vars);
+	    }
 
-            return 0;
-        }
+	    return 0;
+	}
 
-        virtual splice_pass *clone() override {
-            return this;  /* No cloning needed for simple passes */
-        }
+	virtual splice_pass *clone() override {
+	    return this;  /* No cloning needed for simple passes */
+	}
     };
 }  /* Anonymous namespace to avoid name clashes */
 #if 0
@@ -965,3 +987,5 @@ int plugin_init(struct plugin_name_args *plugin_info, struct plugin_gcc_version 
 
     return 0;
 }
+#pragma CC diagnostic pop
+
