@@ -1,7 +1,7 @@
 # Makefile for SHIVA GCC plugin (NetBSD-style formatting welcome)
 # Makefile for SHIVA GCC plugin (NetBSD-style formatting welcome)
 
-CXX      := g++
+CXX      := gcc
 CXXFLAGS := -std=c++11 -fPIC -Wall -Wextra -O2 -fno-rtti -fvisibility=hidden
 LDFLAGS  := -shared 
 TARGET   := shiva_dwarf_plugin.so
