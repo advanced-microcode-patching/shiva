@@ -1287,9 +1287,9 @@ resolve_pltgot_entries(struct shiva_module *linker)
 				res = shiva_so_resolve_symbol(linker, (char *)symbol.name, &tmp, &so_path);
 				if (res == false) {
 					fprintf(stderr, "Failed to resolve symbol '%s' in shared libs:%s\n",
-                                            symbol.name, tmp.type == STT_GNU_IFUNC ? " unsupported STT_GNU_IFUNC symbol" : "");
-                                        return false;
-                                }
+					    symbol.name, tmp.type == STT_GNU_IFUNC ? " unsupported STT_GNU_IFUNC symbol" : "");
+					return false;
+				}
 				if (realpath(so_path, path_out) == NULL) {
 					perror("realpath");
 					return false;
@@ -1633,7 +1633,7 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
     struct shiva_transform *transform)
 {
 	struct shiva_module_plt_entry *current = NULL;
-	struct shiva_module_section_mapping *smap_current;
+	struct shiva_module_section_mapping *smap_current, *smap_current2;
 	struct shiva_module_section_mapping smap, smap_tmp;
 	uint8_t *rel_unit;
 	uint64_t symval;
@@ -1647,15 +1647,18 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
 	char *symbol_section;
 	struct elf_section tmp_shdr;
 
-	char *shdrname = strrchr(rel.shdrname, '.');
+
+	char *shdrname = rel.shdrname + strlen(".rela");
 	if (shdrname == NULL) {
 		shiva_debug("strrchr failed\n");
 		return false;
 	}
+
 	if (get_section_mapping(linker, shdrname, &smap) == false) {
 		shiva_debug("Failed to retrieve section data for %s\n", rel.shdrname);
 		return false;
 	}
+
 	shiva_debug("Successfully retrieved section mapping for %s\n", shdrname);
 	shiva_debug("linker->text_vaddr: %#lx\n", linker->text_vaddr);
 	shiva_debug("linker->data_vaddr: %#lx\n", linker->data_vaddr);
@@ -1935,35 +1938,70 @@ apply_relocation(struct shiva_module *linker, struct elf_relocation rel,
 shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 
 #if defined(__x86_64__)
+	bool found_target_section = false;
+
+	/*
+	 * So far I've only seen these two relocations as they apply to building jump-tables
+	 * and function pointer tables in .rodata. We added this as part of a Galois demo
+	 * patch recently, that required this support. I reckon we will run into it in the
+	 * future too, so we should have support.
+	 * R_X86_64_64 and R_X86_64_PC64 respectively
+	 */
 	switch(rel.type) {
 	case R_X86_64_64:
-		shiva_debug("Applying R_X86_64_64 relocation\n");
-		fprintf(stderr, "Unsupported relocation. Don't use -fno-pic on x86_64 shiva modules\n");
-		return false;
-		if (rel.symname[0] == '.') {
-			struct elf_section shdr;
-			/*
-			 * Iterate through the sections that have been mapped
-			 * from the modules ELF object into the process image
-			 */
-			TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
-				if (strcmp(smap_current->name, rel.symname) == 0) {
-					shiva_debug("Target symbol is an ELF section: '%s'\n",
-					    smap_current->name);
-					res = elf_section_by_name(&linker->elfobj, rel.symname, &shdr);
-					if (res == false) {
-						fprintf(stderr, "elf_section_by_name(..., %s, ...) failed\n",
-						    rel.symname);
-						return false;
-					}
-				}
-				/*
-				 * XXX UNFINISHED CODE XXX/
-				 */
-			 }
+		shiva_debug("Applying R_X86_64_64 relocation on %s\n", rel.symname);
+		TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
+			if (strcmp(smap_current->name, shdrname) != 0)
+				continue;
+			rel_unit = &linker->text_mem[smap.offset + rel.offset];
+			rel_addr = smap_current->vaddr + rel.offset;
+			if (rel.symname[0] != '.') {
+				fprintf(stderr, "Shiva does not support R_X86_64_64 with this type of target symbol\n");
+				return false;
+			}
+			TAILQ_FOREACH(smap_current2, &linker->tailq.section_maplist, _linkage) {
+				if (strcmp(smap_current2->name, rel.symname) != 0)
+					continue;
+				symval = smap_current2->vaddr;
+				found_target_section = true;
+			}
+			if (found_target_section == false) {
+				fprintf(stderr, "Failed to find target section '%s' loaded into patch memory\n",
+				    rel.symname);
+				return false;
+			}
+			rel_val = symval + rel.addend;
+			*(uint64_t *)&rel_unit[0] = rel_val;
+			return true;
 		}
 		break;
-
+	case R_X86_64_PC64:
+		shiva_debug("Applying R_X86_64_PC64 relocation on %s\n", rel.symname);
+		TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
+			if (strcmp(smap_current->name, shdrname) != 0)
+				continue;
+			rel_unit = &linker->text_mem[smap.offset + rel.offset];
+			rel_addr = smap_current->vaddr + rel.offset;
+			if (rel.symname[0] != '.') {
+				fprintf(stderr, "Shiva does not support R_X86_64_PC64 with this type of target symbol\n");
+				return false;
+			}
+			TAILQ_FOREACH(smap_current2, &linker->tailq.section_maplist, _linkage) {
+				if (strcmp(smap_current2->name, rel.symname) != 0)
+					continue;
+				symval = smap_current2->vaddr;
+				found_target_section = true;
+			}
+			if (found_target_section == false) {
+				fprintf(stderr, "Failed to find target section '%s' loaded into patch memory\n",
+				    rel.symname);
+				return false;
+			}
+			rel_val = (symval + rel.addend) - rel_addr;
+			*(uint64_t *)&rel_unit[0] = rel_val;
+			return true;
+		}
+		break;
 	case R_X86_64_PLTOFF64: /* computation L - GOT + A */
 		TAILQ_FOREACH(current, &linker->tailq.plt_list, _linkage) {
 			if (strcmp(rel.symname, current->symname) != 0)
@@ -2200,11 +2238,7 @@ relocate_module(struct shiva_module *linker)
 	elf_relocation_iterator_init(&linker->elfobj, &rel_iter);
 	while (elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK) {
 		tf_ptr = NULL;
-		shdrname = strrchr(rel.shdrname, '.');
-		if (shdrname == NULL) {
-			shiva_debug("strrchr parse error");
-			return false;
-		}
+		shdrname = rel.shdrname + strlen(".rela"); // recently replaced strrchr(rel.shdrname, '.') 
 		if (strcmp(shdrname, ".eh_frame") == 0) {
 			/*
 			 * We don't need to process relocations for .eh_frame. Maybe
