@@ -1980,7 +1980,6 @@ shiva_debug("Going to apply a relocation of type: %d\n", rel.type);
 		TAILQ_FOREACH(smap_current, &linker->tailq.section_maplist, _linkage) {
 			if (strcmp(smap_current->name, shdrname) != 0)
 				continue;
-			shiva_debug("step 1. Found target section %s\n", shdrname);
 			rel_unit = &linker->text_mem[smap.offset + rel.offset];
 			rel_addr = smap_current->vaddr + rel.offset;
 			if (rel.symname[0] != '.') {
