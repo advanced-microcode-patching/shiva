@@ -445,7 +445,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	elf_error_t error;
 	uint64_t last_load_vaddr, last_load_offset, last_load_size;
 	uint64_t last_load_align;
-	bool res;
+	bool res, last_shdr_is_not_shstrtab = false;
 	bool found_note = false, found_dynamic = false;
 	uint8_t *mem;
 	char *target_path;
@@ -784,6 +784,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				}
 			}
 		}
+
 		if (elf_section_by_name(&ctx->bin.elfobj, ".shstrtab", &shstrtab_shdr) == false) {
 			fprintf(stderr, "elf_section_by_name(%p, \"%s\", ...) failed\n",
 			    &ctx->bin.elfobj, ".shstrtab");
@@ -807,33 +808,83 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			shentsize = sizeof(Elf64_Shdr);
 		}
 
-		/*
-		 * Write up until the location of the .shstrtab string data + sh_size
-		 */
-		if (write(fd, ctx->bin.elfobj.mem, shstrtab_shdr.offset + old_shstrtab_len) < 0) {
-			perror("write 1.");
-			return false;
-		}
-		/*
-		 * write out three new strings into .shstrtab
-		 */
-		if (write(fd, (char *)".shiva.strtab", strlen(".shiva.strtab") + 1) < 0) {
-			perror("write 2.");
+		/* Write up until the last section (Usually .shstrtab but sometimes .strtab) */
+		if (elf_section_by_index(&ctx->bin.elfobj, old_e_shnum - 1, &last_shdr) == false) {
+			fprintf(stderr, "elf_section_by_index() failed on index %d\n", old_e_shnum);
 			return false;
 		}
 
-		if (write(fd, (char *)".shiva.xref", strlen(".shiva.xref") + 1) < 0) {
-			perror("write 3.");
-			return false;
+		shiva_debug("Last section: %s\n", last_shdr.name);
+
+		if (strcmp(last_shdr.name, ".shstrtab") == 0) {
+			/*
+			 * Write up until the location of the .shstrtab string data + sh_size
+			 */
+			if (write(fd, ctx->bin.elfobj.mem, last_shdr.offset + last_shdr.size) < 0) {
+				perror("write 1.");
+				return false;
+			}
+			/*
+			 * write out three new strings into .shstrtab
+			 */
+			if (write(fd, (char *)".shiva.strtab", strlen(".shiva.strtab") + 1) < 0) {
+				perror("write 2.");
+				return false;
+			}
+			if (write(fd, (char *)".shiva.xref", strlen(".shiva.xref") + 1) < 0) {
+				perror("write 3.");
+				return false;
+			}
+			if (write(fd, (char *)".shiva.branch", strlen(".shiva.branch") + 1) < 0) {
+				perror("write 4.");
+				return false;
+			}
+			memcpy(&shstrtab_shdr, &last_shdr, sizeof(struct elf_section));
+			size_t off = shstrtab_shdr.offset + old_shstrtab_len;
+		} else {
+			last_shdr_is_not_shstrtab = true;
+			/*
+			 * In this case .shshtrtab is not the last section. In our test example .strtab is
+			 * after .shstrtab and is the last section.
+			 *
+			 * Get offset of the end of the ELF .shstrtab section and add in custom shiva section
+			 * strings ".shiva.strtab, .shiva.xref after it (But before whatever section is next)
+			 */
+			shiva_debug("shstrtab_shdr.offset: %#lx\n", shstrtab_shdr.offset);
+			/*
+			 * Write up until the end of the original .shstrtab and add three new strings
+			 */
+			shiva_debug("old_shstrtab_len: %zu\n", old_shstrtab_len);
+
+			if (write(fd, ctx->bin.elfobj.mem, shstrtab_shdr.offset + old_shstrtab_len) < 0) {
+				fprintf(stderr, "Failed to write first %zu bytes of binary: %s\n",
+				    shstrtab_shdr.offset + shstrtab_shdr.size, strerror(errno));
+				return false;
+			}
+			if (write(fd, (char *)".shiva.strtab", strlen(".shiva.strtab") + 1) < 0) {
+				perror("write 2.");
+				return false;
+			}
+			if (write(fd, (char *)".shiva.xref", strlen(".shiva.xref") + 1) < 0) {
+				perror("write 3.");
+				return false;
+			}
+			if (write(fd, (char *)".shiva.branch", strlen(".shiva.branch") + 1) < 0) {
+				perror("write 4.");
+				return false;
+			}
+			/*
+			 * Write out the last section.
+			 */
+			ssize_t b = write(fd, &ctx->bin.elfobj.mem[shstrtab_shdr.offset + old_shstrtab_len],
+			    (last_shdr.offset + last_shdr.size) - (shstrtab_shdr.offset + old_shstrtab_len));
+			if (b < 0) {
+				perror("write on last section");
+				return false;
+			}
+			shiva_debug("Wrote %#lx bytes\n", b);
 		}
-
-		if (write(fd, (char *)".shiva.branch", strlen(".shiva.branch") + 1) < 0) {
-			perror("write 4.");
-			return false;
-		}
-
-		size_t off = shstrtab_shdr.offset + old_shstrtab_len;
-
+		size_t off = last_shdr.offset + last_shdr.size;
 		/*
 		 * Write up until the end of the section header table.
 		 */
@@ -967,7 +1018,6 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			perror("lseek");
 			return false;
 		}
-
 		/*
 		 * Write out entire old dynamic segment, except for the last entry
 		 * which will be DT_NULL
@@ -1148,6 +1198,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				    ctx->output_exec, elf_error_msg(&error));
 				return false;
 			}
+
 			if (elf_section_index_by_name(&ctx->bin.elfobj, ".dynstr", &dynstr_index) == false) {
 				fprintf(stderr, "elf_section_index_by_name() failed on .dynstr\n");
 				return false;
@@ -1244,6 +1295,38 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		    ctx->output_exec, elf_error_msg(&error));
 		free(target_path);
 		return false;
+	}
+
+	if (last_shdr_is_not_shstrtab == true) {
+		uint64_t last_shdr_index; // what section index is the last shdr?
+
+		/* Write up until the last section (Usually .shstrtab but sometimes .strtab) */
+		if (elf_section_by_index(&ctx->bin.elfobj, old_e_shnum - 1, &last_shdr) == false) {
+			 fprintf(stderr, "elf_section_by_index() failed on index %d\n", old_e_shnum);
+			 return false;
+		}
+		/*
+		 * .shstrtab is not the last section header oh no, we must shift every section
+		 * after it forward, i.e. section.offset += size_of_extra_bytes
+		 */
+		if (elf_section_index_by_name(&ctx->bin.elfobj, last_shdr.name, &last_shdr_index) == false) {
+			fprintf(stderr, "elf_section_index_by_name() failed on %s\n", last_shdr.name);
+			return false;
+		}
+
+		struct elf_section tmp_shdr;
+		memcpy(&tmp_shdr, &last_shdr, sizeof(struct elf_section));
+
+		shiva_debug("Modifying section %s by updating sh_offset in last section header\n", last_shdr.name);
+		last_shdr.offset += strlen(".shiva.strtab") + strlen(".shiva.xref") + strlen(".shiva.branch") + 3;
+		memcpy(&tmp_shdr, &last_shdr, sizeof(struct elf_section));
+		printf("last_shdr.offset = %#lx\n", last_shdr.offset);
+
+		if (elf_section_modify(&ctx->bin.elfobj, last_shdr_index, &last_shdr, &error) == false) {
+			fprintf(stderr, "elf_section_modify() failed on index %d (%s)\n", last_shdr_index, last_shdr.name);
+			return false;
+		}
+		(void)elf_section_commit(&ctx->bin.elfobj);
 	}
 	free(target_path);
 	*(uint32_t *)&ctx->bin.elfobj.mem[EI_PAD] = SHIVA_SIGNATURE;
