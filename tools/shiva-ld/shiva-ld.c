@@ -816,11 +816,13 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 
 		shiva_debug("Last section: %s\n", last_shdr.name);
 
+		size_t off;
+
 		if (strcmp(last_shdr.name, ".shstrtab") == 0) {
 			/*
-			 * Write up until the location of the .shstrtab string data + sh_size
+			 * Write up until the location of the .shstrtab + sh_size
 			 */
-			if (write(fd, ctx->bin.elfobj.mem, last_shdr.offset + last_shdr.size) < 0) {
+			if (write(fd, ctx->bin.elfobj.mem, last_shdr.offset + old_shstrtab_len) < 0) {
 				perror("write 1.");
 				return false;
 			}
@@ -840,7 +842,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				return false;
 			}
 			memcpy(&shstrtab_shdr, &last_shdr, sizeof(struct elf_section));
-			size_t off = shstrtab_shdr.offset + old_shstrtab_len;
+			off = shstrtab_shdr.offset + old_shstrtab_len;
 		} else {
 			last_shdr_is_not_shstrtab = true;
 			/*
@@ -850,12 +852,6 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			 * Get offset of the end of the ELF .shstrtab section and add in custom shiva section
 			 * strings ".shiva.strtab, .shiva.xref after it (But before whatever section is next)
 			 */
-			shiva_debug("shstrtab_shdr.offset: %#lx\n", shstrtab_shdr.offset);
-			/*
-			 * Write up until the end of the original .shstrtab and add three new strings
-			 */
-			shiva_debug("old_shstrtab_len: %zu\n", old_shstrtab_len);
-
 			if (write(fd, ctx->bin.elfobj.mem, shstrtab_shdr.offset + old_shstrtab_len) < 0) {
 				fprintf(stderr, "Failed to write first %zu bytes of binary: %s\n",
 				    shstrtab_shdr.offset + shstrtab_shdr.size, strerror(errno));
@@ -874,7 +870,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				return false;
 			}
 			/*
-			 * Write out the last section.
+			 * Write out the last sections after .shstrtab.
 			 */
 			ssize_t b = write(fd, &ctx->bin.elfobj.mem[shstrtab_shdr.offset + old_shstrtab_len],
 			    (last_shdr.offset + last_shdr.size) - (shstrtab_shdr.offset + old_shstrtab_len));
@@ -882,9 +878,8 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				perror("write on last section");
 				return false;
 			}
-			shiva_debug("Wrote %#lx bytes\n", b);
+			off = last_shdr.offset + old_shstrtab_len;
 		}
-		size_t off = last_shdr.offset + last_shdr.size;
 		/*
 		 * Write up until the end of the section header table.
 		 */
