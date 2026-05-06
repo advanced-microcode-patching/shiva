@@ -184,6 +184,7 @@ typedef enum shiva_branch_type {
 #define SHIVA_BRANCH_F_SRC_SYMINFO	(1UL << 1) /* symbol info of the source function is present */
 #define SHIVA_BRANCH_F_DST_SYMINFO	(1UL << 2) /* symbol info of the dest function is present  */
 #define SHIVA_BRANCH_F_INDIRECT		(1UL << 3) /* Indirect jmp or call (i.e. func pointer) */
+#define SHIVA_BRANCH_F_UNCONDITIONAL	(1UL << 4) /* Unconditional branch (i.e. call or jmp) */
 
 struct shiva_branch_site {
 	/* Original instruction */
@@ -1574,6 +1575,8 @@ build_x86_64_jmp(struct shiva_prelink_ctx *ctx, uint64_t pc_vaddr, uint8_t *code
 	tmp->branch_type = SHIVA_BRANCH_JMP;
 	tmp->insn_string = get_shiva_strtab_offset(ctx);
 	memcpy(&tmp->o_insn, code_ptr - ctx->disas.insn->size, ctx->disas.insn->size);
+	tmp->branch_flags |= strcmp(ctx->disas.insn->mnemonic, "jmp") == 0 ?
+	    SHIVA_BRANCH_F_UNCONDITIONAL : 0;
 	shiva_debug("o_insn[0]: %02x\n", tmp->o_insn);
 
 	snprintf(insn_str, sizeof(insn_str), "%s %s", ctx->disas.insn->mnemonic,

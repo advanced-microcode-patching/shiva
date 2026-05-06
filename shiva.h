@@ -116,11 +116,11 @@
 
 #define SHIVA_ULEXEC_TARGET_TRANSFER(entry) __asm__ __volatile__("mov x30, %0	\n"	\
 								 "ret		" \
-	 						 	:: "r"(entry));
+								:: "r"(entry));
 #define SHIVA_ULEXEC_TARGET_TRANSFER3(entry, arg0) __asm__ __volatile__ ("mov x0, %0\n"	\
 								   "mov x9, %1\n" \
-                                                                   "blr x9"      \
-                                                                   :: "r"(arg0), "r"(entry));
+								   "blr x9"	 \
+								   :: "r"(arg0), "r"(entry));
 
 #endif
 
@@ -158,6 +158,11 @@ typedef struct shiva_callsite_iterator {
 	struct shiva_ctx *ctx;
 } shiva_callsite_iterator_t;
 
+typedef struct shiva_jmpsite_iterator {
+	struct shiva_branch_site *current;
+	struct shiva_ctx *ctx;
+} shiva_jmpsite_iterator_t;
+
 typedef struct shiva_auxv_iterator {
 	unsigned int index;
 	struct shiva_ctx *ctx;
@@ -190,10 +195,11 @@ typedef enum shiva_branch_type {
 	SHIVA_BRANCH_RET
 } shiva_branch_type_t;
 
-#define SHIVA_BRANCH_F_PLTCALL  	(1UL << 0)
+#define SHIVA_BRANCH_F_PLTCALL		(1UL << 0)
 #define SHIVA_BRANCH_F_SRC_SYMINFO	(1UL << 1) /* symbol info of the source function is present */
 #define SHIVA_BRANCH_F_DST_SYMINFO	(1UL << 2) /* symbol info of the dest function is present  */
 #define SHIVA_BRANCH_F_INDIRECT		(1UL << 3) /* Indirect jmp or call (i.e. func pointer) */
+#define SHIVA_BRANCH_F_UNCONDITIONAL	(1UL << 4) /* An unconditional jump (i.e. jmp or b) */
 
 struct shiva_branch_site {
 	/* Original instruction */
@@ -279,7 +285,7 @@ struct shiva_xref_site {
 	uint64_t rip_rel_site; /* site address of ip relative instruction */
 	uint8_t  rip_rel_o_insn[16]; /* original instruction bytes */
 	size_t insn_len;
-	uint32_t addr_size; 	/* width of address being written/read */
+	uint32_t addr_size;	/* width of address being written/read */
 	size_t jumptable_count; /* only relevant if it's an xref to a jumptable */
 #endif
 	uint32_t reloc_type;
@@ -504,7 +510,7 @@ typedef struct shiva_trace_regset_x86_64 shiva_trace_jumpbuf_t;
 /*
  * Prelinking flags set by shiva-ld
  */
-#define SHIVA_PRELINK_F_CFG_ENABLED 	(1UL << 0)
+#define SHIVA_PRELINK_F_CFG_ENABLED	(1UL << 0)
 
 typedef struct shiva_ctx {
 	char *path; // path to target executable
@@ -652,6 +658,12 @@ bool shiva_maps_get_so_base(struct shiva_ctx *, char *,
  */
 void shiva_callsite_iterator_init(struct shiva_ctx *, struct shiva_callsite_iterator *);
 shiva_iterator_res_t shiva_callsite_iterator_next(shiva_callsite_iterator_t *, struct shiva_branch_site *);
+
+/*
+ * shiva_jmpsite.c
+ */
+void shiva_jmpsite_iterator_init(struct shiva_ctx *, struct shiva_jmpsite_iterator *);
+shiva_iterator_res_t shiva_jmpsite_iterator_next(shiva_jmpsite_iterator_t *, struct shiva_branch_site *);
 
 /*
  * shiva_analyze.c

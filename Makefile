@@ -7,7 +7,7 @@ ELFLIB=/usr/lib/x86_64-linux-gnu/libelf.a
 LIBZ=/usr/local/lib/libz.a
 OBJ_LIST=shiva.o shiva_util.o shiva_signal.o shiva_ulexec.o shiva_auxv.o	\
     shiva_module.o shiva_trace.o shiva_trace_thread.o shiva_error.o shiva_maps.o shiva_analyze.o \
-    shiva_callsite.o shiva_target.o shiva_xref.o shiva_transform.o shiva_so.o shiva_post_linker.o shiva_jumptable.o \
+    shiva_callsite.o shiva_jmpsite.o shiva_target.o shiva_xref.o shiva_transform.o shiva_so.o shiva_post_linker.o shiva_jumptable.o \
     shiva_dwarf.o
 STATIC_LIBS=/opt/elfmaster/lib/libelfmaster.a libcapstone_x86_64.a $(DWARFLIB) $(ELFLIB)
 CC=musl-gcc -I ./
@@ -28,6 +28,7 @@ interp:
 	$(CC) $(GCC_OPTS) shiva_maps.c -o	shiva_maps.o
 	$(CC) $(GCC_OPTS) shiva_analyze.c -o	shiva_analyze.o
 	$(CC) $(GCC_OPTS) shiva_callsite.c -o	shiva_callsite.o
+	$(CC) $(GCC_OPTS) shiva_jmpsite.c -o	shiva_jmpsite.o
 	$(CC) $(GCC_OPTS) shiva_target.c -o	shiva_target.o
 	$(CC) $(GCC_OPTS) shiva_xref.c -o		shiva_xref.o
 	$(CC) $(GCC_OPTS) shiva_transform.c -o	shiva_transform.o

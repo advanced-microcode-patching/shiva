@@ -160,9 +160,9 @@ install_aarch64_call26_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
 }
 #elif __x86_64__
 static bool
-install_x86_64_call_imm_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
+install_x86_64_branch_imm_patch(struct shiva_ctx *ctx, struct shiva_module *linker,
     struct shiva_branch_site *e, struct elf_symbol *patch_symbol,
-    struct shiva_transform *transform)
+    struct shiva_transform *transform, uint64_t type)
 {
 	/*
 	 * The patch_symbol->value will be a symbol value found within the patch
@@ -171,7 +171,7 @@ install_x86_64_call_imm_patch(struct shiva_ctx *ctx, struct shiva_module *linker
 	 */
 	uint64_t target_vaddr = patch_symbol->value + linker->text_vaddr;
 	uint8_t insn_bytes[SHIVA_MAX_INST_LEN];
-	uint32_t call_offset;
+	uint32_t branch_offset;
 	shiva_error_t error;
 	bool res;
 
@@ -195,24 +195,25 @@ install_x86_64_call_imm_patch(struct shiva_ctx *ctx, struct shiva_module *linker
 			shiva_debug("Module has no transforms\n");
 		}
 	}
-
-	shiva_debug("PATCHING BRANCH SITE: %#lx\n", e->branch_site);
+	shiva_debug("PATCHING BRANCH SITE: [%#lx]: %s %#lx\n",
+	    e->branch_site, type == SHIVA_BRANCH_CALL ? "call" : "jmp", target_vaddr);
 	shiva_debug("ctx->ulexec.base_vaddr: %#lx\n", ctx->ulexec.base_vaddr);
+
 	memcpy(&insn_bytes, &e->o_insn, sizeof(insn_bytes));
-	shiva_debug("call_offset = %#lx - %#lx\n",
+	shiva_debug("branch_offset = %#lx - %#lx\n",
 	    target_vaddr, (e->branch_site + ctx->ulexec.base_vaddr));
-	call_offset = (target_vaddr - (e->branch_site + ctx->ulexec.base_vaddr));
-	call_offset -= 5; /* subtract length of call instruction */
-	shiva_debug("call_offset: %#lx\n", call_offset);
-	*(int32_t *)&insn_bytes[1] = call_offset;
+
+	branch_offset = (target_vaddr - (e->branch_site + ctx->ulexec.base_vaddr));
+	branch_offset -= 5; /* subtract length of branch instruction */
+
+	*(int32_t *)&insn_bytes[1] = branch_offset;
 	/*
-	 * XXX
-	 * Technically the shiva_trace API shouldn't be used from within Shiva.
-	 * It's Akin to the Kernel invoking syscalls. Although atleast we aren't
+	 * XXX Technically the shiva_trace API shouldn't be used from within
+	 * Shiva.  It's Akin to the Kernel invoking syscalls.  We aren't
 	 * calling shiva_trace(), but rather one of it's utility functions for
 	 * writing to memory. This won't cause any harm, but it's not congruent
-	 * with the modeled use cases of Shiva trace API which is meant to be invoked
-	 * by modules.
+	 * with the modeled use cases of Shiva trace API which is meant to be
+	 * invoked by modules.
 	 */
 	res = shiva_trace_write(ctx, 0, (void *)e->branch_site + ctx->ulexec.base_vaddr,
 	    (void *)&insn_bytes, 5, &error);
@@ -221,7 +222,6 @@ install_x86_64_call_imm_patch(struct shiva_ctx *ctx, struct shiva_module *linker
 		return false;
 	}
 	return true;
-
 }
 #endif
 
@@ -849,10 +849,11 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 #elif __x86_64__
 			shiva_debug("Installing patch offset on target at %#lx for %s. Transform: %p\n",
 			    be.branch_site + ctx->ulexec.base_vaddr, symbol.name, tfptr);
-			res = install_x86_64_call_imm_patch(ctx, linker, &be, &symbol, tfptr);
+			res = install_x86_64_branch_imm_patch(ctx, linker, &be, &symbol,
+			    tfptr, SHIVA_BRANCH_CALL);
 			if (res == false) {
 				fprintf(stderr, "external linkage failure: "
-				    "install_x86_64_call_imm_patch() failed\n");
+				    "install_x86_64_branch_imm_patch() failed\n");
 				return false;
 			}
 
@@ -861,6 +862,40 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 		tfptr = NULL;
 	}
 
+#ifdef __x86_64__
+	struct shiva_jmpsite_iterator jmps;
+
+	shiva_debug("Calling shiva_jmpsite_iterator_init\n");
+	shiva_jmpsite_iterator_init(ctx, &jmps);
+
+	/*
+	 * ADD TAILCALL support, relink global jmps to interposed functions
+	 * -foptimize-sibling-calls is enabled at -O2 and above
+	 */
+	while (shiva_jmpsite_iterator_next(&jmps, &be) == SHIVA_ITER_OK) {
+		if (!(be.branch_flags & SHIVA_BRANCH_F_UNCONDITIONAL))
+			continue;
+		shiva_debug("Found unconditional branch, tail-call? looking up %lx\n", be.target_vaddr);
+		if (elf_symbol_by_value(&ctx->elfobj, be.target_vaddr,
+		    &symbol) == true) {
+			if (symbol.type != STT_FUNC) {
+				fprintf(stderr, "unexpected linking error: symbol %s is not a function\n",
+				    symbol.name);
+				return false;
+			}
+			shiva_debug("unconditional branch: jmp %#lx links to function %s\n",
+			    be.target_vaddr, symbol.name);
+			res = install_x86_64_branch_imm_patch(ctx, linker, &be, &symbol,
+			    tfptr, SHIVA_BRANCH_JMP);
+			if (res == false) {
+				fprintf(stderr, "install_x86_64_jmp_imm_patch() for '%s' failed\n",
+				    symbol.name);
+				return false;
+			}
+			break;
+		}
+	}
+#endif
 	shiva_debug("Calling shiva_xref_iterator_init\n");
 	shiva_xref_iterator_init(ctx, &xrefs);
 
