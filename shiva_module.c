@@ -834,7 +834,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 		shiva_debug("Looking up symname: %s\n", symname);
 		if (elf_symbol_by_name(&linker->elfobj, symname,
 		    &symbol) == true) {
-			if (symbol.type != STT_FUNC ||
+			if (symbol.type != STT_FUNC || /* TODO examine, shouldn't this be && instead of || */
 			    symbol.bind != STB_GLOBAL)
 				continue;
 #if __aarch64__
@@ -873,9 +873,15 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 	 * -foptimize-sibling-calls is enabled at -O2 and above
 	 */
 	while (shiva_jmpsite_iterator_next(&jmps, &be) == SHIVA_ITER_OK) {
+		struct elf_symbol patch_sym;
+
 		if (!(be.branch_flags & SHIVA_BRANCH_F_UNCONDITIONAL))
 			continue;
-		shiva_debug("Found unconditional branch, tail-call? looking up %lx\n", be.target_vaddr);
+		if (!(be.branch_flags & SHIVA_BRANCH_F_IMMEDIATE))
+			continue;
+		if (be.branch_flags & SHIVA_BRANCH_F_SHORT)
+			continue;
+		shiva_debug("Found unconditional immediate 5-byte branch, tail-call? looking up %lx\n", be.target_vaddr);
 		if (elf_symbol_by_value(&ctx->elfobj, be.target_vaddr,
 		    &symbol) == true) {
 			if (symbol.type != STT_FUNC) {
@@ -883,9 +889,13 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 				    symbol.name);
 				return false;
 			}
-			shiva_debug("unconditional branch: jmp %#lx links to function %s\n",
-			    be.target_vaddr, symbol.name);
-			res = install_x86_64_branch_imm_patch(ctx, linker, &be, &symbol,
+			if (elf_symbol_by_name(&linker->elfobj, symbol.name, &patch_sym) == false) {
+				fprintf(stderr, "Unable to find symbol: %s in patch file: %s\n", 
+				    symbol.name, elf_pathname(&linker->elfobj));
+				return false;
+			}
+			shiva_debug("patching jmpsite with correct offset to the interposed version of: %s\n", symbol.name);
+			res = install_x86_64_branch_imm_patch(ctx, linker, &be, &patch_sym,
 			    tfptr, SHIVA_BRANCH_JMP);
 			if (res == false) {
 				fprintf(stderr, "install_x86_64_jmp_imm_patch() for '%s' failed\n",

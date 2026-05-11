@@ -85,21 +85,30 @@ shiva_analyze_build_jmp(struct shiva_ctx *ctx, uint64_t pc_vaddr)
 		perror("calloc");
 		return false;
 	}
+	tmp->branch_site = pc_vaddr;
+	memcpy(&tmp->o_insn[0], (uint8_t *)tmp->branch_site + ctx->ulexec.base_vaddr,
+	    ctx->disas.insn->size);
 #ifdef __aarch64__
 	tmp->target_vaddr = strtoul((p + 1), NULL, 16);
 #elif __x86_64__
 	tmp->target_vaddr = strtoul(ctx->disas.insn->op_str, NULL, 16);
 	tmp->branch_flags |=
 	    strcmp(ctx->disas.insn->mnemonic, "jmp") == 0 ? SHIVA_BRANCH_F_UNCONDITIONAL : 0;
-	shiva_debug("OPSTRING :) %s\n", ctx->disas.insn->mnemonic);
+	if (tmp->branch_flags & SHIVA_BRANCH_F_UNCONDITIONAL) {
+		if (tmp->o_insn[0] == 0xe9 || tmp->o_insn[0] == 0xeb) {
+			tmp->branch_flags |= SHIVA_BRANCH_F_IMMEDIATE;
+		}
+		if (tmp->o_insn[0] == 0xeb) { /* short jump */
+			tmp->branch_flags |= SHIVA_BRANCH_F_SHORT;
+		}
+	}
+
 #endif
 	shiva_debug("Stored target address: %#lx\n", tmp->target_vaddr);
 	tmp->branch_site = pc_vaddr;
 	tmp->branch_type = SHIVA_BRANCH_JMP;
 	tmp->insn_string = shiva_xfmtstrdup("%s %s",
 	    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
-	memcpy(&tmp->o_insn[0], (uint8_t *)tmp->branch_site + ctx->ulexec.base_vaddr,
-	    ctx->disas.insn->size);
 	if (elf_symbol_by_range(&ctx->elfobj, pc_vaddr,
 	    &tmp_sym) == true) {
 		tmp->branch_flags |= SHIVA_BRANCH_F_SRC_SYMINFO;

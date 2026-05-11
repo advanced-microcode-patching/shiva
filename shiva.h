@@ -200,6 +200,8 @@ typedef enum shiva_branch_type {
 #define SHIVA_BRANCH_F_DST_SYMINFO	(1UL << 2) /* symbol info of the dest function is present  */
 #define SHIVA_BRANCH_F_INDIRECT		(1UL << 3) /* Indirect jmp or call (i.e. func pointer) */
 #define SHIVA_BRANCH_F_UNCONDITIONAL	(1UL << 4) /* An unconditional jump (i.e. jmp or b) */
+#define SHIVA_BRANCH_F_IMMEDIATE        (1UL << 5) /* Immediate branch offset encoding */
+#define SHIVA_BRANCH_F_SHORT            (1UL << 6) /* Short branch encoding, i.e. x86_64 shortjump */
 
 struct shiva_branch_site {
 	/* Original instruction */
