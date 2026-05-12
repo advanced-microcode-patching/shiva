@@ -825,7 +825,18 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 						shiva_debug("Transform source found: %s\n", symname);
 						tfptr = transform;
 					}
-
+					break;
+				case SHIVA_TRANSFORM_SPLICE_FUNCTION_PREPEND_SRCLINE:
+					shiva_debug("Comparing %s and %s\n",
+					    transform->source_symbol.name +
+					    strlen(SHIVA_T_SPLICE_PREPEND_SRCLINE_FUNC_ID), be.symbol.name);
+					if (strcmp(transform->source_symbol.name +
+					    strlen(SHIVA_T_SPLICE_PREPEND_SRCLINE_FUNC_ID), be.symbol.name) == 0) {
+						symname = transform->source_symbol.name;
+						shiva_debug("Transform source found: %s\n", symname);
+						tfptr = transform;
+					}
+					break;
 				default:
 					break;
 				}
@@ -873,7 +884,7 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 	 * -foptimize-sibling-calls is enabled at -O2 and above
 	 */
 	while (shiva_jmpsite_iterator_next(&jmps, &be) == SHIVA_ITER_OK) {
-		struct elf_symbol patch_sym;
+		struct elf_symbol patch_sym, src_symbol;
 
 		if (!(be.branch_flags & SHIVA_BRANCH_F_UNCONDITIONAL))
 			continue;
@@ -889,10 +900,21 @@ apply_external_patch_links(struct shiva_ctx *ctx, struct shiva_module *linker)
 				    symbol.name);
 				return false;
 			}
+			if (elf_symbol_by_range(linker->target_elfobj, be.branch_site, &src_symbol) == true) {
+				if (strcmp(src_symbol.name, symbol.name) == 0) {
+					/*
+					 * The source and the target destination
+					 * of the jmp are the same function, so lets
+					 * just break.
+					 */
+					shiva_debug("src and dest function of jmp are the same: funcname: %s\n", symbol.name);
+					break;
+				}
+			}
 			if (elf_symbol_by_name(&linker->elfobj, symbol.name, &patch_sym) == false) {
 				fprintf(stderr, "Unable to find symbol: %s in patch file: %s\n", 
 				    symbol.name, elf_pathname(&linker->elfobj));
-				return false;
+				return true;
 			}
 			shiva_debug("patching jmpsite with correct offset to the interposed version of: %s\n", symbol.name);
 			res = install_x86_64_branch_imm_patch(ctx, linker, &be, &patch_sym,
@@ -3156,10 +3178,13 @@ validate_helpers(struct shiva_ctx *ctx, struct shiva_module *linker)
 /*
  * Used to find the length of the last instruction before a function splice.
  * Only needed for x86_64 due to variable length instructions
+ * Out variables:
+ * out1 is the size of the instruction at insert_vaddr
+ * out2 is the address of the instruction at insert_vaddr
  */
 static bool
 find_insert_instruction_len(struct shiva_ctx *ctx,
-    uint64_t insert_vaddr, size_t *out)
+    uint64_t insert_vaddr, size_t *out1, size_t *out2)
 {
 
 	uint64_t qword, qword2;
@@ -3186,12 +3211,12 @@ find_insert_instruction_len(struct shiva_ctx *ctx,
 	}
 
 	count = cs_disasm(handle, insn_code, 16, insert_vaddr, 1, &insn);
-	*out = count > 0 ? insn[0].size : 0;
-
+	*out1 = count > 0 ? insn[0].size : 0;
+	*out2 = count > 0 ? insn[0].address : 0;
 	cs_close(&handle);
 
 	if (count > 0) {
-		shiva_debug("Last instruction size: %zu bytes -- %#lx: %s %s\n",
+		shiva_debug("instruction size: %zu bytes -- %#lx: %s %s\n",
 		    insn[0].size, insn[0].address, insn[0].mnemonic, insn[0].op_str);
 		return true;
 	}
@@ -3200,17 +3225,95 @@ find_insert_instruction_len(struct shiva_ctx *ctx,
 }
 
 static bool
+find_previous_instruction_len(struct shiva_ctx *ctx,
+	uint64_t insert_vaddr, size_t *out1, size_t *out2)
+{
+	uint64_t qword, qword2;
+	csh handle;
+	cs_insn *insn = NULL;
+	size_t count;
+	uint8_t insn_code[32];
+
+	if (insert_vaddr < 16) {
+		fprintf(stderr, "insert_vaddr too small to find previous instruction\n");
+		return false;
+	}
+
+	if (elf_read_address(&ctx->elfobj, insert_vaddr - 16, &qword, ELF_QWORD) == false ||
+	    elf_read_address(&ctx->elfobj, insert_vaddr - 8,  &qword2, ELF_QWORD) == false) {
+		fprintf(stderr, "elf_read_address() failed before %#lx\n", insert_vaddr);
+		return false;
+	}
+
+	memcpy(insn_code, &qword, sizeof(uint64_t));
+	memcpy(insn_code + 8, &qword2, sizeof(uint64_t));
+
+	if (elf_read_address(&ctx->elfobj, insert_vaddr,     &qword, ELF_QWORD) == false ||
+	    elf_read_address(&ctx->elfobj, insert_vaddr + 8, &qword2, ELF_QWORD) == false) {
+		fprintf(stderr, "elf_read_address() failed on %#lx\n", insert_vaddr);
+		return false;
+	}
+
+	memcpy(insn_code + 16, &qword, sizeof(uint64_t));
+	memcpy(insn_code + 24, &qword2, sizeof(uint64_t));
+
+	if (cs_open(CS_ARCH_X86, CS_MODE_64, &handle) != CS_ERR_OK) {
+		fprintf(stderr, "cs_open() failed\n");
+		return false;
+	}
+
+	/* Disassemble starting from insert_vaddr - 16 */
+	count = cs_disasm(handle, insn_code, sizeof(insn_code),
+		insert_vaddr - 16, 0, &insn);
+
+	if (count == 0) {
+		cs_close(&handle);
+		return false;
+	}
+
+	/* Find the instruction whose end address matches insert_vaddr */
+	uint64_t prev_addr = 0;
+	size_t	 prev_size = 0;
+
+	for (size_t i = 0; i < count; ++i) {
+		if (insn[i].address + insn[i].size == insert_vaddr) {
+			prev_addr = insn[i].address;
+			prev_size = insn[i].size;
+			break;
+		}
+		if (insn[i].address >= insert_vaddr)
+			break;	 /* went past target */
+	}
+
+	cs_free(insn, count);
+	cs_close(&handle);
+
+	*out1 = prev_size;
+	*out2 = prev_addr;
+
+	if (prev_size > 0) {
+		shiva_debug("Previous instruction: %zu bytes -- %#lx\n",
+			prev_size, prev_addr);
+		return true;
+	}
+
+	shiva_debug("Could not find previous instruction for %#lx\n", insert_vaddr);
+	return false;
+}
+
+static bool
 set_transform_type(struct shiva_ctx *ctx, struct shiva_transform *transform)
 {
 
 	size_t last_insn_len;
+	size_t last_insn_addr;
 
 	/*
 	 * Get the length of the last instruction before the splice.
 	 * i.e. the insert_vaddr
 	 */
 	if (find_insert_instruction_len(ctx, transform->insert_vaddr,
-	    &last_insn_len) == false) {
+	    &last_insn_len, &last_insn_addr) == false) {
 		fprintf(stderr, "Unable to find the instruction length at %#lx\n",
 		    transform->insert_vaddr);
 		return false;
@@ -3346,7 +3449,15 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 					    SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID);
 					dst_symname += strlen("replace_srcline_");
 					tf_type = SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE;
-				}
+
+				} else if (strncmp(tf_sym.name, SHIVA_T_SPLICE_PREPEND_SRCLINE_FUNC_ID,
+				    strlen(SHIVA_T_SPLICE_PREPEND_SRCLINE_FUNC_ID)) == 0) {
+					shiva_debug("transform op extended to prepend source line: %s\n",
+					    SHIVA_T_SPLICE_PREPEND_SRCLINE_FUNC_ID);
+					dst_symname += strlen("prepend_srcline_");
+					tf_type = SHIVA_TRANSFORM_SPLICE_FUNCTION_PREPEND_SRCLINE;
+				} 
+
 				if (elf_symbol_by_name(linker->target_elfobj,
 				    dst_symname, &target_sym) == false) {
 					fprintf(stderr, "Transform target symbol doesn't exist: %s not found\n",
@@ -3377,7 +3488,8 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 	 * We now pass over our linked list of transforms, and fill out the
 	 * rest of each transform entry.
 	 *
-	 * For every transform entry of type: SHIVA_TRANFORM_SPLICE_FUNCTION, we
+	 * For every transform entry of types:
+	 * SHIVA_TRANFORM_SPLICE_FUNCTION, etc. we
 	 * must locate the corresponding transform inputs, which are two symbols:
 	 * 1. __shiva_splice_insert_<func_name>
 	 * 2. __shiva_splice_extend_<func_name>
@@ -3393,6 +3505,11 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 	TAILQ_FOREACH(transform, &linker->tailq.transform_list, _linkage) {
 		shiva_debug("Checking type: %d\n", transform->type);
 		switch(transform->type) {
+		case SHIVA_TRANSFORM_SPLICE_FUNCTION_PREPEND_SRCLINE:
+			shiva_debug("SHIVA_TRANSFORM_SPLICE_FUNCTION_PREPEND_SRCLINE\n");
+			/*
+			 * fall through
+			 */
 		case SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE:
 			shiva_debug("case SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE");
 			if (get_tf_function_refs(ctx, linker, transform) == false) {
@@ -3439,21 +3556,47 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			}
 			uint32_t lineno = (uint32_t)tf_val;
 			size_t insert_size;
-			shiva_debug("DWARF srcline replace, line number: %d\n", lineno);
+
+			shiva_debug("DWARF srcline operation line number: %d\n", lineno);
 			if (shiva_dwarf_line_attributes(elf_pathname(&ctx->elfobj),
 			    transform->name, lineno, &insert_vaddr, &insert_size) == false) {
 				fprintf(stderr, "shiva_dwarf_line_attributes() failed\n");
 				return false;
 			}
-			shiva_debug("Found insert_vaddr: %#lx and insert_size: %d\n", 
-			    insert_vaddr, insert_size);
-			transform->insert_vaddr = insert_vaddr;
-			extend_vaddr = insert_vaddr + insert_size;
+			if (transform->type == SHIVA_TRANSFORM_SPLICE_FUNCTION_PREPEND_SRCLINE) {
+				/*
+				 * Find the previous instruction address to insert_vaddr
+				 * -- Our goal is to splice in between the two addresses: insert_vaddr and
+				 * the address just previous to it.
+				 */
+				uint64_t last_insn_addr;
+				uint64_t last_insn_len;
+
+				if (find_previous_instruction_len(ctx, insert_vaddr,
+				    &last_insn_len, &last_insn_addr) == false) {
+					printf(stderr, "Unable to find the instruction length at %#lx\n",
+					    transform->insert_vaddr);
+					return false;
+				}
+				transform->insert_vaddr = last_insn_addr;
+				extend_vaddr = insert_vaddr;
+				insert_size = last_insn_len;
+				shiva_debug("Found insert_vaddr: %#lx and insert_size: %d\n",
+				    transform->insert_vaddr, insert_size);
+			} else if (transform->type == SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE) {
+
+				shiva_debug("Found insert_vaddr: %#lx and insert_size: %d\n", 
+				    insert_vaddr, insert_size);
+				transform->insert_vaddr = insert_vaddr;
+				extend_vaddr = insert_vaddr + insert_size;
+			}
+
 			memset(tmp, 0, sizeof(tmp));
 			strcpy(tmp, SHIVA_T_SPLICE_LINENO_ID);
 			strncat(tmp, transform->name,
 			    PATH_MAX - strlen(SHIVA_T_SPLICE_LINENO_ID));
 			tmp[sizeof(tmp) - 1] = '\0';
+
 			shiva_debug("Checking symbol cache for %s\n", tmp);
 			if (elf_symbol_by_name(&linker->elfobj,
 			    tmp, &tf_sym) == false) {
@@ -3461,8 +3604,8 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 				    tmp);
 				goto fail;
 			}
-			transform->offset = insert_vaddr - target_sym.value;
-			transform->old_len = extend_vaddr - insert_vaddr;
+			transform->offset = transform->insert_vaddr - target_sym.value;
+			transform->old_len = extend_vaddr - transform->insert_vaddr;
 			transform->new_len = transform->source_symbol.size;
 			shiva_debug("Transform offset: %#lx old_len: %d new_len: %d\n",
 			    transform->offset, transform->old_len, transform->new_len);
@@ -3547,11 +3690,17 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 				return true;
 			}
 			memset(tmp, 0, sizeof(tmp));
-			strcpy(tmp, SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID);
-			strncat(tmp, transform->name,
-			    PATH_MAX - strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID));
-			tmp[sizeof(tmp) - 1] = '\0';
-
+			if (transform->type == SHIVA_TRANSFORM_SPLICE_FUNCTION_PREPEND_SRCLINE) {
+				strcpy(tmp, SHIVA_T_SPLICE_PREPEND_SRCLINE_FUNC_ID);
+				strncat(tmp, transform->name,
+				    PATH_MAX - strlen(SHIVA_T_SPLICE_PREPEND_SRCLINE_FUNC_ID));
+				tmp[sizeof(tmp) - 1] = '\0';
+			} else if (transform->type == SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE) {
+				strcpy(tmp, SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID);
+				strncat(tmp, transform->name,
+				    PATH_MAX - strlen(SHIVA_T_SPLICE_REPLACE_SRCLINE_FUNC_ID));
+				tmp[sizeof(tmp) - 1] = '\0';
+			}
 			if (elf_symbol_by_name(&linker->elfobj, tmp,
 			    &tf_sym) == false) {
 				fprintf(stderr, "elf_symbol_by_name failed '%s'\n", tmp);
@@ -3593,6 +3742,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			tmp[sizeof(tmp) - 1] = '\0';
 			shiva_debug("Checking '%s' symbol cache for %s\n",
 			    elf_pathname(&linker->elfobj), tmp);
+
 			if (elf_symbol_by_name(&linker->elfobj,
 			   tmp, &tf_sym) == false) {
 				fprintf(stderr, "Failed to find transform input '%s'\n",

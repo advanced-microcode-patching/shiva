@@ -838,6 +838,7 @@ shiva_tf_process_transforms(struct shiva_module *linker, uint8_t *dst,
 		switch(transform->type) {
 		case SHIVA_TRANSFORM_SPLICE_FUNCTION:
 		case SHIVA_TRANSFORM_SPLICE_FUNCTION_REPLACE_SRCLINE:
+		case SHIVA_TRANSFORM_SPLICE_FUNCTION_PREPEND_SRCLINE:
 			shiva_debug("Calling shiva_tf_splice_function\n");
 			shiva_debug("Transform offset: %#lx (%zu)\n", transform->offset,
 			    transform->offset);
