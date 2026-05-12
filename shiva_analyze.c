@@ -125,67 +125,6 @@ shiva_analyze_build_jmp(struct shiva_ctx *ctx, uint64_t pc_vaddr)
 }
 
 #ifdef __x86_64__
-/*
- * This function was added so that Shiva can lookup the previous address of an instruction
- * for prepended srcline function splicing--new dwarf feature for prepending code to a given
- * line of source code by line-number.
- */
-bool
-shiva_analyze_prev_insn_addr(struct shiva_ctx *ctx, uint64_t target_addr, uint64_t *prev)
-{
-	uint64_t start_addr = target_addr - 64;
-	cs_insn *insn = NULL;
-	size_t count, buf_size;
-	const uint8_t *buf;
-	uint64_t prev_addr = 0;
-	int i;
-	csh handle;
-
-	shiva_debug("target address: %#lx\n", target_addr);
-
-	if (target_addr == 0 || target_addr <= ctx->disas.base) {
-		shiva_debug("target_addr %#lx is invalid\n", target_addr);
-		return false;
-	}
-
-	if (start_addr < ctx->disas.base)
-		start_addr = ctx->disas.base;
-
-	buf_size = target_addr - start_addr;
-	buf = ctx->disas.textptr + (start_addr - ctx->disas.base);
-
-	shiva_debug("start_addr: %#lx\n", start_addr);
-
-        if (cs_open(CS_ARCH_X86, CS_MODE_64, &handle) != CS_ERR_OK) {
-                fprintf(stderr, "cs_open() failed\n");
-                return false;
-        }
-
-	for (i = 0; i < buf_size; i++)
-		printf("%02x ", buf[i]);
-	printf("\n");
-
-	count = cs_disasm(handle,
-	    buf, buf_size, start_addr, 0, &insn);
-
-	cs_close(&handle);
-
-	if (count == 0) {
-		shiva_debug("count == 0, return false\n");
-		return false;
-	}
-
-	for (i = 0; i < count; i++) {
-		if (insn[i].address + insn[i].size == target_addr) {
-			prev_addr = insn[i].address;
-			break;
-		}
-	}
-	cs_free(insn, count);
-	*prev = prev_addr;
-	return true;
-}
-
 static bool
 shiva_analyze_branches_x86_64(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 {
