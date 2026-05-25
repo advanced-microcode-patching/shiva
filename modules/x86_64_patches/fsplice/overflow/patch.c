@@ -1,8 +1,6 @@
 /*
- * Patch code.
- * Patch 1. Create a new .data variable, data_val
- * Patch 2. Splice code into function foo() (Very intensive operation)
- * Patch 3. Rewrite function bar() via symbol interposition
+ * Splice code in to function parse_string() to fix
+ * the vulnerable strcpy.
  */
 
 #include <stdint.h>

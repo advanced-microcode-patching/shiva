@@ -3318,6 +3318,7 @@ set_transform_type(struct shiva_ctx *ctx, struct shiva_transform *transform)
 		    transform->insert_vaddr);
 		return false;
 	}
+	shiva_debug("last_insn_len: %d\n", last_insn_len);
 	/*
 	 * If the splice length (new_len) is exactly the same length
 	 * as the specified insertion space then we simply replace the
@@ -3325,7 +3326,9 @@ set_transform_type(struct shiva_ctx *ctx, struct shiva_transform *transform)
 	 * of function splicing as it requires less local re-linking of
 	 * the function locally. The transform flags are simply: REPLACE
 	 */
+	shiva_debug("new_len: %d old_len: %d\n", transform->new_len, transform->old_len);
 	if (transform->new_len == transform->old_len) {
+		shiva_debug("REPLACE!\n");
 		transform->flags |= SHIVA_TRANSFORM_F_REPLACE;
 
 	/*
@@ -3336,6 +3339,7 @@ set_transform_type(struct shiva_ctx *ctx, struct shiva_transform *transform)
 	 * flags.
 	 */
 	} else if (transform->new_len < transform->old_len) {
+		shiva_debug("REPLACE WITH NOPS\n");
 		transform->flags |=
 		     (SHIVA_TRANSFORM_F_NOP_PAD | SHIVA_TRANSFORM_F_REPLACE);
 #ifdef __aarch64__
@@ -3369,7 +3373,9 @@ set_transform_type(struct shiva_ctx *ctx, struct shiva_transform *transform)
 		transform->old_len > last_insn_len) {
 		transform->flags |=
 		    (SHIVA_TRANSFORM_F_EXTEND);
+		shiva_debug("EXTEND!\n");
 	} else if (transform->old_len == last_insn_len && transform->new_len > 0) {
+		shiva_debug("EXTEND|INJECT\n");
 		transform->flags |=
 		    (SHIVA_TRANSFORM_F_EXTEND | SHIVA_TRANSFORM_F_INJECT);
 		transform->offset += last_insn_len;
@@ -3832,6 +3838,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 			 */
 			shiva_debug("transform->offset = %#lx - %#lx\n", insert_vaddr,
 			    target_sym.value);
+			shiva_debug("insert_vaddr: %#lx extend_vaddr: %#lx \n", insert_vaddr, extend_vaddr);
 			transform->offset = insert_vaddr - target_sym.value;
 			transform->old_len = extend_vaddr - insert_vaddr;
 			transform->new_len = transform->source_symbol.size;

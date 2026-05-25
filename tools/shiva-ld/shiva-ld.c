@@ -881,7 +881,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				perror("write on last section");
 				return false;
 			}
-			off = last_shdr.offset + old_shstrtab_len;
+			off = last_shdr.offset + last_shdr.size;
 		}
 		/*
 		 * Write up until the end of the section header table.
