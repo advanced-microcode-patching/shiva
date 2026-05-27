@@ -584,7 +584,8 @@ Mayhem.
 
 Simply write a patch with the new definition of a given symbol (Global variable
 or global function) and compile the patch into a shared library instead of a
-relocatable object file.
+relocatable object file. Copy the shared object patch into /lib/x86_64-linux-gnu
+(Or another valid search path) and use ldconfig to update the cache.
 
 
 ### Author contact
