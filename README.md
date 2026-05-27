@@ -177,7 +177,7 @@ ELF PIE binaries that are of a supported architecture (x86_64 and aarch64)--
     it is very helpful to atleast have a complete .symtab symbol table. Otherwise Shiva will still
     allow you to interpose any symbols that are witin the .dynsym (Dynamic symbol table).
 
-NOTE ON STRIPPED BINARIES:
+**NOTE ON STRIPPED BINARIES:**
     Shiva is built with libelfmaster under the hood, it inherently has some symbol
     forensics capabilities, so it's able to reconstruct a basic symbol table for every
     function in the executable. In cases where the binary is stripped Shiva will allow you
