@@ -1,6 +1,39 @@
 # Shiva JIT micropatching engine
 ![My Image](shiva_logo.png)
 
+**Table of Contents**
+
+- [Description](#description)
+  - [DARPA](#darpa)
+- [Support](#support)
+- [Build](#build)
+  - [x86_64 Shiva build](#x86_64-shiva-build)
+  - [AArch64 Shiva build](#aarch64-shiva-build)
+- [Dependencies](#dependencies)
+  - [libelfmaster](#libelfmaster)
+  - [musl-libc](#musl-libc)
+- [Building Shiva](#building-shiva)
+  - [Clone the correct Shiva repo](#clone-the-correct-shiva-repo)
+  - [Build for x86_64 Linux](#build-for-x86_64-linux)
+  - [Build shiva AArch64](#build-shiva-aarch64)
+- [Build artifacts](#build-artifacts)
+  - [shiva: The custom ELF dynamic linker](#shiva-the-custom-elf-dynamic-linker)
+  - [shiva-ld: The Shiva ELF prelinker](#shiva-ld-the-shiva-elf-prelinker)
+- [How to build/compile/link the ELF executables that you will be patching](#how-to-buildcompilelink-the-elf-executables-that-you-will-be-patching)
+- [Patch example in AArch64 Linux](#patch-example-in-aarch64-linux)
+  - [CFS Binary patch: cfs_patch1](#cfs-binary-patch-cfs_patch1)
+    - [Running core-cpu1.patched](#running-core-cpu1patched)
+    - [Patching .rodata symbols with Shiva: rodata_interposing patch.](#patching-rodata-symbols-with-shiva-rodata_interposing-patch)
+  - [Friendly user guide to micropatching with Shiva AArch64](#friendly-user-guide-to-micropatching-with-shiva-aarch64)
+- [Patch example in X86_64 Linux](#patch-example-in-x86_64-linux)
+  - [Function splicing](#function-splicing)
+    - [Function splice example 1: Fix strcpy vuln](#function-splice-example-1-fix-strcpy-vuln)
+    - [Splice patch src code](#splice-patch-src-code)
+    - [Test ./vuln](#test-vuln)
+    - [Test patched ./vuln](#test-patched-vuln)
+- [Interposing shared library functions](#interposing-shared-library-functions)
+- [Author contact](#author-contact)
+
 ## Description
 
 Shiva is an ELF dynamic linker that is specialized for patching native Linux
