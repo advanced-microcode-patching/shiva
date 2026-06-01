@@ -510,7 +510,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			last_load_align = 4096; //segment.align;
 		} else if (segment.type == PT_DYNAMIC) {
 			found_dynamic = true;
-			ctx->new_segment.dyn_size = elf_dtag_count(&ctx->bin.elfobj) * sizeof(ElfW(Dyn));
+			ctx->new_segment.dyn_size = (elf_dtag_count(&ctx->bin.elfobj) + 1) * sizeof(ElfW(Dyn));
 			if (ctx->flags & SHIVA_LD_F_NEEDED_INJECTION) {
 				ctx->new_segment.dyn_size += sizeof(ElfW(Dyn));
 				if (elf_section_by_name(&ctx->bin.elfobj, ".dynstr", &dynstr_shdr) == false) {
@@ -2572,6 +2572,11 @@ usage:
 		printf("[-o] --output_exec	Output executable\n");
 		printf("[-d] --disable-cflow	Do not generate CFG data (i.e. .shiva.xref and .shiva.branch)\n");
 		printf("[-N] --needed-injection	Injects shared object dependency via DT_NEEDED entry\n");
+		printf("\nExample 1, prelink a standard ET_REL Shiva patch\n");
+		printf("$ shiva-ld -e testprog -p patch.o -s /opt/shiva/modules -i /lib/shiva -o testprog.new\n");
+		printf("\nExample 2: prelink a shared object patch via ELF DT_NEEDED injection\n");
+		printf("$ shiva-ld -e testprog -p patch.so -s /lib/x86_64-linux-gnu -o testprog.new -N\n");
+
 		exit(0);
 	}
 

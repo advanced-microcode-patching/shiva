@@ -575,8 +575,9 @@ as the correct arguments to `strncpy`.
 
 This will cause a segfault
 
+```
 ./vuln AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-
+```
 
 #### Test patched ./vuln
 
@@ -585,16 +586,22 @@ This will cause a segfault
 Use a large code model, disable the stack protection code, omit frame pointers (Not necessary with splice code).
 Make sure to copy your patch into the correct search path after compiling it.
 
+```
 gcc -mcmodel=large -fno-stack-protector -fomit-frame-pointer -I /opt/shiva/include/ -c patch.c
 sudo cp patch.o /opt/shiva/modules/
+```
 
 2. Prelink the binary
 
+```
 shiva-ld -i /lib/shiva -s /opt/shiva/modules -p patch.o -e vuln -o vuln.fixed
+```
 
 3. Test ./vuln.fixed
 
+```
 ./vuln.fixed AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+```
 
 ## Interposing shared library functions
 
@@ -620,6 +627,69 @@ or global function) and compile the patch into a shared library instead of a
 relocatable object file. Copy the shared object patch into /lib/x86_64-linux-gnu
 (Or another valid search path) and use ldconfig to update the cache.
 
+For example, if you needed to interpose the function `connect()` from glibc,
+and the function `connect()` is not already called by the main executable, then
+you would need to use a shared library style patch to interpose connect.
+
+### Patch source code for libc:connect()
+
+
+```
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <dlfcn.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+
+static int (*real_connect)(int sockfd, const struct sockaddr *addr, socklen_t addrlen) = NULL;
+
+__attribute__((constructor))
+static void init_connect_hook(void)
+{
+    real_connect = dlsym(RTLD_NEXT, "connect");
+    if (!real_connect) {
+        fprintf(stderr, "[connect_interpose] ERROR: dlsym(RTLD_NEXT, \"connect\") failed\n");
+    } else {
+        fprintf(stderr, "[connect_interpose] Hook installed successfully\n");
+    }
+}
+
+// Interposed connect()
+int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
+{
+    unsigned short port = ntohs(((struct sockaddr_in *)addr)->sin_port);
+	if (port == 31337) {
+		printf("Suspicious activity... connect to port 31337?\n");
+	}
+    return real_connect(sockfd, addr, addrlen);
+}
+```
+
+### Compile and install .so patch for libc::connect() interposing
+
+```
+gcc -shared -fPIC -o libconnect_interpose.so connect_interpose.c -ldl
+sudo cp libconnect_interpose.so /lib/x86_64-linux-gnu/
+sudo ldconfig
+```
+
+#### Prelink patch to program (Netcat in this case)
+
+```
+shiva-ld -s /lib/x86_64-linux-gnu -p libconnect_interpose.so -e test -o test.new -N
+```
+
+If we do a `readelf -d` we can see the new shared library dependency at the top
+of the list.
+
+```
+Dynamic section at offset 0x4000 contains 28 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libconnect_interpose.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+... truncated ...
+```
 
 ### Author contact
 
