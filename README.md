@@ -20,6 +20,7 @@
   - [shiva: The custom ELF dynamic linker](#shiva-the-custom-elf-dynamic-linker)
   - [shiva-ld: The Shiva ELF prelinker](#shiva-ld-the-shiva-elf-prelinker)
 - [How to build/compile/link the ELF executables that you will be patching](#how-to-buildcompilelink-the-elf-executables-that-you-will-be-patching)
+- [How to compile a Shiva patch](#how-to-compile-a-shiva-patch)
 - [Patch example in AArch64 Linux](#patch-example-in-aarch64-linux)
   - [CFS Binary patch: cfs_patch1](#cfs-binary-patch-cfs_patch1)
     - [Running core-cpu1.patched](#running-core-cpu1patched)
@@ -235,6 +236,49 @@ ELF PIE binaries that are of a supported architecture (x86_64 and aarch64)--
     problem, and will be fixed upon request.
 
 4. The binary must be PIE (position independent), i.e. gcc -pie -fPIC test.c -o test
+
+## How to compile a Shiva patch
+
+Shiva patches are ET_REL objects. Shiva modules are also ET_REL objects, they are one
+in the same thing, except that a module has a `shiva_init(shiva_ctx_t *)` function.
+Shiva modules should be compiled with a large code model. Here's a general guideline
+
+### Compiling patches for AArch64 Linux
+
+#### For AArch64 Shiva patches that are not using function splicing at all
+
+You can optionally use optimizations (i.e. -O2) etc. You may safely add quite a number
+of flags and optimizations, but stick with this as a baseline command. The code model
+must be large, and -fno-pic must be used on AArch64 Linux.
+
+```
+gcc -I /opt/shiva/include -fno-stack-protector -mcmodel=large -fno-pic -c patch.c
+```
+
+#### AArch64 Shiva patches that are using function splicing
+
+Notice that we use -fomit-frame-pointer in function splices. This is because we don't
+want frame pointer prologue/epilogue when splicing into an existing function.
+
+```
+gcc -I /opt/shiva/include -fno-stack-protector -fomit-frame-pointer -fno-pic -mcmodel=large -c patch.c
+```
+
+### Compiling patches for X86_64 Linux
+
+Use the same commands to compile patches for X86_64, but do not use the `-fno-pic` flag
+as you do when in AArch64 Linux.
+
+#### X86_64 Shiva patches without function splicing
+```
+gcc -I /opt/shiva/include -fno-stack-protector -mcmodel=large -c patch.c
+```
+
+#### X86_64 Shiva patches with function splicing
+
+```
+gcc -I /opt/shiva/include -fno-stack-protector -fomit-frame-pointer -mcmodel=large -c patch.c
+```
 
 ## Patch example in AArch64 Linux
 

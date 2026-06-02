@@ -50,7 +50,8 @@ install:
 	ln -sf /lib/shiva /usr/bin/shiva
 	cp tools/shiva-ld/shiva-ld /usr/bin
 	mkdir -p /opt/shiva/modules
-
+	mkdir -p /opt/shiva/include
+	cp modules/include/shiva_module.h /opt/shiva/include
 #	cp $(PATCH_PATH)/*interposing*/*.o /opt/shiva/modules
 #	cp $(PATCH_PATH)/cfs_patch1/*.o /opt/shiva/modules
 	cat shiva.ansi
