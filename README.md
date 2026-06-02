@@ -512,7 +512,7 @@ SHIVA_MODULE_FORCE_MUSL_RESOLUTION;
 SHIVA_T_SPLICE_FUNCTION(parse_string, 0x1175, 0x118c)
 {
 	SHIVA_T_PAIR_RDI(src);
-	SHIVA_T_LEA_BP(dst, -16);
+    SHIVA_T_LEA_BP(dst, -16);
 	strncpy(dst, src, BUFLEN-1);
 }
 ```
@@ -525,10 +525,22 @@ function whos symbol type is `STT_IFUNC` it is necessary to force Shiva to
 resolve the symbol from musl-libc instead, which is already baked right into
 its own binary (i.e.  musl-libc is in /lib/shiva).
 
+Regarding the macros SHIVA_T_PAIR_RDI and SHIVA_T_LEA_BP, these are simple macros
+that use inline assembly. If you don't see a macro for a specific operation you are
+trying to do, feel free to just inline assembly manually.
+
+SHIVA_T_PAIR_RDI macro expands to: `register int64_t var asm("rdi");`
+SHIVA_T_LEA_BP macro expands to: `register int64_t var = (int64_t)((char*)__builtin_frame_address(0) + (offset));`
+
+Take a peek at `shiva/modules/include/shiva_module.h` which must be included in all
+Shiva patches in order to use the various macros that may or may not be necessary
+in a given patch.
+
 #### A list of the `STT_IFUNC` symbols in glibc.
 
-Byte-string functions
+#### Byte-string functions
 
+```
     strcpy — copy a string
     strncpy — copy fixed-length string
     stpcpy — copy string and return pointer to terminating null
@@ -541,15 +553,19 @@ Byte-string functions
     strstr — locate substring
     strlen — compute string length
     strnlen — compute bounded string length
+```
 
-Memory functions
+#### Memory functions
 
+```
     memchr — locate byte in memory block
     memrchr — locate last byte in memory block
     rawmemchr — locate byte without length limit
+```
 
-Wide-character (wchar_t) functions
+#### Wide-character (wchar_t) functions
 
+```
     wcslen — wide-character string length
     wcsnlen — bounded wide-character string length
     wcscpy — copy wide-character string
@@ -565,11 +581,14 @@ Wide-character (wchar_t) functions
     wcspbrk — locate wide character in set
     wmemchr — locate wide character in wide block
     wmemrchr — locate last wide character in wide block
+```
 
+#### Patch description
 
 The patch creates an int64_t variable caled `src` from input register RDI and
-stores the value of RBP-16 in an int64_t variable called `dst`. It passes these
-as the correct arguments to `strncpy`.
+stores the value of RBP-16 in an `int64_t` variable called `dst`. It passes these
+as the correct arguments to `strncpy`, making sure to cast it as a `char *` since
+it is declared as `int64_t`.
 
 #### Test ./vuln
 
