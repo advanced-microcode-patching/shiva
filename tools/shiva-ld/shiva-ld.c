@@ -510,7 +510,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 			last_load_align = 4096; //segment.align;
 		} else if (segment.type == PT_DYNAMIC) {
 			found_dynamic = true;
-			ctx->new_segment.dyn_size = (elf_dtag_count(&ctx->bin.elfobj) + 1) * sizeof(ElfW(Dyn));
+			ctx->new_segment.dyn_size = elf_dtag_count(&ctx->bin.elfobj) * sizeof(ElfW(Dyn));
 			if (ctx->flags & SHIVA_LD_F_NEEDED_INJECTION) {
 				ctx->new_segment.dyn_size += sizeof(ElfW(Dyn));
 				if (elf_section_by_name(&ctx->bin.elfobj, ".dynstr", &dynstr_shdr) == false) {
