@@ -40,8 +40,6 @@ interp:
 
 shiva-ld:
 	make -C tools/shiva-ld
-patches:
-	make -C modules/aarch64_patches
 
 .PHONY: install
 install:
