@@ -9,7 +9,8 @@
  * 3. Creates a new PT_DYNAMIC segment within the new PT_LOAD segment. It has two additional entries:
  *	3.1. SHIVA_DT_NEEDED holds the address of the string to the patch basename, i.e. "amp_patch1.o"
  *	3.2. SHIVA_DT_SEARCH holds the address of the string to the patch search path, i.e. "/opt/shiva/modules"
- *
+ *	3.3. SHIVA_DT_ORIG_INTEPR holds the address of the string to the original dynamic linker
+ *	3.4. SHIVA_DT_SEARCH_HOTPATCH is optional and holds the address of the string to the search path for hotpatches
  * The Shiva linker parses these custom dynamic segment values to locate the patch object at runtime.
  * In the future shiva-ld will be able to generate ELF relocation data for the external linking process
  * at runtime. This meta-data will be stored in the executable and parsed at runtime, giving Shiva
@@ -45,10 +46,13 @@
 #define SHIVA_LD_F_NO_CFG		(1UL << 0)
 #define SHIVA_LD_F_NEEDED_INJECTION	(1UL << 1)
 #define SHIVA_LD_F_CFS_BINARY		(1UL << 2) // super edge-case
+#define SHIVA_LD_F_HOTPATCH		(1UL << 3)
 
 #define SHIVA_DT_NEEDED	DT_LOOS + 10
 #define SHIVA_DT_SEARCH DT_LOOS + 11
 #define SHIVA_DT_ORIG_INTERP DT_LOOS + 12
+#define SHIVA_DT_SEARCH_HOTPATCH DT_LOOS + 13
+#define SHIVA_DT_NEEDED_HOTPATCH DT_LOOS + 14
 
 #define SHIVA_SIGNATURE 0x31f64 /* elf64 */
 
@@ -226,6 +230,8 @@ struct shiva_prelink_ctx {
 	char *input_patch;
 	char *output_exec;
 	char *search_path;
+	char *input_hotpatch;
+	char *hotpatch_search_path;
 	char *interp_path;
 	char *orig_interp_path;
 	struct {
@@ -553,7 +559,6 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 				ctx->new_segment.filesz += sizeof(ElfW(Shdr)) * 3;
 			}
 			if (ctx->flags & SHIVA_LD_F_NEEDED_INJECTION) {
-				printf(".dynstr original size: %zu\n", dynstr_shdr.size);
 				ctx->new_segment.filesz += dynstr_shdr.size;
 				ctx->new_segment.filesz += strlen(ctx->input_patch) + 1;
 			}
@@ -1032,7 +1037,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 
 		/*
 		 * Write out new dynamic entry for SHIVA_DT_SEARCH and
-		 * SHIVA_DT_NEEDED
+		 * SHIVA_DT_NEEDED, and SHIVA_DT_ORIG_INTERP
 		 */
 		dyn[0].d_tag = SHIVA_DT_SEARCH;
 		dyn[0].d_un.d_ptr = ctx->new_segment.vaddr + ctx->new_segment.dyn_size;
@@ -2554,6 +2559,8 @@ int main(int argc, char **argv)
 		{"output_exec", required_argument, 0, 'o'},
 		{"search_path", required_argument, 0, 's'},
 		{"interp_path", required_argument, 0, 'i'},
+		{"hotpatch_search", "required_argument", 0, 'h'},
+		{"input_hotpatch", required_argument, 0, 'P'},
 		{"disable-cflow", no_argument,	   0, 'd'},
 		{"cfs-binary"	, no_argument,	   0, 'c'},
 		{"needed-injection", no_argument,  0, 'N'},
@@ -2570,13 +2577,16 @@ usage:
 		printf("[-i] --interp_path	Interpreter search path, i.e. \"/lib/shiva\"\n");
 		printf("[-s] --search_path	Module search path (For patch object)\n");
 		printf("[-o] --output_exec	Output executable\n");
+		printf("[-h] --hotpatch_search	Search path for hotpatches at runtime\n");
+		printf("[-P] --input_hotpatch	Basename of hotpatch (i.e. hotpatch1.o)\n");
 		printf("[-d] --disable-cflow	Do not generate CFG data (i.e. .shiva.xref and .shiva.branch)\n");
 		printf("[-N] --needed-injection	Injects shared object dependency via DT_NEEDED entry\n");
 		printf("\nExample 1, prelink a standard ET_REL Shiva patch\n");
 		printf("$ shiva-ld -e testprog -p patch.o -s /opt/shiva/modules -i /lib/shiva -o testprog.new\n");
-		printf("\nExample 2: prelink a shared object patch via ELF DT_NEEDED injection\n");
+		printf("\nExample 2: prelink a shared object patch via ELF DT_NEEDED injection (NOTE: doesn't require -i)\n");
 		printf("$ shiva-ld -e testprog -p patch.so -s /lib/x86_64-linux-gnu -o testprog.new -N\n");
-
+		printf("\nExample 3: prelink the binary with hot-patching capabilities.\n");
+		printf("$ shiva-ld -e testprog -P hotpatch.o -h /opt/shiva/hotpaches -i /lib/shiva -o testprog.new\n");
 		exit(0);
 	}
 
@@ -2613,6 +2623,21 @@ usage:
 		case 's':
 			ctx.search_path = strdup(optarg);
 			if (ctx.search_path == NULL) {
+				perror("strdup");
+				exit(EXIT_FAILURE);
+			}
+			break;
+		case 'P':
+			ctx.hotpatch_search_path = strdup(optarg);
+			if (ctx.hotpatch_search_path == NULL) {
+				perror("strdup");
+				exit(EXIT_FAILURE);
+			}
+			ctx.flags |= SHIVA_LD_F_HOTPATCH;
+			break;
+		case 'h':
+			ctx.input_hotpatch = strdup(optarg);
+			if (ctx.input_patch == NULL) {
 				perror("strdup");
 				exit(EXIT_FAILURE);
 			}
