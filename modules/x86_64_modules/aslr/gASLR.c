@@ -212,6 +212,8 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 	uint8_t movabs_rdi[] = "\x48\xbf\x00\x00\x00\x00\x00\x00\x00\x00";
 	uint8_t rip_call[] = "\xff\x15\x00\x00\x00\x00";
 	uint64_t rel_flags = 0;
+	elf_dynsym_iterator_t dsym_iter;
+	size_t symoffset = 0;
 
 	if (fe->flags & ASLR_FUNC_F_ENTRYPOINT) {
 		aslr_debug("Relocating entry point  %s\n", fe->symbol.name);
@@ -247,14 +249,14 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 			return false;
 		}
 
-#if 0
-		if (rel_entry->rel.type == R_X86_64_GOTPCRELX || rel_entry->rel.type == R_X86_64_GOTPCREL) {
-			elf_dynsym_iterator_t dsym_iter;
-			size_t symoffset = 0;
+		switch(rel_entry->rel.type) {
+		case R_X86_64_GOTPCRELX:
+		case R_X86_64_GOTPCREL:
 			struct elf_symbol tmp;
 
 			elf_dynsym_iterator_init(&ctx->elfobj, &dsym_iter);
 			while (elf_dynsym_iterator_next(&dsym_iter, &tmp) == ELF_ITER_OK) {
+				printf("Comparing tmp.name: %s with %s\n", tmp.name, rel_entry->rel.symname);
 				if (strcmp(tmp.name, rel_entry->rel.symname) == 0) {
 					uint64_t got_entry; // address of the GOT entry for the symbol
 					struct elf_symbol sym;
@@ -273,15 +275,14 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 					aslr_debug("symoffset in got is %zu\n", symoffset);
 					aslr_debug("Setting reloc value to %#lx\n", rel_val);
 					*(uint64_t *)r_ptr = rel_val;
-					goto success;
+					break;
 				}
 				symoffset += sizeof(uintptr_t);
 			 }
-#endif
-		if (rel_entry->rel.type == R_X86_64_GOT64) {
-			struct elf_symbol tmp;
-			elf_dynsym_iterator_t dsym_iter;
-			size_t symoffset = 0;
+			fprintf(stderr, "failed to resolve R_X86_64_GOTPCREL\n");
+			return false;
+			break;
+		case R_X86_64_GOT64:
 
 			elf_dynsym_iterator_init(&ctx->elfobj, &dsym_iter);
 			while (elf_dynsym_iterator_next(&dsym_iter, &tmp) == ELF_ITER_OK) {
@@ -292,13 +293,6 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 					return false;
 				}
 
-#if 0
-				printf("Continuing...\n");
-				if (elf_plt_by_name(&ctx->elfobj, tmp.name, &plt_entry) == false) {
-					aslr_debug("No PLT entry for %s, skipping...\n", tmp.name);
-					continue;
-				}
-#endif
 				/* This symbol should be related to a GLOB_DAT or JUMPSLOT
 				 * relocation.
 				 */
@@ -313,35 +307,13 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 					aslr_debug("symoffset in got is %zu\n", symoffset);
 					aslr_debug("Setting reloc value to %#lx\n", rel_val);
 					*(uint64_t *)r_ptr = rel_val;
-					goto success;
+					break;
 				}
 				symoffset += sizeof(uintptr_t);
 			}
-#if 0
-			elf_dynsym_iterator_init(&ctx->elfobj, &dsym_iter);
-			while (elf_dynsym_iterator_next(&dsym_iter, &tmp) == ELF_ITER_OK) {
-				if (tmp.type != STT_OBJECT && tmp.type != STT_NOTYPE)
-					continue;
-				 if (strcmp(tmp.name, rel_entry->rel.symname) == 0) {
-					aslr_debug("R_X86_64_GOT64 processing symbol %s\n", tmp.name);
-					aslr_debug("Type: %d\n", tmp.type);
-					 /*
-					 * First 3 entries of GOT[0, 1, 2] are reserved
-					 */
-					rel_val = symoffset + (sizeof(uintptr_t) * 3);
-					aslr_debug("symoffset in got is %zu\n", symoffset);
-					aslr_debug("Setting reloc value to %#lx\n", rel_val);
-					*(uint64_t *)r_ptr = rel_val;
-					goto success;
-				}
-				symoffset += sizeof(uintptr_t);
-			}
-#endif
 			fprintf(stderr, "Failed to find symbol for R_X86_64_GOT64 reloc entry\n");
 			return false;
-		}
-		aslr_debug("Made it to reloc switch() case\n");
-		switch(rel_entry->rel.type) {
+			break;
 		case R_X86_64_GOTPC64: /* GOT - P + A */
 			if (elf_section_by_name(&ctx->elfobj, ".got", &got) == false) {
 				fprintf(stderr, "elf_section_by_name() failed on .got\n");

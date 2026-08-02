@@ -7,6 +7,9 @@
 #define SHIVA_MODULE_PRE_EXEC_PHASE 	int __shiva_module_pre_exec_phase;
 #define SHIVA_MODULE_POST_EXEC_PHASE	int __shiva_module_post_exec_phase;
 
+#define SHIVA_MODULE_PRE_LDSO SHIVA_MODULE_PRE_EXEC_PHASE
+#define SHIVA_MODULE_POST_LDSO SHIVA_MODULE_POST_EXEC_PHASE
+
 #define SHIVA_MODULE_FORCE_MUSL_RESOLUTION int __shiva_module_musl_resolution;
 
 /*
