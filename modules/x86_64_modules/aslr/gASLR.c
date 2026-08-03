@@ -252,15 +252,13 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 		switch(rel_entry->rel.type) {
 		case R_X86_64_GOTPCRELX:
 		case R_X86_64_GOTPCREL:
+			break; /* GOTPCREL relocs are still unfinished, break out here. */
 			struct elf_symbol tmp;
-
 			elf_dynsym_iterator_init(&ctx->elfobj, &dsym_iter);
 			while (elf_dynsym_iterator_next(&dsym_iter, &tmp) == ELF_ITER_OK) {
-				printf("Comparing tmp.name: %s with %s\n", tmp.name, rel_entry->rel.symname);
 				if (strcmp(tmp.name, rel_entry->rel.symname) == 0) {
 					uint64_t got_entry; // address of the GOT entry for the symbol
 					struct elf_symbol sym;
-
 					aslr_debug("R_X86_64_GOTPCREL(X) processing symbol %s\n", tmp.name);
 					/*
 					 * First 3 entries of GOT[0, 1, 2] are reserved (hence the "sizeof(uintptr_t) * 3")
@@ -274,8 +272,9 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 					aslr_debug("rel_val = %#lx - %#lx\n", got_entry, ELF_RUNTIME_BASE(sym.value));
 					aslr_debug("symoffset in got is %zu\n", symoffset);
 					aslr_debug("Setting reloc value to %#lx\n", rel_val);
+
 					*(uint64_t *)r_ptr = rel_val;
-					break;
+					goto success;
 				}
 				symoffset += sizeof(uintptr_t);
 			 }
