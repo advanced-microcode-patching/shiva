@@ -1,46 +1,118 @@
 # Shiva JIT micropatching engine
 ![My Image](shiva_logo.png)
 
+**Table of Contents**
+
+- [Description](#description)
+  - [DARPA](#darpa)
+- [Support](#support)
+- [Build](#build)
+  - [x86_64 Shiva build](#x86_64-shiva-build)
+  - [AArch64 Shiva build](#aarch64-shiva-build)
+- [Dependencies](#dependencies)
+  - [libelfmaster](#libelfmaster)
+  - [musl-libc](#musl-libc)
+- [Building Shiva](#building-shiva)
+  - [Clone the correct Shiva repo](#clone-the-correct-shiva-repo)
+  - [Build for x86_64 Linux](#build-for-x86_64-linux)
+  - [Build shiva AArch64](#build-shiva-aarch64)
+- [Build artifacts](#build-artifacts)
+  - [shiva: The custom ELF dynamic linker](#shiva-the-custom-elf-dynamic-linker)
+  - [shiva-ld: The Shiva ELF prelinker](#shiva-ld-the-shiva-elf-prelinker)
+- [How to build/compile/link the ELF executables that you will be patching](#how-to-buildcompilelink-the-elf-executables-that-you-will-be-patching)
+- [How to compile a Shiva patch](#how-to-compile-a-shiva-patch)
+- [Patch example in AArch64 Linux](#patch-example-in-aarch64-linux)
+  - [CFS Binary patch: cfs_patch1](#cfs-binary-patch-cfs_patch1)
+    - [Running core-cpu1.patched](#running-core-cpu1patched)
+    - [Patching .rodata symbols with Shiva: rodata_interposing patch.](#patching-rodata-symbols-with-shiva-rodata_interposing-patch)
+  - [Friendly user guide to micropatching with Shiva AArch64](#friendly-user-guide-to-micropatching-with-shiva-aarch64)
+- [Patch example in X86_64 Linux](#patch-example-in-x86_64-linux)
+  - [Function splicing](#function-splicing)
+    - [Function splice example 1: Fix strcpy vuln](#function-splice-example-1-fix-strcpy-vuln)
+    - [Splice patch src code](#splice-patch-src-code)
+    - [Test ./vuln](#test-vuln)
+    - [Test patched ./vuln](#test-patched-vuln)
+- [Interposing shared library functions](#interposing-shared-library-functions)
+- [Author contact](#author-contact)
+
 ## Description
 
 Shiva is an ELF dynamic linker that is specialized for patching native Linux
-software. Shiva has been custom tailored towards the requirements of the DARPA
-AMP project and currently supports the AArch64 architecture.
+software, supporting AArch64 and X86_64 architectures. Shiva was invented in
+2021 and has continued to evolve throughout the DARPA AMP and DARPA EBOSS
+programs.
 
-Patches are written in C and compiled into ELF relocatable objects. Shiva loads,
-links, and patches the new code into memory.
+Patches are written in C and compiled into ELF relocatable objects. Shiva is an
+ELF interpreter that loads, links, and patches the new code into memory at
+load-time.  Once the patch has been installed Shiva then maps
+"/lib/ld-linux.so" into memory and transfers control to it in order to finish
+loading before program startup. We call this "Chained linking" where more than
+one dynamic linker can be chained together for program startup
+
+### DARPA
+
+Shiva has continued to evolve through the DARPA AMP and DARPA EBOSS (Contract No. HR001124C0488)
+programs. Any opinions, findings and conclusions or recommendations expressed in this material
+are those of the author and do not necessarily reflect the views of the Defense Advanced Research
+Project Agency (DARPA).
 
 ## Support
 
 OS: Linux
-Architectures: AArch64
-ELF binary support: AArch64 ELF PIE executables (aka. ET_DYN)
+Architectures:
+	- AArch64 : Tested with Ubuntu 18, 20
+	- X86_64 : Tested with Ubuntu 20, 22, 24
+ELF binary support: ELF PIE executables (aka. ET_DYN)
 
-Support for ET_EXEC binaries and other architectures are on the way.
+Support for ET_EXEC can be implemented relatively easily but
+it has not been a high priority since modern Linux systems
+do not often use them for security reasons.
 
 ## Build
 
-This has been tested on aarch64 ubuntu 18.04 and ubuntu 22.
+The build process is separated into two distinct branches.
+
+### x86_64 Shiva build
+
+If you want to build the x86_64 Shiva you currently have
+to checkout the branch: "x86_64_port" as it has not been
+merged into the main branch yet.
+
+### AArch64 Shiva build
+
+Checkout the main branch to build AArch64 Shiva.
+
 Shiva relies on libelfmaster, musl-libc, and libcapstone.
+For now it has a pre-built version of libcapstone that is
+statically linked with musl-libc.
+
+(libcapstone.a for AArch64 and libcapstone_x86_64.a for x86_64).
+
+For AArch64 Linux make sure to see the friendly user-guide :)
+This will tell you everything you need to know in order to patch in Linux
+AArch64.
+
+https://github.com/advanced-microcode-patching/shiva_user_manual
 
 ## Dependencies
 
 
-#### libelfmaster (aarch64_support branch)
+#### libelfmaster
 
 ```
 git clone git@github.com:elfmaster/libelfmaster
-cd libelfmaster
-git --fetch all
-git checkout aarch64_support
-```
-
-The original build for libelfmaster is broken and I haven't yet fixed it.
-Meanwhile just use the simple build shellscript I made.
+cd libelfmaster/src
 
 ```
-cd src
-sudo make.sh
+
+In X86_64 Shiva can only be built properly when libelfmaster
+is compiled with musl-libc (As the Shiva binary is)
+In AArch64 it's not necessary to build libelfmaster with
+musl-libc, but it won't hurt.
+
+```
+make musl
+sudo make musl-install
 ```
 
 The static library to libelfmaster
@@ -58,31 +130,159 @@ sudo apt-get install musl musl-dev musl-tools
 
 ## Building Shiva
 
+### Clone the correct Shiva repo
+
 ```
 cd ~/git
 git clone git@github.com:advanced-microcode-patching/shiva
 cd shiva
+```
+
+### Build for x86_64 Linux
+
+(NOTE: The DWARF support has primarily been tested on ubuntu 22 and 24)
+
+x86_64 Linux has DWARF support that requires libelf and a
+musl-libc static library for libdwarf.
+
+```
+git checkout x86_64_port
+sudo apt-get install libelf-dev
+sudo ./build_dwarf.sh
+make
+sudo make install
+```
+
+### Build shiva AArch64
+
+```
 make
 make shiva-ld
 make patches
 sudo make install
 ```
 
-Shiva is copied to `"/lib/shiva"` and can be executed directly or indirectly as
+## Build artifacts
+
+The Shiva micropatching system is made up of two programs: "shiva" and "shiva-ld"
+
+### shiva: The custom ELF dynamic linker
+
+Shiva, the dynamic linker, is placed in /lib/shiva with a symlink from /usr/bin/shiva
+Shiva can be invoked directly as an executable or used as the primary ELF interpreter
+in a program. 
+
+Shiva is responsible for the patching at runtime. It's a program loader, linker, and
+transformer that treats ELF relocatable objects ".o" files, as first class modules for
+patching.
+
+Shiva is copied to `/lib/shiva` and can be executed directly or indirectly as
 an interpreter.
 
-The shiva-ld utility is known as the "Shiva Prelinker" and is used to modify
-binaries with the path to the new program interpreter `"/lib/shiva"`, and the
-path to the patch module (i.e.  `"/opt/modules/shiva/patch1.o"`).
+### shiva-ld: The Shiva ELF prelinker
 
-## Patch testing
+The shiva-ld utility is known as the "Shiva Prelinker". It installs the basic
+meta-data and linking meta-data into a binary that is necessary for the patch to be
+properly installed at load-time. Primarily this tool modifies the PT_INTERP segment
+changing it from "/lib/ld-linux.so" to "/lib/shiva" and adding an extra PT_LOAD segment
+in order to make room for custom ELF sections and a new larger dynamic segment that
+contains several new dtags describing the patch pathname among other things.
 
+The shiva-ld tool is placed in `/usr/bin`
+
+
+## How to build/compile/link the ELF executables that you will be patching
+
+Generally speaking Shiva makes no assumptions about how you build your software. It tries
+to be a robust and dynamic approach to many types of ELF binaries. Presently it does not
+work on ET_EXEC type files (As they are few these days) but it has varying support for most
+ELF PIE binaries that are of a supported architecture (x86_64 and aarch64)--
+
+1. The ELF executable must have a PT_INTERP segment (i.e. be dynamically linked)
+
+    Presently the ELF executable must have a PT_INTERP segment which any dynamically linked
+    executable will already have.  In the future Shiva will work with fully
+    statically linked executable too. I can accomplish this task in just a few days.
+
+2. The ELF executable should ideally have a complete symbol table (But not entirely necessary).
+
+    Shiva is a symbolically driven patching system. In other words it allows developers
+    to re-write code and data by symbol name (i.e. function name, variable name, etc.). Therefore
+    it is very helpful to atleast have a complete .symtab symbol table. Otherwise Shiva will still
+    allow you to interpose any symbols that are witin the .dynsym (Dynamic symbol table).
+
+**NOTE ON STRIPPED BINARIES:**
+    Shiva is built with libelfmaster under the hood, it inherently has some symbol
+    forensics capabilities, so it's able to reconstruct a basic symbol table for every
+    function in the executable. In cases where the binary is stripped Shiva will allow you
+    to interpose a function by it's "psuedo-symbol-name" in the format of: fn_0xdeadbeef
+    (Changing deadbeef to the correct address).
+
+    (NOTE: The symbol reconstruction feature is dependent on the PT_GNU_EH_FRAME segment
+    existing.)
+
+3. The ELF executable should ideally have the `.llvm_jump_table_sizes` section
+
+    Shiva requires the `.llvm_jump-table_sizes` section to properly re-write
+    jump-tables for functions that have splice patches being applied to them.  If a
+    patch aims to function splice into a specific function, Shiva re-writes the
+    entire function into a new location from scratch and it's corresponding
+    jump-table can only be re-written correctly if the `.llvm_jump_table_sizes
+    section exists.
+
+    NOTE: Jump-table re-writing is only a feature in x86_64. Function splicing
+    into functions that have jump-tables in AArch64 Linux will currently cause
+    the new patched function to jump back into the old function. This is a big
+    problem, and will be fixed upon request.
+
+4. The binary must be PIE (position independent), i.e. gcc -pie -fPIC test.c -o test
+
+## How to compile a Shiva patch
+
+Shiva patches are ET_REL objects. Shiva modules are also ET_REL objects, they are one
+in the same thing, except that a module has a `shiva_init(shiva_ctx_t *)` function.
+Shiva modules should be compiled with a large code model. Here's a general guideline
+
+### Compiling patches for AArch64 Linux
+
+#### For AArch64 Shiva patches that are not using function splicing at all
+
+You can optionally use optimizations (i.e. -O2) etc. You may safely add quite a number
+of flags and optimizations, but stick with this as a baseline command. The code model
+must be large, and -fno-pic must be used on AArch64 Linux.
+
+```
+gcc -I /opt/shiva/include -fno-stack-protector -mcmodel=large -fno-pic -c patch.c
+```
+
+#### AArch64 Shiva patches that are using function splicing
+
+Notice that we use -fomit-frame-pointer in function splices. This is because we don't
+want frame pointer prologue/epilogue when splicing into an existing function.
+
+```
+gcc -I /opt/shiva/include -fno-stack-protector -fomit-frame-pointer -fno-pic -mcmodel=large -c patch.c
+```
+
+### Compiling patches for X86_64 Linux
+
+Use the same commands to compile patches for X86_64, but do not use the `-fno-pic` flag
+as you do when in AArch64 Linux.
+
+#### X86_64 Shiva patches without function splicing
+```
+gcc -I /opt/shiva/include -fno-stack-protector -mcmodel=large -c patch.c
+```
+
+#### X86_64 Shiva patches with function splicing
+
+```
+gcc -I /opt/shiva/include -fno-stack-protector -fomit-frame-pointer -mcmodel=large -c patch.c
+```
+
+## Patch example in AArch64 Linux
 
 $ cd modules/aarch64/cfs_patch1
-
-We have already compiled and prelinked the example patches in the previous
-steps. Shiva prelinking refers specifically to the prelinking applied by
-the shiva-ld tool.
 
 Take a look at the Makefile for each patch, and you will see how shiva-ld is
 used to apply the pre-patch meta-data.
@@ -260,10 +460,299 @@ val: 5
 elfmaster@esoteric-aarch64:~/amp/shiva/modules/aarch64_patches/rodata_interposing$ 
 ```
 
-### Friendly user guide to micropatching with Shiva
+### Friendly user guide to micropatching with Shiva AArch64
 
 Read the user manual. https://github.com/advanced-microcode-patching/shiva_user_manual
 
+
+## Patch example in X86_64 Linux
+
+Patching in X86_64 is mostly the same as in with AArch64. The following is an example
+of how to splice a single printf line into a program right before another specified
+source line number.
+
+### Function splicing
+
+Function splicing allows a patch developer to splice an arbitrary amount of C code into
+a target function at a given address range.
+
+#### Function splice example 1: Fix strcpy vuln
+
+```
+cd modules/x86_64_patches/fsplice/overflow
+cat vuln.c
+```
+
+#### Original source code of vuln.c
+
+```
+int parse_string(char *s)
+{
+	char buf[16];
+	char *p;
+
+	strcpy(buf, s);
+
+	printf("buf: %s\n", buf);
+}
+
+int main(int argc, char **argv)
+{
+	parse_string(argv[1]);
+}
+```
+
+Our goal is to replace the `strcpy()` with a call to `strncpy()`.  A quick look
+with objdump will shows us where to find the function arguments to `strcpy()`:
+`char *src` and `char *dst` so that we can pass them to our new call to
+`strncpy()`.  args in `strcpy()` are found in `RDI` and `(RBP-16)`,
+respectively.
+
+#### Disassembly for function parse_string
+
+```
+0000000000001169 <parse_string>:
+    1169:       f3 0f 1e fa             endbr64
+    116d:       55                      push   %rbp
+    116e:       48 89 e5                mov    %rsp,%rbp
+    1171:       48 83 ec 20             sub    $0x20,%rsp
+    1175:       48 89 7d e8             mov    %rdi,-0x18(%rbp) -- First instruction to patch
+    1179:       48 8b 55 e8             mov    -0x18(%rbp),%rdx 
+    117d:       48 8d 45 f0             lea    -0x10(%rbp),%rax 
+    1181:       48 89 d6                mov    %rdx,%rsi
+    1184:       48 89 c7                mov    %rax,%rdi 
+    1187:       e8 d4 fe ff ff          call   1060 <strcpy@plt> -- Last instruction to patch
+    118c:       48 8d 45 f0             lea    -0x10(%rbp),%rax
+    1190:       48 89 c6                mov    %rax,%rsi
+    1193:       48 8d 05 6a 0e 00 00    lea    0xe6a(%rip),%rax        # 2004 <_IO_stdin_used+0x4>
+    119a:       48 89 c7                mov    %rax,%rdi
+    119d:       b8 00 00 00 00          mov    $0x0,%eax
+    11a2:       e8 c9 fe ff ff          call   1070 <printf@plt>
+    11a7:       90                      nop
+    11a8:       c9                      leave
+    11a9:       c3                      ret
+```
+
+We want to re-write the code in function `foo()` at address 0x1175 ending at
+address 0x1187.  Our patch code that we are splicing into function `foo()`
+should overwrite the code beginning at address 0x1175 and ending at the
+instruction just before 0x1187. Shiva will be pushing the code at 0x1187
+forward to make room for our splice code that is too large to fit otherwise.
+
+#### Splice patch src code
+
+Here is our patch source code to replace the call to `strcpy()` with a call
+to `strncpy()`.
+
+```
+#include <stdint.h>
+#include <stdio.h>
+#include "shiva_module.h"
+
+#define BUFLEN 16
+
+SHIVA_MODULE_FORCE_MUSL_RESOLUTION;
+
+SHIVA_T_SPLICE_FUNCTION(parse_string, 0x1175, 0x118c)
+{
+	SHIVA_T_PAIR_RDI(src);
+    SHIVA_T_LEA_BP(dst, -16);
+	strncpy(dst, src, BUFLEN-1);
+}
+```
+
+Notice the usage of the `SHIVA_MODULE_FORCE_MUSL_RESOLUTION` macro. Without this
+being declared then Shiva wouldn't be able to link the call to `strncpy()`. The
+reason is that Shiva does not support linking to symbols of type `STT_IFUNC` of
+which there are several dozen of in glibc. When it comes to needing to invoke a
+function whos symbol type is `STT_IFUNC` it is necessary to force Shiva to
+resolve the symbol from musl-libc instead, which is already baked right into
+its own binary (i.e.  musl-libc is in /lib/shiva).
+
+Regarding the macros SHIVA_T_PAIR_RDI and SHIVA_T_LEA_BP, these are simple macros
+that use inline assembly. If you don't see a macro for a specific operation you are
+trying to do, feel free to just inline assembly manually.
+
+SHIVA_T_PAIR_RDI macro expands to: `register int64_t var asm("rdi");`
+SHIVA_T_LEA_BP macro expands to: `register int64_t var = (int64_t)((char*)__builtin_frame_address(0) + (offset));`
+
+Take a peek at `shiva/modules/include/shiva_module.h` which must be included in all
+Shiva patches in order to use the various macros that may or may not be necessary
+in a given patch.
+
+#### A list of the `STT_IFUNC` symbols in glibc.
+
+#### Byte-string functions
+
+```
+    strcpy — copy a string
+    strncpy — copy fixed-length string
+    stpcpy — copy string and return pointer to terminating null
+    strcat — concatenate strings
+    strncat — concatenate fixed-length strings
+    strcmp — compare two strings
+    strncmp — compare fixed-length strings
+    strchr / index — locate character in string
+    strrchr / rindex — locate last occurrence of character
+    strstr — locate substring
+    strlen — compute string length
+    strnlen — compute bounded string length
+```
+
+#### Memory functions
+
+```
+    memchr — locate byte in memory block
+    memrchr — locate last byte in memory block
+    rawmemchr — locate byte without length limit
+```
+
+#### Wide-character (wchar_t) functions
+
+```
+    wcslen — wide-character string length
+    wcsnlen — bounded wide-character string length
+    wcscpy — copy wide-character string
+    wcsncpy — copy fixed-length wide-character string
+    wcscat — concatenate wide-character strings
+    wcsncat — concatenate fixed-length wide-character strings
+    wcscmp — compare wide-character strings
+    wcsncmp — compare fixed-length wide-character strings
+    wcschr — locate wide character
+    wcsrchr — locate last wide character
+    wcscspn — span excluding wide characters from set
+    wcsspn — span including wide characters from set
+    wcspbrk — locate wide character in set
+    wmemchr — locate wide character in wide block
+    wmemrchr — locate last wide character in wide block
+```
+
+#### Patch description
+
+The patch creates an int64_t variable caled `src` from input register RDI and
+stores the value of RBP-16 in an `int64_t` variable called `dst`. It passes these
+as the correct arguments to `strncpy`, making sure to cast it as a `char *` since
+it is declared as `int64_t`.
+
+#### Test ./vuln
+
+This will cause a segfault
+
+```
+./vuln AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+```
+
+#### Test patched ./vuln
+
+1. Compile the patch.
+
+Use a large code model, disable the stack protection code, omit frame pointers (Not necessary with splice code).
+Make sure to copy your patch into the correct search path after compiling it.
+
+```
+gcc -mcmodel=large -fno-stack-protector -fomit-frame-pointer -I /opt/shiva/include/ -c patch.c
+sudo cp patch.o /opt/shiva/modules/
+```
+
+2. Prelink the binary
+
+```
+shiva-ld -i /lib/shiva -s /opt/shiva/modules -p patch.o -e vuln -o vuln.fixed
+```
+
+3. Test ./vuln.fixed
+
+```
+./vuln.fixed AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+```
+
+## Interposing shared library functions
+
+Shiva can re-write most any function or global data code on the fly within the
+main ELF executable, by both symbol interposition and function splicing
+transforms-- however Shiva cannot currently splice code into a shared library
+function, but it can interpose a shared library function if it is already being
+called by the executable in some other place. If the function is already called
+elsewhere then a PLT entry will exist for the shared library function and
+therefore Shiva can easily redirect/interpose that.
+
+In the event that we need to interpose a function within a shared library (Such
+as with LD_PRELOAD) then we can use the Shiva prelinker to inject a DT_NEEDED
+tag into the dynamic segment of the ELF executable in such a way that the new
+shared libraries symbols will be resolved with precedence over any other
+library.  This effectively creates a permenant LD_PRELOAD effect. This
+technique has been documented by myself and other researchers over the years,
+originally showing up in 2002/2003 Phrack magazine Cerberus ELF interface by
+Mayhem.
+
+Simply write a patch with the new definition of a given symbol (Global variable
+or global function) and compile the patch into a shared library instead of a
+relocatable object file. Copy the shared object patch into /lib/x86_64-linux-gnu
+(Or another valid search path) and use ldconfig to update the cache.
+
+For example, if you needed to interpose the function `connect()` from glibc,
+and the function `connect()` is not already called by the main executable, then
+you would need to use a shared library style patch to interpose connect.
+
+### Patch source code for libc:connect()
+
+
+```
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <dlfcn.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+
+static int (*real_connect)(int sockfd, const struct sockaddr *addr, socklen_t addrlen) = NULL;
+
+__attribute__((constructor))
+static void init_connect_hook(void)
+{
+    real_connect = dlsym(RTLD_NEXT, "connect");
+    if (!real_connect) {
+        fprintf(stderr, "[connect_interpose] ERROR: dlsym(RTLD_NEXT, \"connect\") failed\n");
+    } else {
+        fprintf(stderr, "[connect_interpose] Hook installed successfully\n");
+    }
+}
+
+// Interposed connect()
+int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
+{
+    unsigned short port = ntohs(((struct sockaddr_in *)addr)->sin_port);
+	if (port == 31337) {
+		printf("Suspicious activity... connect to port 31337?\n");
+	}
+    return real_connect(sockfd, addr, addrlen);
+}
+```
+
+### Compile and install .so patch for libc::connect() interposing
+
+```
+gcc -shared -fPIC -o libconnect_interpose.so connect_interpose.c -ldl
+sudo cp libconnect_interpose.so /lib/x86_64-linux-gnu/
+sudo ldconfig
+```
+
+#### Prelink patch to program (Netcat in this case)
+
+```
+shiva-ld -s /lib/x86_64-linux-gnu -p libconnect_interpose.so -e test -o test.new -N
+```
+
+If we do a `readelf -d` we can see the new shared library dependency at the top
+of the list.
+
+```
+Dynamic section at offset 0x4000 contains 28 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libconnect_interpose.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+... truncated ...
+```
 
 ### Author contact
 
