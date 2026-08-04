@@ -3580,7 +3580,7 @@ validate_transformations(struct shiva_ctx *ctx, struct shiva_module *linker)
 
 				if (find_previous_instruction_len(ctx, insert_vaddr,
 				    &last_insn_len, &last_insn_addr) == false) {
-					printf(stderr, "Unable to find the instruction length at %#lx\n",
+					fprintf(stderr, "Unable to find the instruction length at %#lx\n",
 					    transform->insert_vaddr);
 					return false;
 				}

@@ -466,7 +466,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 	 */
 	if (elf_section_by_index(&ctx->bin.elfobj, elf_shnum(&ctx->bin.elfobj) - 1,
 	    &last_shdr) == false) {
-		fprintf(stderr, "elf_section_by_index(%p, %d, ...) failed\n",
+		fprintf(stderr, "elf_section_by_index(%p, %ld, ...) failed\n",
 		    &ctx->bin.elfobj, elf_shnum(&ctx->bin.elfobj) - 1);
 		return false;
 	}
@@ -813,7 +813,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 
 		/* Write up until the last section (Usually .shstrtab but sometimes .strtab) */
 		if (elf_section_by_index(&ctx->bin.elfobj, old_e_shnum - 1, &last_shdr) == false) {
-			fprintf(stderr, "elf_section_by_index() failed on index %d\n", old_e_shnum);
+			fprintf(stderr, "elf_section_by_index() failed on index %ld\n", old_e_shnum);
 			return false;
 		}
 
@@ -1300,7 +1300,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 
 		/* Write up until the last section (Usually .shstrtab but sometimes .strtab) */
 		if (elf_section_by_index(&ctx->bin.elfobj, old_e_shnum - 1, &last_shdr) == false) {
-			 fprintf(stderr, "elf_section_by_index() failed on index %d\n", old_e_shnum);
+			 fprintf(stderr, "elf_section_by_index() failed on index %ld\n", old_e_shnum);
 			 return false;
 		}
 		/*
@@ -1321,7 +1321,7 @@ shiva_prelink(struct shiva_prelink_ctx *ctx)
 		printf("last_shdr.offset = %#lx\n", last_shdr.offset);
 
 		if (elf_section_modify(&ctx->bin.elfobj, last_shdr_index, &last_shdr, &error) == false) {
-			fprintf(stderr, "elf_section_modify() failed on index %d (%s)\n", last_shdr_index, last_shdr.name);
+			fprintf(stderr, "elf_section_modify() failed on index %ld (%s)\n", last_shdr_index, last_shdr.name);
 			return false;
 		}
 		(void)elf_section_commit(&ctx->bin.elfobj);
