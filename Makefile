@@ -50,8 +50,10 @@ install:
 	mkdir -p /opt/shiva/modules
 	mkdir -p /opt/shiva/include
 	cp modules/include/shiva_module.h /opt/shiva/include
-#	cp $(PATCH_PATH)/*interposing*/*.o /opt/shiva/modules
-#	cp $(PATCH_PATH)/cfs_patch1/*.o /opt/shiva/modules
+	cp shiva.h /opt/shiva/include
+	cp shiva_debug.h /opt/shiva/include
+	cp *.h /opt/shiva/include
+	cp -R include /opt/shiva/include/
 	cat shiva.ansi
 #
 clean:
