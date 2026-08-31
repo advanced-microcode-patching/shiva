@@ -224,19 +224,11 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 #endif
 		shiva_debug("0x%"PRIx64":\t%s\t\t%s\n", ctx->disas.insn->address,
 		    ctx->disas.insn->mnemonic, ctx->disas.insn->op_str);
-		if (strcmp(ctx->disas.insn->mnemonic, "b") == 0) {
-			if (shiva_analyze_build_aarch64_jmp(ctx, section.address + c)
-			    == false) {
-				fprintf(stderr, "shiva_analyze_build_aarch64_jmp(%p, %#lx) failed\n",
-				    ctx, section.address + c);
-				return false;
-			}
-		}
-		if (strncmp(ctx->disas.insn->mnemonic, "b.", 2) == 0) {
+		if (ctx->disas.insn->id == ARM64_INS_B) {
 			/*
 			 * Branch instructions:
 			 * b.eq, b.ne, b.gt, b.ge, b.lt, b.le, b.ls, b.hi,
-			 * b.cc, b.cs, b.cond
+			 * b.cc, b.cs, b.cond, b
 			 */
 			if (shiva_analyze_build_aarch64_jmp(ctx, section.address + c)
 			    == false) {
@@ -244,7 +236,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 				    ctx, section.address + c);
 				return false;
 			}
-		} else if (strncmp(ctx->disas.insn->mnemonic, "cb", 2) == 0) {
+		} else if (ctx->disas.insn->id == ARM64_INS_CBNZ || ctx->disas.insn->id == ARM64_INS_CBZ) {
 			/*
 			 * Compare and branch
 			 * cbnz, cbz
@@ -256,7 +248,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 				return false;
 			}
 
-		} else if (strncmp(ctx->disas.insn->mnemonic, "tb", 2) == 0) {
+		} else if (ctx->disas.insn->id == ARM64_INS_TBNZ || ctx->disas.insn->id == ARM64_INS_TBZ) {
 			/*
 			 * Test bit and branch
 			 * tbz, tbnz
@@ -268,7 +260,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 				return false;
 			}
 
-		} else if (strcmp(ctx->disas.insn->mnemonic, "bl") == 0) {
+		} else if (ctx->disas.insn->id == ARM64_INS_BL) {
 			struct shiva_branch_site *tmp;
 			uint64_t addr;
 			struct elf_symbol tmp_sym;
@@ -338,7 +330,7 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			shiva_debug("Inserting branch for symbol %s callsite: %#lx\n", tmp->symbol.name, tmp->branch_site);
 			TAILQ_INSERT_TAIL(&ctx->tailq.branch_tqlist, tmp, _linkage);
 			shiva_debug("Done inserting it\n");
-		} else if (strcmp(ctx->disas.insn->mnemonic, "adrp") == 0) {
+		} else if (ctx->disas.insn->id == ARM64_INS_ADRP) {
 			uint64_t adrp_imm, adrp_site;
 			uint32_t adrp_o_bytes = *(uint32_t *)ctx->disas.insn->bytes;
 			uint32_t next_o_bytes;
@@ -383,11 +375,11 @@ shiva_analyze_find_calls(struct shiva_ctx *ctx)
 			/*
 			 * Is the next instruction and ldr?
 			 */
-			if (strcmp(ctx->disas.insn->mnemonic, "ldr") == 0) {
+			if (ctx->disas.insn->id == ARM64_INS_LDR) {
 				xref_type = SHIVA_XREF_TYPE_ADRP_LDR;
-			} else if (strcmp(ctx->disas.insn->mnemonic, "str") == 0) {
+			} else if (ctx->disas.insn->id == ARM64_INS_STR) {
 				xref_type = SHIVA_XREF_TYPE_ADRP_STR;
-			} else if (strcmp(ctx->disas.insn->mnemonic, "add") == 0) {
+			} else if (ctx->disas.insn->id == ARM64_INS_ADD) {
 				xref_type = SHIVA_XREF_TYPE_ADRP_ADD;
 			} else {
 				xref_type = SHIVA_XREF_TYPE_UNKNOWN;

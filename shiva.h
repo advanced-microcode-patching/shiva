@@ -232,7 +232,7 @@ struct shiva_branch_site {
 #define SHIVA_XREF_F_DEREF_SYMINFO	(1UL << 3)
 #define SHIVA_XREF_F_TO_SECTION		(1UL << 4) /* xref to a section (i.e. .rodata) with no syminfo */
 
-struct shiva_xref_site {
+typedef struct shiva_xref_site {
 	int type;
 	uint64_t flags;
 	uint64_t *got; // indirect xrefs use a .got to hold a symbol value.
@@ -370,7 +370,7 @@ typedef struct shiva_transform {
  * after ld-linux.so is completely done and passes
  * control back to Shiva AT_ENTRY, if needed.
  */
-struct shiva_module_delayed_reloc {
+typedef struct shiva_module_delayed_reloc {
 	uint8_t *rel_unit;
 	uint64_t rel_addr;
 	uint64_t symval;	   /* The symbols value */
