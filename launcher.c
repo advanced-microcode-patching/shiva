@@ -823,7 +823,7 @@ bool saruman_remove_pie_flag(struct saruman_ctx *ctx)
 			return true;
 		}
 	}
-	return false;
+	return true;
 }
 
 bool saruman_find_injected_base(struct saruman_ctx *ctx)
