@@ -33,4 +33,16 @@ Specify the command line args of the program you are injecting
 ./saruman <target_pid> <exec_path> [args]
 ```
 
+### NOTES
+
+The executable file that you are injecting will be slightly modified.
+In order for the newer glibc's dlopen() to load a PIE executable it must
+have the PIE flag turned off in the DT_FLAGS_1 tag of the dynamic segment.
+This won't effect the execution of the program in anyway but you must have
+write access to the executable you are loading.
+
+ptrace scope must be disabled (Set to 0) unless you call ./saruman as root.
+
+
+
 
