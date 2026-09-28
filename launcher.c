@@ -175,6 +175,7 @@ __PAYLOAD_KEYWORDS__ int create_thread(void (*fn)(void *), void *data,
 	void **newstack = (void **)stack;
 
 	*--newstack = data;
+	newstack = (void **)((unsigned long)newstack & ~0xfUL);
 
 	__asm__ __volatile__(
 		"xor %%rdx, %%rdx\n\t"
@@ -994,7 +995,6 @@ int main(int argc, char **argv)
 
 	printf("Successfully injected executable '%s' into memory\n", argv[2]);
 
-
 	if (saruman_find_injected_base(&saruman) == false) {
 		fprintf(stderr, "Failed to find base address of injected: %s\n", argv[2]);
 		exit(EXIT_FAILURE);
@@ -1073,6 +1073,8 @@ int main(int argc, char **argv)
 	    (char *)(uintptr_t)saruman.parasite.main_argc,
 	    (char *)(uintptr_t)remote_argv
 	};
+
+	saruman_debug("Setting up remote thread\n");
 
 	saruman_remote_call_init(&rpc, &create_thread, 1024,
 	    pthread_args, 5);
