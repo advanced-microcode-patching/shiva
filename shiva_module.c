@@ -89,6 +89,7 @@ module_symbol_shndx_str(struct shiva_module *linker, struct elf_symbol *symbol)
 static inline void
 transfer_to_module(struct shiva_ctx *ctx)
 {
+	shiva_debug("Calling %#lx\n", ctx->module.runtime->entry_point);
 	void (*fn)(void *arg) = (void (*)(void *))ctx->module.runtime->entry_point;
 
 	return fn(ctx);
