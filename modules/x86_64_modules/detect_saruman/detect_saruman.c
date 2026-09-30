@@ -1,7 +1,8 @@
 /*
  * Arcana Research, 2026
  * Shiva module that runs directly after ld-linux.so finishes
- * Detects and prevents potentially malicious thread injection (i.e. Saruman)
+ * Spawning a thread which detects and prevents potentially malicious thread injection
+ * (i.e. Saruman)
  * Elfmaster [at] Arcana-Research.io
  */
 
@@ -87,29 +88,48 @@ struct iovec_raw {
 static long
 write_raw(int fd, const void *buf, unsigned long n)
 {
-        long r;
+	long r;
 
-        asm volatile("syscall"
-            : "=a"(r)
-            : "a"(1L), "D"((long)fd), "S"((long)buf), "d"(n)
-            : "rcx", "r11", "memory");
-        return (r);
+	asm volatile("syscall"
+	    : "=a"(r)
+	    : "a"(1L), "D"((long)fd), "S"((long)buf), "d"(n)
+	    : "rcx", "r11", "memory");
+	return (r);
 }
 
 void
 print_msg(const char *fmt, ...)
 {
-        char buf[512];
-        va_list ap;
-        int n;
+	char buf[512];
+	va_list ap;
+	int n;
 
-        va_start(ap, fmt);
-        n = vsnprintf(buf, sizeof(buf), fmt, ap);
-        va_end(ap);
-        if (n > (int)sizeof(buf) - 1)
-                n = (int)sizeof(buf) - 1;
-        if (n > 0)
-                write_raw(2, buf, (unsigned long)n);
+	va_start(ap, fmt);
+	n = vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+	if (n > (int)sizeof(buf) - 1)
+		n = (int)sizeof(buf) - 1;
+	if (n > 0)
+		write_raw(2, buf, (unsigned long)n);
+}
+
+void
+debug_msg(const char *fmt, ...)
+{
+	char buf[512];
+	va_list ap;
+	int n;
+
+#if DEBUG
+	va_start(ap, fmt);
+	n = vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+	if (n > (int)sizeof(buf) - 1)
+		n = (int)sizeof(buf) - 1;
+	if (n > 0)
+		write_raw(2, buf, (unsigned long)n);
+#endif
+	return;
 }
 
 long
@@ -198,13 +218,16 @@ install_filter(void)
 	prog.len = (unsigned short)(sizeof(filt) / sizeof(filt[0]));
 	prog.filter = filt;
 
-	r = raw_prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+	r = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
 	if (r < 0) {
 		fprintf(stderr, "prctl() failed\n");
 		return -1;
 	}
 
-	r = seccomp_raw(1, 8, &prog);
+	r = seccomp_raw(1,
+	    SECCOMP_FILTER_FLAG_NEW_LISTENER,
+	    &prog);
+
 	if (r <= 0) {
 		fprintf(stderr, "seccomp() failed\n");
 		return -1;
@@ -237,19 +260,26 @@ read_clone3_args(pid_t pid, uint64_t uaddr, size_t sz, struct clone_args *out)
 bool
 classify_clone(uint64_t flags, uint64_t stack, uint64_t tls)
 {
-	if (stack == 0)
+	if (stack == 0) {
+		debug_msg("stack is NULL in clone\n");
 		return false;
+	}
 
-	if ((flags & PTHREAD_HINT) == PTHREAD_HINT)
+	if ((flags & PTHREAD_HINT) == PTHREAD_HINT) {
+		debug_msg("PTHREAD_HINT found in clone\n");
 		return false;
+	}
 
 	/*
 	 * Does this call to clone use the flags that Saruman uses?
 	 */
-	if ((flags & SARUMAN_FLAGS) == SARUMAN_FLAGS)
+	if ((flags & SARUMAN_FLAGS) == SARUMAN_FLAGS) {
+		debug_msg("SARUMAN detected\n");
 		return true;
+	}
 
 	(void)tls;
+	debug_msg("return false\n");
 	return false;
 }
 
@@ -261,7 +291,7 @@ void
 handle_notification(struct seccomp_notif *req, struct seccomp_notif_resp *resp)
 {
 	uint64_t flags = 0, stack = 0, tls = 0;
-	struct clone_args c3;
+	struct clone_args clone_args;
 	bool detected = false;
 
 	resp->id = req->id;
@@ -281,14 +311,16 @@ handle_notification(struct seccomp_notif *req, struct seccomp_notif_resp *resp)
 		if (read_clone3_args((pid_t)req->pid,
 		    req->data.args[0],
 		    (size_t)req->data.args[1],
-		    &c3)) {
-			flags = c3.flags;
-			stack = c3.stack;
-			tls   = c3.tls;
+		    &clone_args)) {
+			flags = clone_args.flags;
+			stack = clone_args.stack;
+			tls   = clone_args.tls;
 			detected = classify_clone(flags, stack, tls);
 		}
 	}
-
+	if (detected == false) {
+		debug_msg("detected = %d allowing thread\n", detected);
+	}
 	if (detected == true) {
 		print_msg("Detected and prevented suspicious thread injection!"
 		    " pid=%d nr=%d flags=0x%lx stack=0x%lx tls=0x%lx\n",
@@ -305,71 +337,60 @@ handle_notification(struct seccomp_notif *req, struct seccomp_notif_resp *resp)
 long
 ioctl_raw(int fd, unsigned long cmd, void *arg)
 {
-    long r;
-    asm volatile("syscall"
+	long r;
+	asm volatile("syscall"
 	: "=a"(r)
 	: "a"(16L), "D"((long)fd), "S"(cmd), "d"((long)arg)
 	: "rcx", "r11", "memory");
-    return r;
+	return r;
 }
+
+volatile int listener_ready = 0;
 
 int
 listener_loop(void *arg)
 {
-	struct seccomp_notif req;
-	struct seccomp_notif_resp resp;
+        struct seccomp_notif_sizes sz;
+        unsigned long cmd_recv, cmd_send;
+        void *req, *resp;
+        long rec, snd;
 
-	(void)arg;
+        (void)arg;
 
-	while (notify_fd < 0)
-		;
-	for (;;) {
-		if (ioctl_raw(notify_fd, SECCOMP_IOCTL_NOTIF_RECV, &req) < 0)
-			continue;
-		handle_notification(&req, &resp);
-		(void)ioctl_raw(notify_fd, SECCOMP_IOCTL_NOTIF_SEND, &resp);
-	}
+        while (notify_fd <= 0)
+                ;
+
+        memset(&sz, 0, sizeof(sz));
+        if (seccomp_raw(3u, 0, &sz) < 0 || sz.seccomp_notif == 0) {
+                sz.seccomp_notif = 256;
+                sz.seccomp_notif_resp = 128;
+        }
+
+        cmd_recv = _IOC(_IOC_READ | _IOC_WRITE, '!', 0, sz.seccomp_notif);
+        cmd_send = _IOC(_IOC_READ | _IOC_WRITE, '!', 1, sz.seccomp_notif_resp);
+
+        req = mmap(NULL, sz.seccomp_notif, PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        resp = mmap(NULL, sz.seccomp_notif_resp, PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (req == MAP_FAILED || resp == MAP_FAILED)
+                return (-1);
+
+        listener_ready = 1;
+
+        for (;;) {
+                memset(req, 0, sz.seccomp_notif);
+                rec = ioctl_raw(notify_fd, cmd_recv, req);
+                if (rec < 0) {
+                        print_msg("recv errno=%d\n", (int)(-rec));
+                        continue;
+                }
+                handle_notification(req, resp);
+                snd = ioctl_raw(notify_fd, cmd_send, resp);
+                if (snd < 0)
+                        print_msg("send=%ld\n", snd);
+        }
 }
-
-#define __NR_clone 56
-
-typedef int (*clone_fn_t)(void *);
-
-long
-clone_raw(unsigned long flags, void *stack,
-    int *parent_tid, int *child_tid, unsigned long tls,
-    clone_fn_t fn, void *arg)
-{
-	long ret;
-	register long r10 asm("r10") = (long)child_tid;
-	register long r8  asm("r8")  = (long)tls;
-	register long rbx_fn asm("rbx") = (long)fn;
-	register long r12_arg asm("r12") = (long)arg;
-
-	asm volatile(
-	"syscall\n\t"
-	"testq %%rax, %%rax\n\t"
-	"jnz   1f\n\t"
-	"xorq  %%rbp, %%rbp\n\t"
-	"andq  $-16, %%rsp\n\t"
-	"movq  %%r12, %%rdi\n\t"
-	"call  *%%rbx\n\t"
-	"movq  %%rax, %%rdi\n\t"
-	"movq  $60, %%rax\n\t"
-	"syscall\n"
-	"1:"
-	: "=a"(ret)
-	: "a"((long)__NR_clone),
-	  "D"((long)flags),
-	  "S"((long)stack),
-	  "d"((long)parent_tid),
-	  "r"(r10), "r"(r8),
-	  "r"(rbx_fn), "r"(r12_arg)
-	: "rcx", "r11", "r9", "memory"
-	);
-	return ret;
-}
-
 #define STACK_SIZE 4096 * 10
 
 int
@@ -389,20 +410,28 @@ shiva_init(struct shiva_ctx *ctx)
 
 	int ptid = 0;
 
-	child = clone_raw(
+	debug_msg("Calling clone\n");
+
+	child = clone(listener_loop,
+	    stack + STACK_SIZE,
 	    CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND |
-	    CLONE_THREAD | CLONE_SYSVSEM,
-	    stack + STACK_SIZE, 0, 0, 0, listener_loop, 0);
+	    CLONE_THREAD | CLONE_SYSVSEM, NULL);
 
 	if (child <= 0) {
 		fprintf(stderr, "clone failed, child: %ld\n", child);
 		return -1;
 	}
 
+	debug_msg("Installing filter\n");
 	if (install_filter() < 0) {
 		fprintf(stderr, "install_filter failed!\n");
 		return -1;
 	}
 
+	debug_msg("listener_ready == 0)\n");
+	while (listener_ready == 0)
+		;
+
+	debug_msg("returning 0\n");
 	return 0;
 }
