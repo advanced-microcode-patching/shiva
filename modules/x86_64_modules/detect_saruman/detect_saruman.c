@@ -379,8 +379,6 @@ shiva_init(struct shiva_ctx *ctx)
 	uint8_t *stack;
 	g_ctx = ctx;
 
-	printf("shiva_init invoked\n");
-
 	stack = (uint8_t *)mmap(0, STACK_SIZE,
 	    PROT_READ | PROT_WRITE,
 	    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
