@@ -1,7 +1,7 @@
 /*
  * Arcana Research, 2026
- * Shiva module that runs pre-ldso
- * Detects potentially malicious thread injection (i.e. Saruman)
+ * Shiva module that runs directly after ld-linux.so finishes
+ * Detects and prevents potentially malicious thread injection (i.e. Saruman)
  * Elfmaster [at] Arcana-Research.io
  */
 
@@ -26,8 +26,6 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 #include <stddef.h>
-
-SHIVA_MODULE_PRE_LDSO;
 
 #ifndef SECCOMP_IOCTL_NOTIF_RECV
 #define SECCOMP_IOCTL_NOTIF_RECV SECCOMP_IOWR(0, struct seccomp_notif)
@@ -84,6 +82,35 @@ struct iovec_raw {
     void  *iov_base;
     unsigned long iov_len;
 };
+
+
+static long
+write_raw(int fd, const void *buf, unsigned long n)
+{
+        long r;
+
+        asm volatile("syscall"
+            : "=a"(r)
+            : "a"(1L), "D"((long)fd), "S"((long)buf), "d"(n)
+            : "rcx", "r11", "memory");
+        return (r);
+}
+
+void
+print_msg(const char *fmt, ...)
+{
+        char buf[512];
+        va_list ap;
+        int n;
+
+        va_start(ap, fmt);
+        n = vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+        if (n > (int)sizeof(buf) - 1)
+                n = (int)sizeof(buf) - 1;
+        if (n > 0)
+                write_raw(2, buf, (unsigned long)n);
+}
 
 long
 process_vm_readv_raw(long pid,
@@ -177,7 +204,7 @@ install_filter(void)
 		return -1;
 	}
 
-	 r = seccomp_raw(1u, 8u, &prog);   /* SET_MODE_FILTER, NEW_LISTENER */
+	r = seccomp_raw(1, 8, &prog);
 	if (r <= 0) {
 		fprintf(stderr, "seccomp() failed\n");
 		return -1;
@@ -200,17 +227,30 @@ read_clone3_args(pid_t pid, uint64_t uaddr, size_t sz, struct clone_args *out)
 	return n == (ssize_t)remote.iov_len;
 }
 
+/*
+ * The flags of the clone we do ourselves in shiva_init()
+ */
+#define SARUMAN_FLAGS \
+	(CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | \
+	 CLONE_THREAD | CLONE_SYSVSEM)
+
 bool
 classify_clone(uint64_t flags, uint64_t stack, uint64_t tls)
 {
-	if ((flags & SARUMAN_CORE) != SARUMAN_CORE)
-		return false;
 	if (stack == 0)
 		return false;
+
 	if ((flags & PTHREAD_HINT) == PTHREAD_HINT)
 		return false;
+
+	/*
+	 * Does this call to clone use the flags that Saruman uses?
+	 */
+	if ((flags & SARUMAN_FLAGS) == SARUMAN_FLAGS)
+		return true;
+
 	(void)tls;
-	return true;
+	return false;
 }
 
 /*
@@ -249,12 +289,15 @@ handle_notification(struct seccomp_notif *req, struct seccomp_notif_resp *resp)
 		}
 	}
 
-	if (detected) {
-		fprintf(stderr, "Detected suspicious thread injection! pid=%d nr=%d flags=0x%lx stack=0x%lx tls=0x%lx\n",
+	if (detected == true) {
+		print_msg("Detected and prevented suspicious thread injection!"
+		    " pid=%d nr=%d flags=0x%lx stack=0x%lx tls=0x%lx\n",
 		(int)req->pid, req->data.nr,
 		(unsigned long)flags,
 		(unsigned long)stack,
 		(unsigned long)tls);
+		resp->error = -EPERM;
+		resp->flags = 0;
 	}
 	return;
 }
@@ -336,6 +379,8 @@ shiva_init(struct shiva_ctx *ctx)
 	uint8_t *stack;
 	g_ctx = ctx;
 
+	printf("shiva_init invoked\n");
+
 	stack = (uint8_t *)mmap(0, STACK_SIZE,
 	    PROT_READ | PROT_WRITE,
 	    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -357,7 +402,7 @@ shiva_init(struct shiva_ctx *ctx)
 	}
 
 	if (install_filter() < 0) {
-		printf("install_filter failed!\n");
+		fprintf(stderr, "install_filter failed!\n");
 		return -1;
 	}
 
