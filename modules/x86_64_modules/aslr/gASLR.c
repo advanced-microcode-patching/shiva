@@ -287,18 +287,15 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 			while (elf_dynsym_iterator_next(&dsym_iter, &tmp) == ELF_ITER_OK) {
 				struct elf_plt plt_entry;
 
+				aslr_debug("R_X86_64_GOT64 processing symbol %s\n", tmp.name);
 				if (elf_section_by_name(&ctx->elfobj, ".got", &got) == false) {
 					fprintf(stderr, "elf_section_by_name() failed on .got\n");
 					return false;
 				}
-
 				/* This symbol should be related to a GLOB_DAT or JUMPSLOT
 				 * relocation.
 				 */
-
-				printf("Comparing %s and %s\n", tmp.name, rel_entry->rel.symname);
 				if (strcmp(tmp.name, rel_entry->rel.symname) == 0) {
-					aslr_debug("R_X86_64_GOT64 processing symbol %s\n", tmp.name);
 					/*
 					 * First 3 entries of GOT[0, 1, 2] are reserved
 					 */
@@ -306,7 +303,7 @@ relocate_function(struct shiva_ctx *ctx, struct aslr_ctx *aslr, struct func_entr
 					aslr_debug("symoffset in got is %zu\n", symoffset);
 					aslr_debug("Setting reloc value to %#lx\n", rel_val);
 					*(uint64_t *)r_ptr = rel_val;
-					break;
+					goto success;
 				}
 				symoffset += sizeof(uintptr_t);
 			}

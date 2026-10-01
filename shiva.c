@@ -338,7 +338,6 @@ shiva_interp_mode(struct shiva_ctx *ctx)
 	SHIVA_ULEXEC_LDSO_TRANSFER(rsp, ctx->ulexec.ldso.entry_point, entry_point);
 
 	return true;
-
 }
 
 __attribute__ ((visibility("hidden"))) int main(int argc, char **argv, char **envp)
