@@ -167,29 +167,6 @@ seccomp_raw(unsigned int op, unsigned int flags, void *args)
 	return ret;
 }
 
-long
-raw_prctl(long option, long a2, long a3, long a4, long a5)
-{
-	long ret;
-	register long r10 asm("r10") = a4;
-	register long r8  asm("r8")  = a5;
-	register long r9  asm("r9")  = 0;
-
-	asm volatile(
-	"syscall"
-	: "=a"(ret)
-	: "a"((long)__NR_prctl),
-	  "D"(option),
-	  "S"(a2),
-	  "d"(a3),
-	  "r"(r10),
-	  "r"(r8),
-	  "r"(r9)
-	: "rcx", "r11", "memory"
-	);
-	return ret;
-}
-
 pid_t
 gettid_raw(void)
 {
