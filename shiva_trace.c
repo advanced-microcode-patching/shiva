@@ -8,33 +8,79 @@ static bool shiva_trace_op_peek(struct shiva_ctx *, pid_t,
  * temporary version.
  */
 #if __x86_64__
-void __attribute__((naked)) shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *regs)
+void __attribute__((naked))
+shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *regs)
 {
 	__asm__ __volatile__(
-		"movq %rax, (%rdi)\n\t"
+		"movq %rax, 0(%rdi)\n\t"
 		"movq %rbx, 8(%rdi)\n\t"
 		"movq %rcx, 16(%rdi)\n\t"
 		"movq %rdx, 24(%rdi)\n\t"
 		"movq %rsi, 32(%rdi)\n\t"
-		"movq %r8,  48(%rdi)\n\t"
-		"movq %r9,  56(%rdi)\n\t"
-		"movq %r10, 64(%rdi)\n\t"
-		"movq %r11, 72(%rdi)\n\t"
-		"movq %r12, 80(%rdi)\n\t"
-		"movq %r13, 88(%rdi)\n\t"
-		"movq %r14, 96(%rdi)\n\t"
-		"movq %r15, 104(%rdi)\n\t"
+		/* 40(%rdi) is rdi; leave it, %rdi is the buffer */
+		"movq %rbp, 48(%rdi)\n\t"
+		"leaq 8(%rsp), %rax\n\t"
+		"movq %rax, 56(%rdi)\n\t"	   /* caller rsp */
+		"movq (%rsp), %rax\n\t"
+		"movq %rax, 64(%rdi)\n\t"	   /* return rip */
+		"movq %r8,  72(%rdi)\n\t"
+		"movq %r9,  80(%rdi)\n\t"
+		"movq %r10, 88(%rdi)\n\t"
+		"movq %r11, 96(%rdi)\n\t"
+		"movq %r12, 104(%rdi)\n\t"
+		"movq %r13, 112(%rdi)\n\t"
+		"movq %r14, 120(%rdi)\n\t"
+		"movq %r15, 128(%rdi)\n\t"
+		"pushfq\n\t"
+		"popq %rax\n\t"
+		"movq %rax, 136(%rdi)\n\t"	   /* flags */
+		"xorl %eax, %eax\n\t"
+		"movw %cs, %ax\n\t"
+		"movq %rax, 144(%rdi)\n\t"
+		"movw %ss, %ax\n\t"
+		"movq %rax, 152(%rdi)\n\t"
+		"movw %fs, %ax\n\t"
+		"movq %rax, 160(%rdi)\n\t"
+		"movw %ds, %ax\n\t"
+		"movq %rax, 168(%rdi)\n\t"
+		"movq 0(%rdi), %rax\n\t"	   /* put the saved rax back */
 		"ret\n\t"
-		);
+	);
 }
 
+void __attribute__((naked))
+shiva_trace_setregs_x86_64(struct shiva_trace_regset_x86_64 *regs)
+{
+        __asm__ __volatile__(
+                "movq 136(%rdi), %rax\n\t"
+                "pushq %rax\n\t"
+                "popfq\n\t"                    /* flags */
+                "movq 0(%rdi), %rax\n\t"
+                "movq 8(%rdi), %rbx\n\t"
+                "movq 16(%rdi), %rcx\n\t"
+                "movq 24(%rdi), %rdx\n\t"
+                "movq 32(%rdi), %rsi\n\t"
+                "movq 48(%rdi), %rbp\n\t"
+                "movq 72(%rdi), %r8\n\t"
+                "movq 80(%rdi), %r9\n\t"
+                "movq 88(%rdi), %r10\n\t"
+                "movq 96(%rdi), %r11\n\t"
+                "movq 104(%rdi), %r12\n\t"
+                "movq 112(%rdi), %r13\n\t"
+                "movq 120(%rdi), %r14\n\t"
+                "movq 128(%rdi), %r15\n\t"
+                "movq 56(%rdi), %rsp\n\t"      /* caller rsp from getregs */
+                "jmp *64(%rdi)\n\t"            /* saved rip From getregs */
+        );
+}
 /*
  * This is primarily designed for handler functions. This will save the state
  * of the code execution location that triggered the breakpoint handler to run.
  * so that the handler can return execution back to the location where the breakpoint
  * was after it replaces the original instruction.
  */
-void __attribute__ ((naked)) shiva_trace_setjmp_x86_64(shiva_trace_jumpbuf_t *jmpbuf)
+void __attribute__ ((naked))
+shiva_trace_setjmp_x86_64(shiva_trace_jumpbuf_t *jmpbuf)
 {
 	__asm__ __volatile__(
 		"movq %rax, 0(%rdi)\n\t"
@@ -58,9 +104,11 @@ void __attribute__ ((naked)) shiva_trace_setjmp_x86_64(shiva_trace_jumpbuf_t *jm
 		);
 }
 
-void shiva_trace_longjmp_x86_64(shiva_trace_jumpbuf_t *jumpbuf, uint64_t ip)
+void __attribute__((naked))
+shiva_trace_longjmp_x86_64(shiva_trace_jumpbuf_t *jmpbuf, uint64_t ip)
 {
 	__asm__ __volatile__(
+		"movq %rsi, 40(%rdi)\n\t"      /* ip stored stored at [rdi + 40] */
 		"movq 0(%rdi), %rax\n\t"
 		"movq 8(%rdi), %rbx\n\t"
 		"movq 16(%rdi), %rcx\n\t"
@@ -75,11 +123,9 @@ void shiva_trace_longjmp_x86_64(shiva_trace_jumpbuf_t *jumpbuf, uint64_t ip)
 		"movq 104(%rdi), %r12\n\t"
 		"movq 112(%rdi), %r13\n\t"
 		"movq 120(%rdi), %r14\n\t"
-		"movq 128(%rdi), %r15\n\t");
-
-	__asm__ __volatile__ (
-			"movq %0, %%rdx\n\t"
-			"jmp *%%rdx" :: "r"(ip));
+		"movq 128(%rdi), %r15\n\t"
+		"jmp *40(%rdi)\n\t"	       /* rdi still points at the buffer */
+		);
 }
 #endif
 
