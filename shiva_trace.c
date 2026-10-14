@@ -17,7 +17,7 @@ shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *regs)
 		"movq %rcx, 16(%rdi)\n\t"
 		"movq %rdx, 24(%rdi)\n\t"
 		"movq %rsi, 32(%rdi)\n\t"
-		/* 40(%rdi) is rdi; leave it, %rdi is the buffer */
+		/* 40(%rdi) is rdi; */
 		"movq %rbp, 48(%rdi)\n\t"
 		"leaq 8(%rsp), %rax\n\t"
 		"movq %rax, 56(%rdi)\n\t"	   /* caller rsp */
@@ -73,6 +73,8 @@ shiva_trace_setregs_x86_64(struct shiva_trace_regset_x86_64 *regs)
                 "jmp *64(%rdi)\n\t"            /* saved rip From getregs */
         );
 }
+
+
 /*
  * This is primarily designed for handler functions. This will save the state
  * of the code execution location that triggered the breakpoint handler to run.
@@ -767,9 +769,6 @@ shiva_trace_op_peek(struct shiva_ctx *ctx, pid_t pid,
  * SHIVA_TRACE_OP_CONT
  * SHIVA_TRACE_OP_POKE
  * SHIVA_TRACE_OP_PEEK
- * SHIVA_TRACE_OP_GETREGS
- * SHIVA_TRACE_OP_SETREGS
- * SHIVA_TRACE_OP_SETFPREGS
  * SHIVA_TRACE_OP_GETSIGINFO
  * SHIVA_TRACE_OP_SETSIGINFO
  */
@@ -793,23 +792,12 @@ shiva_trace(struct shiva_ctx *ctx, pid_t pid, shiva_trace_op_t op,
 	case SHIVA_TRACE_OP_PEEK:
 		res = shiva_trace_op_peek(ctx, pid, addr, data, len, error);
 		break;
-#if 0
-	case SHIVA_TRACE_OP_GETREGS:
-		res = shiva_trace_op_getregs(ctx, pid, op, addr, data);
-		break;
-	case SHIVA_TRACE_OP_SETREGS:
-		res = shiva_trace_op_setregs(ctx, pid, op, addr, data);
-		break;
 	case SHIVA_TRACE_OP_GETSIGINFO:
-		res = shiva_trace_op_getsiginfo(ctx, pid, op, addr, data);
+		//res = shiva_trace_op_getsiginfo(ctx, pid, op, addr, data);
 		break;
 	case SHIVA_TRACE_OP_SETSIGINFO:
-		res = shiva_trace_op_setsiginfo(ctx, pid, op, addr, data);
+		//res = shiva_trace_op_setsiginfo(ctx, pid, op, addr, data);
 		break;
-	case SHIVA_TRACE_OP_SETFPREGS:
-		res = shiva_trace_op_setfpregs(ctx, pid, op, addr, data);
-		break;
-#endif
 	default:
 		break;
 	}
