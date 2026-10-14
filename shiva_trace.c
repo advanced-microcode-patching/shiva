@@ -620,7 +620,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
 				break;
 			case SHIVA_TRACE_BP_CALL: /* This hooks imm32 calls, and only works in mcmodel=small scenarios */
-#ifndef SHIVA_STANDALONE
+#if 0
 				shiva_error_set(error, "SHIVA_TRACE_BP_CALL incompatible with Shiva-LDSO. Please use"
 				    " Shiva in standalone mode.");
 				return false;

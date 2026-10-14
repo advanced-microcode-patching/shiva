@@ -760,7 +760,7 @@ typedef enum shiva_trace_bp_type {
 				break;	\
 			if (bp->bp_type == SHIVA_TRACE_BP_PLTGOT) { \
 				TAILQ_FOREACH(addr, &bp->retaddr_list, _linkage) { \
-					if (addr->addr == __ret)	\
+					if ((void *)addr->addr == __ret)	\
 						break;	\
 				}	\
 			}	\
