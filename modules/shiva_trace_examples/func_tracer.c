@@ -35,6 +35,12 @@ callsite_handler(void *arg)
 	 */
 	SHIVA_TRACE_BP_STRUCT(bp, handler);
 	printf("[CALL] %s\n", bp->call_target_symname);
+	printf("[CALL] %s  o_target=%#lx  is_plt=%d  callsite_retaddr=%#lx\n",
+        bp->call_target_symname, bp->o_target,
+       	(bp->call_target_symname && strstr(bp->call_target_symname, "@plt") != NULL),
+       bp->callsite_retaddr);
+
+	fflush(stdout);
 	SHIVA_TRACE_CALL_ORIGINAL(bp);
 }
 
@@ -46,6 +52,8 @@ shiva_init(shiva_ctx_t *ctx)
 	shiva_callsite_iterator_t call_iter;
 	struct shiva_branch_site branch;
 	struct shiva_trace_handler trace_handler;
+	elf_pltgot_iterator_t pltgot_iter;
+	struct elf_pltgot_entry pltgot_entry;
 
 	printf("Target '%s': %#lx\n", ctx->path, ctx->ulexec.base_vaddr);
 	printf("LDSO '/lib64/ld-linux.so': %#lx\n", ctx->ulexec.ldso.base_vaddr);
@@ -57,6 +65,10 @@ shiva_init(shiva_ctx_t *ctx)
 		printf("shiva_trace failed: %s\n", shiva_error_msg(&error));
 		return -1;
 	}
+	/*
+	 * Extremely fast breakpoints that hook call offsets from
+	 * immediate alls, rather than use standard int3
+	 */
 	res = shiva_trace_register_handler(ctx, (void *)&callsite_handler,
 	    SHIVA_TRACE_BP_CALL, &error);
 	if (res == false) {
@@ -64,18 +76,45 @@ shiva_init(shiva_ctx_t *ctx)
 		    shiva_error_msg(&error));
 		return -1;
 	}
+
+	/*
+	 * Extremely fast breakpoints that hook the PLTGOT directly
+	 * and setup a handler, rather than use standard int3.
+	 */
+#if 0
+	res = shiva_trace_register_handler(ctx, (void *)&pltgot_handler,
+	    SHIVA_TRACE_BP_PLTGOT, &error);
+	if (res == false) {
+		printf("shiva_trace_register_handler failed: %s\n",
+		    shiva_error_msg(&error));
+		return -1;
+	}
+#endif
+	/*
+	 * Set 'e8' immediate call breakpoints. Which replace the call offset
+	 * on every e8 call. Ignore calls to PLT, instead we use the
+	 * PLTGOT breakpoint type to handle those ones.
+	 */
 	shiva_callsite_iterator_init(ctx, &call_iter);
 	while (shiva_callsite_iterator_next(&call_iter, &branch) == ELF_ITER_OK) {
-		//if ((branch.branch_flags & SHIVA_BRANCH_F_PLTCALL) == 0)
-			//continue;
+		if (branch.branch_flags & SHIVA_BRANCH_F_PLTCALL)
+			continue;
 		res = shiva_trace_set_breakpoint(ctx, (void *)&callsite_handler,
-		    branch.branch_site + ctx->ulexec.base_vaddr, NULL, &error);
+		    RUNTIME_BASE(branch.branch_site), NULL, &error);
 		if (res == false) {
 			printf("shiva_trace_register_breakpoint failed: %s\n",
 			    shiva_error_msg(&error));
 			return -1;
 		}
 	}
+#if 0
+	elf_pltgot_iterator_init(&ctx->elfobj, &pltgot_iter);
+	while (elf_pltgot_iterator_next(&pltgot_iter, &pltgot_entry) == ELF_ITER_OK) {
+		uint64_t got_addr = RUNTIME_BASE(pltgot_entry.offset);
+
+		res = shiva_trace_set_breakpoint(ctx, (void *)&pltgot_handler,
+		    0, NULL, &error);
+#endif
 	return 0;
 }
 

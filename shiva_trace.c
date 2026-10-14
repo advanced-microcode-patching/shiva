@@ -51,27 +51,27 @@ shiva_trace_getregs_x86_64(struct shiva_trace_regset_x86_64 *regs)
 void __attribute__((naked))
 shiva_trace_setregs_x86_64(struct shiva_trace_regset_x86_64 *regs)
 {
-        __asm__ __volatile__(
-                "movq 136(%rdi), %rax\n\t"
-                "pushq %rax\n\t"
-                "popfq\n\t"                    /* flags */
-                "movq 0(%rdi), %rax\n\t"
-                "movq 8(%rdi), %rbx\n\t"
-                "movq 16(%rdi), %rcx\n\t"
-                "movq 24(%rdi), %rdx\n\t"
-                "movq 32(%rdi), %rsi\n\t"
-                "movq 48(%rdi), %rbp\n\t"
-                "movq 72(%rdi), %r8\n\t"
-                "movq 80(%rdi), %r9\n\t"
-                "movq 88(%rdi), %r10\n\t"
-                "movq 96(%rdi), %r11\n\t"
-                "movq 104(%rdi), %r12\n\t"
-                "movq 112(%rdi), %r13\n\t"
-                "movq 120(%rdi), %r14\n\t"
-                "movq 128(%rdi), %r15\n\t"
-                "movq 56(%rdi), %rsp\n\t"      /* caller rsp from getregs */
-                "jmp *64(%rdi)\n\t"            /* saved rip From getregs */
-        );
+	__asm__ __volatile__(
+		"movq 136(%rdi), %rax\n\t"
+		"pushq %rax\n\t"
+		"popfq\n\t"		       /* flags */
+		"movq 0(%rdi), %rax\n\t"
+		"movq 8(%rdi), %rbx\n\t"
+		"movq 16(%rdi), %rcx\n\t"
+		"movq 24(%rdi), %rdx\n\t"
+		"movq 32(%rdi), %rsi\n\t"
+		"movq 48(%rdi), %rbp\n\t"
+		"movq 72(%rdi), %r8\n\t"
+		"movq 80(%rdi), %r9\n\t"
+		"movq 88(%rdi), %r10\n\t"
+		"movq 96(%rdi), %r11\n\t"
+		"movq 104(%rdi), %r12\n\t"
+		"movq 112(%rdi), %r13\n\t"
+		"movq 120(%rdi), %r14\n\t"
+		"movq 128(%rdi), %r15\n\t"
+		"movq 56(%rdi), %rsp\n\t"      /* caller rsp from getregs */
+		"jmp *64(%rdi)\n\t"	       /* saved rip From getregs */
+	);
 }
 
 
@@ -620,17 +620,11 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
 				break;
 			case SHIVA_TRACE_BP_CALL: /* This hooks imm32 calls, and only works in mcmodel=small scenarios */
-#if 0
-				shiva_error_set(error, "SHIVA_TRACE_BP_CALL incompatible with Shiva-LDSO. Please use"
-				    " Shiva in standalone mode.");
-				return false;
-#endif
 				/*
 				 * Get the original inst
 				 */
-				//ud_set_input_buffer(&ctx->disas.ud_obj, inst_ptr, SHIVA_MAX_INST_LEN);
 				bits = elf_class(&ctx->elfobj) == elfclass64 ? 64 : 32;
-				insn_len = 5; //ud_insn_len(&ctx->disas.ud_obj);
+				insn_len = 5;
 				assert(insn_len <= 15);
 				bp = calloc(1, sizeof(*bp));
 				if (bp == NULL) {
@@ -641,13 +635,17 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				/*
 				 * backup the original instruction.
 				 */
-				/*
-				 * XXX look into why insn_len is 0 after ud_insn_len.
-				 */
 				memcpy(&bp->insn.o_insn[0], (void *)bp_addr, 5);
-				bp->o_call_offset = *(uint32_t *)&bp->insn.o_insn[1];
+				/*
+				 * If this is not an immediate call, then we can't set a
+				 * immediate call breakpoint using e8.
+				 */
+				if (bp->insn.o_insn[0] != 0xe8) {
+					free(bp);
+					continue;
+				}
+				bp->o_call_offset = *(int32_t *)&bp->insn.o_insn[1];
 				bp->o_target = (int64_t)bp_addr + (int64_t)bp->o_call_offset + 5;
-				bp->o_target &= 0xffffffff;
 				bp->bp_type = current->type;
 				bp->bp_addr = bp_addr;
 				bp->bp_len = 5; // length of breakpoint is size of imm call insn
