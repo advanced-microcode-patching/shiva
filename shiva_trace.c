@@ -237,6 +237,120 @@ shiva_trace_register_handler(struct shiva_ctx *ctx, void * (*handler_fn)(void *)
 
 #define MAX_PLT_RETADDR_COUNT 4096
 
+static bool
+shiva_trace_disable_jumpslot_record(struct shiva_ctx *ctx, struct shiva_trace_bp *bp, const char *symname, shiva_error_t *error)
+{
+
+	struct elf_section rela_plt;
+	Elf64_Rela *rela_plt_ptr;
+	struct elf_symbol symbol;
+	size_t jmprel_count;
+	size_t i;
+
+	if (elf_section_by_name(&ctx->elfobj, ".rela.plt", &rela_plt) == false) {
+		shiva_error_set(error, "unable to find .rela.plt section\n");
+		return false;
+	}
+       /*
+	* Find the relocation record that we want to modify. It is the JUMP_SLOT
+	* relocation for the symbol related to the .got.plt entry that we are hijacking.
+	*/
+	memset(&symbol, 0, sizeof(symbol));
+	rela_plt_ptr = (Elf64_Rela *)((char *)ctx->ulexec.base_vaddr + rela_plt.offset);
+	shiva_debug("rela_plt_ptr: %p\n", rela_plt_ptr);
+
+	/*
+	 * We create an entirely new copy of the JUMPSLOT relocation table
+	 * in memory, as pointed to by the dynamic tag: DT_JMPREL .
+	 * If jmprel == NULL then allocate one on the heap.
+	 */
+	if (ctx->altrelocs.jmprel == NULL)
+		ctx->altrelocs.jmprel = shiva_malloc(rela_plt.size);
+	for (i = 0, jmprel_count = 0; i < rela_plt.size / rela_plt.entsize; i++) {
+		if (ELF64_R_TYPE(rela_plt_ptr[i].r_info) != R_X86_64_JUMP_SLOT)
+			continue;
+		if (elf_symbol_by_index(&ctx->elfobj,
+		    ELF64_R_SYM(rela_plt_ptr[i].r_info),
+		    &symbol,
+		    SHT_DYNSYM) == true) {
+			if (strcmp(symbol.name, symname) == 0) {
+				memcpy(&bp->symbol, &symbol, sizeof(symbol));
+				bp->symbol_location = true;
+				continue;
+			} else {
+				memcpy(ctx->altrelocs.jmprel + jmprel_count,
+				    &rela_plt_ptr[i], sizeof(Elf64_Rela));
+				jmprel_count++;
+			}
+		} else {
+			shiva_error_set(error, "unable to find dynamic symbol index: %d\n",
+			    ELF64_R_SYM(rela_plt_ptr[i].r_info));
+			return false;
+		}
+	}
+	if (jmprel_count >= rela_plt.size / rela_plt.entsize) {
+		shiva_error_set(error, "unable to properly de-activate relocation record"
+		    " '%s'\n", symname);
+		return false;
+	}
+	shiva_debug("Setting DT_JMPREL to %#lx - %#lx = %#lx\n",
+	    (uint64_t) ctx->altrelocs.jmprel, ctx->ulexec.base_vaddr,
+	    (uint64_t) ctx->altrelocs.jmprel - ctx->ulexec.base_vaddr);
+
+	shiva_target_dynamic_set(ctx, DT_JMPREL,
+	    (uint64_t)ctx->altrelocs.jmprel - ctx->ulexec.base_vaddr);
+	shiva_target_dynamic_set(ctx, DT_PLTRELSZ, jmprel_count * sizeof(Elf64_Rela));
+	return true;
+}
+
+bool
+shiva_trace_patch_bp_addr(struct shiva_ctx *ctx, unsigned int type, uint64_t addr,
+    char *symname, void * (*handler_fn)(void *))
+{
+	bool valid_address = false;
+	int i;
+	elf_relocation_iterator_t rel_iter;
+	struct elf_relocation rel;
+
+	if (type == SHIVA_TRACE_BP_PLTGOT) {
+		elf_pltgot_iterator_t pltgot_iter;
+		struct elf_pltgot_entry pltgot_entry;
+
+		/*
+		 * NOTE: Shiva allows PLTGOT breakpoints on PLT GOT entries
+		 * and the reserved entry of __dl_resolve (Incase someone
+		 * wants to experimentally hook the __dl_resolve routine).
+		 */
+
+		elf_pltgot_iterator_init(&ctx->elfobj, &pltgot_iter);
+		while (elf_pltgot_iterator_next(&pltgot_iter, &pltgot_entry) == ELF_ITER_OK) {
+			if ((pltgot_entry.flags & ELF_PLTGOT_PLT_STUB_F) ||
+			    (pltgot_entry.flags & ELF_PLTGOT_RESERVED_DL_RESOLVE_F)) {
+				if (symname == NULL) {
+					if (RUNTIME_BASE(pltgot_entry.offset) == addr) {
+						valid_address = true;
+						uint64_t *gotptr = (uint64_t *)addr;
+						*(uint64_t *)gotptr = (uintptr_t)handler_fn;
+						break;
+					}
+				} else {
+					for (i = 0; elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK;) {
+						if (rel.type != R_X86_64_JUMP_SLOT)
+							continue;
+						if (rel.offset == pltgot_entry.offset) {
+							uint64_t *gotptr = (uint64_t *)RUNTIME_BASE(pltgot_entry.offset);
+							*(uint64_t *)gotptr = (uintptr_t)handler_fn;
+							valid_address = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+	return valid_address;
+}
+
 bool
 shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
     uint64_t bp_addr, void *option, shiva_error_t *error)
@@ -369,207 +483,152 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
 				break;
 			case SHIVA_TRACE_BP_PLTGOT:
-				if (elf_plt_by_name(&ctx->elfobj, (char *)option, &plt_entry) == false) {
-					shiva_error_set(error, "elf_plt_by_name(%p, %s, ...) failed\n",
-					    &ctx->elfobj, (char *)option);
+				if (option == NULL) {
+					struct elf_symbol dsym;
+					/*
+					 * If option == NULL, then we are setting a PLTGOT breakpoint by the GOT address
+					 * rather than it's symbol name.
+					 */
+					for (i = 0; elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK;) {
+						if (rel.type != R_X86_64_JUMP_SLOT)
+							continue;
+						if (rel.offset != bp_addr)
+							continue;
+						symname = rel.symname;
+						break;
+					}
+					if (symname == NULL) {
+						shiva_error_set(error, "unable to find symbol for GOT entry at %#lx\n",
+						    pltgot_entry.offset);
+						return false;
+					}
+					if (shiva_trace_patch_bp_addr(ctx, SHIVA_TRACE_BP_PLTGOT, bp_addr, NULL, handler_fn) == false) {
+						shiva_error_set(error, "%#lx is an invalid pltgot breakpoint address\n", bp_addr);
+						return false;
+					}
+					bp = calloc(1, sizeof(*bp));
+					if (bp == NULL) {
+						shiva_error_set(error, "memory allocation failed: %s\n",
+						    strerror(errno));
+						return false;
+					}
+					bp->bp_type = SHIVA_TRACE_BP_PLTGOT;
+					bp->bp_addr = bp_addr;
+					bp->o_target = RUNTIME_BASE(*(uint64_t *)bp_addr); // save original GOT value
+					
+					if (elf_symbol_by_name(&ctx->elfobj, symname, &dsym) == false) {
+						shiva_error_set(error, "elf_symbol_by_name() failed on %s\n", symname);
+						free(bp);
+						return false;
+					}
+					memcpy(&bp->symbol, &dsym, sizeof(struct elf_symbol));
+					bp->symbol_location = true;
+				} else {
+					struct elf_symbol dsym;
+
+					symname = option;
+					if (shiva_trace_patch_bp_addr(ctx, SHIVA_TRACE_BP_PLTGOT, 0, symname, handler_fn) == false) {
+						shiva_error_set(error, "%#lx is an invalid pltgot breakpoint symbol: %s\n", symname);
+						return false;
+					}
+					bp = calloc(1, sizeof(*bp));
+                                        if (bp == NULL) {
+                                                shiva_error_set(error, "memory allocation failed: %s\n",
+                                                    strerror(errno));
+                                                return false;
+                                        }
+					/*
+					 * SET bp_addr
+					 */
+                                        bp->bp_type = SHIVA_TRACE_BP_PLTGOT;
+                                        bp->o_target = RUNTIME_BASE(*(uint64_t *)bp_addr); // save original GOT value
+					/*
+					 * TODO Set bp->bp_addr
+					 */
+                                        if (elf_symbol_by_name(&ctx->elfobj, symname, &dsym) == false) {
+                                                shiva_error_set(error, "elf_symbol_by_name() failed on %s\n", symname);
+                                                free(bp);
+                                                return false;
+                                        }
+                                        memcpy(&bp->symbol, &dsym, sizeof(struct elf_symbol));
+                                        bp->symbol_location = true;
+
+				}
+				/*
+				 * STRICT LINKING (flags: PIE NOW) can be a problem for us since it
+				 * will overwrite any PLT hooks that are set.
+				 *
+				 * Our solution is to create an alternate .rela.plt that excludes the
+				 * JUMP_SLOT relocation entry for the symbol we are hooking.
+				 *
+				 * Update DT_JMPREL to point to our new symbol table.
+				 *
+				 * Update DT_PLTRELASZ with the updated size of .rela.plt
+				 */
+
+				if (shiva_trace_disable_jumpslot_record(ctx, bp, symname, error) == false) {
+					fprintf(stderr, "shiva_trace_disable_jumpslot_record() failed: %s\n",
+					    shiva_error_msg(error));
+					free(bp);
 					return false;
 				}
-				elf_pltgot_iterator_init(&ctx->elfobj, &pltgot_iter);
-				while (elf_pltgot_iterator_next(&pltgot_iter, &pltgot_entry) == ELF_ITER_OK) {
-					if (pltgot_entry.flags & ELF_PLTGOT_PLT_STUB_F) {
-						/*
-						 * XXX IMPORTANT XXX
-						 * If the target binary has a .plt with bound instructions
-						 * then the + 6 calculation will not work. Currently our
-						 * 'test' target binary is built with -fcf-protection=none
-						 * We must add code for compatibility, and libelfmaster's plt
-						 * API needs to be updated to handle as well.
-						 */
-						if (pltgot_entry.value != (plt_entry.addr + 6))
-							continue;
-						shiva_debug("Patching GOT entry %#lx\n",
-						    pltgot_entry.offset + ctx->ulexec.base_vaddr);
-						shiva_debug("plt_entry.addr: %#lx\n", plt_entry.addr);
-						bp = calloc(1, sizeof(*bp));
-						if (bp == NULL) {
-							shiva_error_set(error, "memory allocation failed: %s\n",
-							    strerror(errno));
-							return false;
-						}
-						/*
-						 * This is a PLTGOT hook. So we are actually modifying an fptr (The GOT)
-						 * in the data segment. bp_addr is assigned the address of the GOT entry
-						 * that we are patching (Instead of a code location like usual).
-						 * We may change this convention in the future...
-						 */
-						shiva_debug("pltgot.offset: %#lx base_vaddr: %#lx\n",
-						    pltgot_entry.offset, ctx->ulexec.base_vaddr);
-						elf_relocation_iterator_init(&ctx->elfobj, &rel_iter);
-						for (i = 0; elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK;) {
-							if (rel.type != R_X86_64_JUMP_SLOT)
-								continue;
-							if (rel.offset != pltgot_entry.offset)
-								continue;
-							symname = rel.symname;
-							break;
-						}
-						if (symname == NULL) {
-							shiva_error_set(error, "failed to find symbol for got offset: %#lx\n",
-							    pltgot_entry.offset);
-							return false;
-						}
-						bp->bp_type = SHIVA_TRACE_BP_PLTGOT;
-						bp->bp_addr = pltgot_entry.offset + ctx->ulexec.base_vaddr;
-						uint64_t *gotptr = (uint64_t *)bp->bp_addr;
-						memcpy(&bp->o_target, gotptr, sizeof(uint64_t));
-						/*
-						 * This gotptr value will be an offset, and we must add the base
-						 * address to it, atleast with PIE binaries.
-						 */
-						if (elf_type(&ctx->elfobj) == ET_DYN) {
-							bp->o_target += ctx->ulexec.base_vaddr;
-						}
-						shiva_debug("*gotptr old value: %#lx\n", *gotptr);
-						shiva_debug("Setting gotptr(%p) to %p\n", gotptr, handler_fn);
-						/*
-						 * Currently we only handle PIE target binaries (We must fix this).
-						 * Anyway, PIE binaries have GOT values that are computed with the
-						 * baes address at runtime. We must patch the GOT with an offset from
-						 * the base, and not an absolute address.
-						 *
-						 * XXX:
-						 * Actually scratch this last note out somewhat... yes we normally would
-						 * put an offset from the base so that the RTLD could then patch it with
-						 * the base offset at runtime, but we are going to instruct RTLD to not
-						 * touch this got entry ever again by removing the JUMP_SLOT relocation
-						 * record for it.
-						 */
-						*(uint64_t *)&gotptr[0] = (uint64_t)handler_fn;
-						/*
-						 * STRICT LINKING (flags: PIE NOW) can be a problem for us since it
-						 * will overwrite any PLT hooks that are set.
-						 *
-						 * Our solution is to create an alternate .rela.plt that excludes the
-						 * JUMP_SLOT relocation entry for the symbol we are hooking.
-						 *
-						 * Update DT_JMPREL to point to our new symbol table.
-						 *
-						 * Update DT_PLTRELASZ with the updated size of .rela.plt
-						 */
+				/*
+				 * We must also set all possible return addresses
+				 * for this call <symname>@plt -- keeping track of
+				 * this in the 'struct shiva_trace_bp->plt_retaddrs
+				 * -- This is important information, because when we
+				 *  are within a PLTGOT breakpoint handler we can find
+				 *  the associated shiva_trace_bp struct by seeing if
+				 *  the current return address (At the top of the stack)
+				 *  matches one of the valid retaddrs for the plt call
+				 *  associated with the PLT/GOT breakpoint. If the
+				 *  retaddr at the top of the stack matches one of
+				 *  the addresses in the handlers current_bp->retaddrs_tqlist
+				 *  then the handlers current bp struct is the correct
+				 *  one and correlates to PLT symbol bp->symbol.name.
+				 */
+set_retaddrs:
+				TAILQ_INIT(&bp->retaddr_list);
+				(void) hcreate_r(MAX_PLT_RETADDR_COUNT, &bp->valid_plt_retaddrs);
+				TAILQ_FOREACH(branch_site, &ctx->tailq.branch_tqlist, _linkage) {
+					char *p;
+					size_t copy_len;
 
-						struct elf_section rela_plt;
-						Elf64_Rela *rela_plt_ptr;
-						struct elf_symbol symbol;
-
-						if (elf_section_by_name(&ctx->elfobj, ".rela.plt", &rela_plt) == false) {
-							shiva_error_set(error, "unable to find .rela.plt section\n");
-							return false;
-						}
-
+					if (strstr(branch_site->symbol.name, "@plt") == NULL)
+						continue;
+					if (branch_site->branch_type != SHIVA_BRANCH_CALL)
+						continue;
+					p = strchr(branch_site->symbol.name, '@');
+					copy_len = p - branch_site->symbol.name;
+					if (strncmp((char *)option, branch_site->symbol.name,
+					    copy_len) == 0) {
+						struct shiva_addr_struct *addr = shiva_malloc(sizeof(*addr));
 						/*
-						 * Find the relocation record that we want to modify. It is the JUMP_SLOT
-						 * relocation for the symbol related to the .got.plt entry that we are hijacking.
+						 * We found a branch site (A call) that calls
+						 * the PLT symbol that we are hooking via
+						 * PLTGOT. Add the retaddr to the the current
+						 * breakpoints 'valid_plt_retaddrs' cache.
 						 */
-						memset(&symbol, 0, sizeof(symbol));
-						rela_plt_ptr = (Elf64_Rela *)((char *)ctx->ulexec.base_vaddr + rela_plt.offset);
-						shiva_debug("rela_plt_ptr: %p\n", rela_plt_ptr);
-						if (ctx->altrelocs.jmprel == NULL)
-							ctx->altrelocs.jmprel = shiva_malloc(rela_plt.size);
-						for (i = 0, jmprel_count = 0; i < rela_plt.size / rela_plt.entsize; i++) {
-							if (ELF64_R_TYPE(rela_plt_ptr[i].r_info) != R_X86_64_JUMP_SLOT)
-								continue;
-							if (elf_symbol_by_index(&ctx->elfobj,
-							    ELF64_R_SYM(rela_plt_ptr[i].r_info),
-							    &symbol,
-							    SHT_DYNSYM) == true) {
-								if (strcmp(symbol.name, (char *)option) == 0) {
-									memcpy(&bp->symbol, &symbol, sizeof(symbol));
-									bp->symbol_location = true;
-									continue;
-								} else {
-									memcpy(ctx->altrelocs.jmprel + jmprel_count,
-									    &rela_plt_ptr[i], sizeof(Elf64_Rela));
-									jmprel_count++;
-								}
-							} else {
-								shiva_error_set(error, "unable to find dynamic symbol index: %d\n",
-								    ELF64_R_SYM(rela_plt_ptr[i].r_info));
-								return false;
-							}
-						}
-						if (jmprel_count >= rela_plt.size / rela_plt.entsize) {
-							shiva_error_set(error, "unable to properly de-activate relocation record"
-							    " '%s'\n", (char *)option);
-							return false;
-						}
-						shiva_debug("Setting DT_JMPREL to %#lx - %#lx = %#lx\n",
-						    (uint64_t) ctx->altrelocs.jmprel, ctx->ulexec.base_vaddr,
-						   (uint64_t) ctx->altrelocs.jmprel - ctx->ulexec.base_vaddr);
-
-						(void) shiva_target_dynamic_set(ctx, DT_JMPREL,
-						    (uint64_t)ctx->altrelocs.jmprel - ctx->ulexec.base_vaddr);
-						(void) shiva_target_dynamic_set(ctx, DT_PLTRELSZ,
-						    jmprel_count * sizeof(Elf64_Rela));
-						shiva_debug("Inserted .got.plt hook breakpoint: %#lx\n", bp->bp_addr);
+						addr->addr = branch_site->retaddr + shiva_trace_base_addr(ctx);
+						TAILQ_INSERT_TAIL(&bp->retaddr_list, addr, _linkage);
 						/*
-						 * We must also set all possible return addresses
-						 * for this call <symname>@plt -- keeping track of
-						 * this in the 'struct shiva_trace_bp->plt_retaddrs
-						 * -- This is important information, because when we
-						 *  are within a PLTGOT breakpoint handler we can find
-						 *  the associated shiva_trace_bp struct by seeing if
-						 *  the current return address (At the top of the stack)
-						 *  matches one of the valid retaddrs for the plt call
-						 *  associated with the PLT/GOT breakpoint. If the
-						 *  retaddr at the top of the stack matches one of
-						 *  the addresses in the handlers current_bp->retaddrs_tqlist
-						 *  then the handlers current bp struct is the correct
-						 *  one and correlates to PLT symbol bp->symbol.name.
+						 * Set the PLT address that corresponds to our PLTGOT hook
 						 */
-						TAILQ_INIT(&bp->retaddr_list);
-						(void) hcreate_r(MAX_PLT_RETADDR_COUNT, &bp->valid_plt_retaddrs);
-						TAILQ_FOREACH(branch_site, &ctx->tailq.branch_tqlist, _linkage) {
-							char *p;
-							size_t copy_len;
-
-							if (strstr(branch_site->symbol.name, "@plt") == NULL)
-								continue;
-							if (branch_site->branch_type != SHIVA_BRANCH_CALL)
-								continue;
-							p = strchr(branch_site->symbol.name, '@');
-							copy_len = p - branch_site->symbol.name;
-							if (strncmp((char *)option, branch_site->symbol.name,
-							    copy_len) == 0) {
-								struct shiva_addr_struct *addr = shiva_malloc(sizeof(*addr));
-								/*
-								 * We found a branch site (A call) that calls
-								 * the PLT symbol that we are hooking via
-								 * PLTGOT. Add the retaddr to the the current
-								 * breakpoints 'valid_plt_retaddrs' cache.
-								 */
-								addr->addr = branch_site->retaddr + shiva_trace_base_addr(ctx);
-								TAILQ_INSERT_TAIL(&bp->retaddr_list, addr, _linkage);
-								/*
-								 * Set the PLT address that corresponds to our PLTGOT hook
-								 */
-								bp->plt_addr = branch_site->target_vaddr;
-								
-								/*
-								 * We cannot use an hcreate cache because there's
-								 * some incompatibility when using it cross module
-								 * execution.
-								 */
-							}
-						}
-						TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
-						return true;
+						bp->plt_addr = branch_site->target_vaddr;
+						
+						/*
+						 * FIXME: We cannot use an hcreate cache because there's
+						 * some incompatibility when using it cross module
+						 * execution.
+						 */
 					}
 				}
-				break;
+				TAILQ_INSERT_TAIL(&current->bp_tqlist, bp, _linkage);
+				return true;
+			break;
 			case SHIVA_TRACE_BP_TRAMPOLINE:
-				//ud_set_input_buffer(&ctx->disas.ud_obj, inst_ptr, SHIVA_MAX_INST_LEN);
 				bits = elf_class(&ctx->elfobj) == elfclass64 ? 64 : 32;
-				insn_len = sizeof(tramp_inst); //ud_insn_len(&ctx->disas.ud_obj);
+				insn_len = sizeof(tramp_inst);
 				assert(insn_len <= 15);
 				bp = calloc(1, sizeof(*bp));
 				if (bp == NULL) {
