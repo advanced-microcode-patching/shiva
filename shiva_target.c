@@ -115,11 +115,14 @@ shiva_target_dynamic_set(struct shiva_ctx *ctx, uint64_t tag, uint64_t value)
 		fprintf(stderr, "shiva_target_dynamic_tag() failed, dyn == NULL\n");
 		return false;
 	}
+	shiva_debug("Dynamic segment: %p\n", dyn);
 
 	for (i = 0; dyn[i].d_tag != DT_NULL; i++) {
 		if (dyn[i].d_tag == tag) {
 			shiva_debug("Set dynamic tag %d: %#lx\n", dyn[i].d_tag, value);
+			(void) mprotect((void *)dyn, 4096, PROT_READ|PROT_WRITE);
 			dyn[i].d_un.d_val = value;
+			(void) mprotect((void *)dyn, 4096, PROT_READ);
 			return true;
 		}
 	}

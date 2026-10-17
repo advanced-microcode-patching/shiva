@@ -244,7 +244,7 @@ shiva_trace_disable_jumpslot_record(struct shiva_ctx *ctx, struct shiva_trace_bp
 	struct elf_section rela_plt;
 	Elf64_Rela *rela_plt_ptr;
 	struct elf_symbol symbol;
-	size_t jmprel_count;
+	size_t jmprel_count = 0;
 	size_t i;
 
 	if (elf_section_by_name(&ctx->elfobj, ".rela.plt", &rela_plt) == false) {
@@ -258,7 +258,6 @@ shiva_trace_disable_jumpslot_record(struct shiva_ctx *ctx, struct shiva_trace_bp
 	memset(&symbol, 0, sizeof(symbol));
 	rela_plt_ptr = (Elf64_Rela *)((char *)ctx->ulexec.base_vaddr + rela_plt.offset);
 	shiva_debug("rela_plt_ptr: %p\n", rela_plt_ptr);
-
 	/*
 	 * We create an entirely new copy of the JUMPSLOT relocation table
 	 * in memory, as pointed to by the dynamic tag: DT_JMPREL .
@@ -299,6 +298,7 @@ shiva_trace_disable_jumpslot_record(struct shiva_ctx *ctx, struct shiva_trace_bp
 
 	shiva_target_dynamic_set(ctx, DT_JMPREL,
 	    (uint64_t)ctx->altrelocs.jmprel - ctx->ulexec.base_vaddr);
+	shiva_debug("Now to DT_PLTRELSZ\n");
 	shiva_target_dynamic_set(ctx, DT_PLTRELSZ, jmprel_count * sizeof(Elf64_Rela));
 	return true;
 }
@@ -311,13 +311,14 @@ shiva_trace_set_handlers_valid_plt_retaddrs(struct shiva_ctx *ctx, struct shiva_
 
 	TAILQ_INIT(&bp->retaddr_list);
 
+#if 0
 	if (hcreate_r(MAX_PLT_RETADDR_COUNT, &bp->valid_plt_retaddrs) != 0)
 		return false;
+#endif
 
 	TAILQ_FOREACH(branch_site, &ctx->tailq.branch_tqlist, _linkage) {
 		char *p;
 		size_t copy_len;
-
 		if (strstr(branch_site->symbol.name, "@plt") == NULL)
 			continue;
 		if (branch_site->branch_type != SHIVA_BRANCH_CALL)
@@ -340,11 +341,11 @@ shiva_trace_set_handlers_valid_plt_retaddrs(struct shiva_ctx *ctx, struct shiva_
 			 */
 			bp->plt_addr = branch_site->target_vaddr;
 			/*
-		 	 * FIXME: We cannot use an hcreate cache because there's
-		 	 * some incompatibility when using it cross module
-		 	 * execution. Due most likely to hcreate_r() using TLS
+			 * FIXME: We cannot use an hcreate cache because there's
+			 * some incompatibility when using it cross module
+			 * execution. Due most likely to hcreate_r() using TLS
 			 * before libc has set it up. Do more experimentation
-		 	 */
+			 */
 		}
 	}
 	return true;
@@ -358,6 +359,7 @@ shiva_trace_patch_bp_addr(struct shiva_ctx *ctx, unsigned int type, uint64_t add
 	int i;
 	elf_relocation_iterator_t rel_iter;
 	struct elf_relocation rel;
+	uint64_t *gotptr = NULL;
 
 	if (type == SHIVA_TRACE_BP_PLTGOT) {
 		elf_pltgot_iterator_t pltgot_iter;
@@ -377,17 +379,25 @@ shiva_trace_patch_bp_addr(struct shiva_ctx *ctx, unsigned int type, uint64_t add
 					if (RUNTIME_BASE(pltgot_entry.offset) == addr) {
 						valid_address = true;
 						printf("Patching GOT at %#lx with %p\n", addr, handler_fn);
-						uint64_t *gotptr = (uint64_t *)addr;
+						gotptr = (uint64_t *)addr;
+						printf("gotptr contains value: %#lx\n", *(uint64_t *)gotptr);
+						if (mprotect(gotptr, 4096, PROT_READ|PROT_WRITE) != 0) {
+							shiva_debug("mprotect failed\n");
+							return false;
+						}
 						*(uint64_t *)gotptr = (uintptr_t)handler_fn;
 						break;
 					}
 				} else {
+					elf_relocation_iterator_init(&ctx->elfobj, &rel_iter);
 					for (i = 0; elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK;) {
 						if (rel.type != R_X86_64_JUMP_SLOT)
 							continue;
 						if (rel.offset == pltgot_entry.offset) {
-							uint64_t *gotptr = (uint64_t *)RUNTIME_BASE(pltgot_entry.offset);
+							gotptr = (uint64_t *)RUNTIME_BASE(pltgot_entry.offset);
+							mprotect(gotptr, 4096, PROT_READ|PROT_WRITE);
 							*(uint64_t *)gotptr = (uintptr_t)handler_fn;
+							printf("Patching symbol: %s\n", rel.symname);
 							valid_address = true;
 							break;
 						}
@@ -396,6 +406,13 @@ shiva_trace_patch_bp_addr(struct shiva_ctx *ctx, unsigned int type, uint64_t add
 			}
 		}
 	}
+	if (gotptr != NULL) {
+		if (mprotect(addr, 4096, PROT_READ) != 0) {
+			shiva_debug("mprotect failed\n");
+			return false;
+		}
+	}
+
 	return valid_address;
 }
 
@@ -512,8 +529,6 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					return false;
 				}
 				trap = (qword & ~0xff) | 0xcc;
-				//*(uint64_t *)&bp->insn.o_insn[0] = qword;
-				//*(uint64_t *)&bp->insn.n_insn[0] = trap;
 
 				if (shiva_trace_write(ctx, 0, (void *)bp_addr, &trap, sizeof(uint64_t), error) == false) {
 					shiva_error_set(error, "shiva_trace_write() failed to write to %#lx\n", bp_addr);
@@ -539,11 +554,16 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					 * If option == NULL, then we are setting a PLTGOT breakpoint by the GOT address
 					 * rather than it's symbol name.
 					 */
+					if (elf_relocation_iterator_init(&ctx->elfobj, &rel_iter) == false) {
+						shiva_error_set(error, "elf_relocation_iterator_init failed\n");
+						return false;
+					}
 					for (i = 0; elf_relocation_iterator_next(&rel_iter, &rel) == ELF_ITER_OK;) {
 						if (rel.type != R_X86_64_JUMP_SLOT)
 							continue;
-						if (rel.offset != bp_addr)
+						if (RUNTIME_BASE(rel.offset) != bp_addr)
 							continue;
+						printf("rel.symname: %s\n", rel.symname);
 						symname = rel.symname;
 						break;
 					}
@@ -576,6 +596,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 						return false;
 					}
 					memcpy(&bp->symbol, &dsym, sizeof(struct elf_symbol));
+					bp->symbol.name = shiva_strdup(symname);
 					bp->symbol_location = true;
 				} else {
 					/*
@@ -584,7 +605,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					 * to a JUMPSLOT relocation record (GOT entry).
 					 */
 					struct elf_symbol dsym;
-
+					shiva_debug("setting pltgot breakpoint by name: %s\n", symname);
 					symname = option;
 					if (shiva_trace_patch_bp_addr(ctx, SHIVA_TRACE_BP_PLTGOT, 0, symname, handler_fn) == false) {
 						shiva_error_set(error, "%#lx is an invalid pltgot breakpoint symbol: %s\n", symname);
@@ -610,6 +631,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 						return false;
 					}
 					memcpy(&bp->symbol, &dsym, sizeof(struct elf_symbol));
+					bp->symbol.name = shiva_strdup(symname);
 					bp->symbol_location = true;
 
 				}
@@ -625,13 +647,13 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				 * Update DT_PLTRELASZ with the updated size of .rela.plt
 				 */
 
-				shiva_debug("shiva_trace_disable_jumpslot_record\n");
 				if (shiva_trace_disable_jumpslot_record(ctx, bp, symname, &error2) == false) {
 					shiva_error_set(error, "shiva_trace_disable_jumpslot_record() failed: %s",
 					    shiva_error_msg(&error2));
 					free(bp);
 					return false;
 				}
+				shiva_debug("Setting valid PLT ret addresses\n");
 				/*
 				 * We must also set all possible return addresses
 				 * for this call <symname>@plt -- keeping track of
@@ -647,12 +669,11 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 				 *  then the handlers current bp struct is the correct
 				 *  one and correlates to PLT symbol bp->symbol.name.
 				 */
-				shiva_debug("calling shiva_trace_set_valid_plt_retaddrs\n");
 				if (shiva_trace_set_handlers_valid_plt_retaddrs(ctx, bp, symname) == false) {
 					shiva_error_set(error, "shiva_trace_set_handler_retaddrs() failed\n");
 					return false;
 				}
-				shiva_debug("Done\n");
+				shiva_debug("Add to breakpoint list\n");
 				/*
 				 * Insert breakpoint
 				 */

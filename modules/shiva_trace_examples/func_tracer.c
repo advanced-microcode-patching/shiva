@@ -119,7 +119,7 @@ shiva_init(shiva_ctx_t *ctx)
 		if (pltgot_entry.flags & ELF_PLTGOT_PLT_STUB_F) {
 			printf("Setting breakpoint on %#lx\n", got_addr);
 			res = shiva_trace_set_breakpoint(ctx, (void *)&pltgot_handler,
-		    	    0, NULL, &error);
+		    	    got_addr, NULL, &error);
 			if (res == false) {
 				printf("shiva_trace_set_breakpoint() failed %#lx\n", got_addr);
 				return -1;
