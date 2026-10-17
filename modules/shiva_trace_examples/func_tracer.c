@@ -7,6 +7,13 @@
 #include "shiva_module.h"
 
 /*
+ * Handles PLTGOT hooks
+ */
+void * pltgot_handler(void *arg)
+{
+	printf("Found PLT call\n");
+}
+/*
  * Handles hooked callsites
  */
 void *
@@ -81,7 +88,6 @@ shiva_init(shiva_ctx_t *ctx)
 	 * Extremely fast breakpoints that hook the PLTGOT directly
 	 * and setup a handler, rather than use standard int3.
 	 */
-#if 0
 	res = shiva_trace_register_handler(ctx, (void *)&pltgot_handler,
 	    SHIVA_TRACE_BP_PLTGOT, &error);
 	if (res == false) {
@@ -89,7 +95,6 @@ shiva_init(shiva_ctx_t *ctx)
 		    shiva_error_msg(&error));
 		return -1;
 	}
-#endif
 	/*
 	 * Set 'e8' immediate call breakpoints. Which replace the call offset
 	 * on every e8 call. Ignore calls to PLT, instead we use the
@@ -107,14 +112,20 @@ shiva_init(shiva_ctx_t *ctx)
 			return -1;
 		}
 	}
-#if 0
 	elf_pltgot_iterator_init(&ctx->elfobj, &pltgot_iter);
 	while (elf_pltgot_iterator_next(&pltgot_iter, &pltgot_entry) == ELF_ITER_OK) {
 		uint64_t got_addr = RUNTIME_BASE(pltgot_entry.offset);
 
-		res = shiva_trace_set_breakpoint(ctx, (void *)&pltgot_handler,
-		    0, NULL, &error);
-#endif
+		if (pltgot_entry.flags & ELF_PLTGOT_PLT_STUB_F) {
+			printf("Setting breakpoint on %#lx\n", got_addr);
+			res = shiva_trace_set_breakpoint(ctx, (void *)&pltgot_handler,
+		    	    0, NULL, &error);
+			if (res == false) {
+				printf("shiva_trace_set_breakpoint() failed %#lx\n", got_addr);
+				return -1;
+			}
+		}
+	}
 	return 0;
 }
 
