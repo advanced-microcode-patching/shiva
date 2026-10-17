@@ -753,24 +753,34 @@ typedef enum shiva_trace_bp_type {
  * NOTE: Can ONLY be used from within a module callback/handler
  */
 #define SHIVA_TRACE_BP_STRUCT(bp, handler) { \
-	do {\
-		void *__ret = __builtin_return_address(0); \
-		struct shiva_addr_struct *addr;			\
-		TAILQ_FOREACH(bp, &handler->bp_tqlist, _linkage)  { \
-			if (bp->bp_type == SHIVA_TRACE_BP_TRAMPOLINE) \
-				break;	\
-			if (bp->bp_type == SHIVA_TRACE_BP_PLTGOT) { \
-				TAILQ_FOREACH(addr, &bp->retaddr_list, _linkage) { \
-					if ((void *)addr->addr == __ret)	\
-						break;	\
-				}	\
-			}	\
-			if ((void *)bp->callsite_retaddr == __ret)	\
-				break;	\
-		} \
-	} while(0); \
+    do { \
+        void *__ret = __builtin_return_address(0); \
+        struct shiva_addr_struct *addr; \
+        int found = 0; \
+        TAILQ_FOREACH(bp, &handler->bp_tqlist, _linkage) { \
+            if (bp->bp_type == SHIVA_TRACE_BP_TRAMPOLINE) { \
+                found = 1; \
+                break; \
+            } \
+            if (bp->bp_type == SHIVA_TRACE_BP_PLTGOT) { \
+                TAILQ_FOREACH(addr, &bp->retaddr_list, _linkage) { \
+                    if ((void *)addr->addr == __ret) { \
+                        found = 1; \
+                        break; \
+                    } \
+                } \
+                if (found) \
+                    break; \
+            } \
+            if ((void *)bp->callsite_retaddr == __ret) { \
+                found = 1; \
+                break; \
+            } \
+        } \
+        if (!found) \
+            bp = NULL; \
+    } while (0); \
 }
-
 /*
  * A necessary longjmp from a trap handler back to the
  * instruction that was trapped on. We must reset the

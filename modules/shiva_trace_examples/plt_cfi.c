@@ -1,11 +1,5 @@
-/*
- * This module demonstrates the pltgot hooking mechanism.
- * The symbol 'puts@plt' is hijacked via the GOT pointer
- * and redirected to (*n_puts)() handler. This is does using
- * the Shiva trace API.
- */
-
-#include "../shiva.h"
+#include "shiva.h"
+#include "shiva_module.h"
 
 /*
  * This function services all PLT calls, and enforces
@@ -69,7 +63,7 @@ int plt_handler(void *arg)
 
 
 int
-shakti_main(shiva_ctx_t *ctx)
+shiva_init(shiva_ctx_t *ctx)
 {
 	bool res;
 	shiva_error_t error;
@@ -96,8 +90,10 @@ shakti_main(shiva_ctx_t *ctx)
 		 * libelfmaster will assign the PLT symbol name "PLT-0" for the
 		 * PLT-0 entry in the .plt section.
 		 */
+		printf("plt_entry.symname: %s\n", plt_entry.symname);
 		if (strcmp(plt_entry.symname, "PLT-0") == 0)
 			continue;
+		printf("setting breakpoint\n");
 		res = shiva_trace_set_breakpoint(ctx, (void *)&plt_handler,
 		    0, plt_entry.symname, &error);
 		if (res == false) {

@@ -319,9 +319,10 @@ shiva_trace_set_handlers_valid_plt_retaddrs(struct shiva_ctx *ctx, struct shiva_
 	TAILQ_FOREACH(branch_site, &ctx->tailq.branch_tqlist, _linkage) {
 		char *p;
 		size_t copy_len;
-		if (strstr(branch_site->symbol.name, "@plt") == NULL)
-			continue;
+
 		if (branch_site->branch_type != SHIVA_BRANCH_CALL)
+			continue;
+		if (strstr(branch_site->symbol.name, "@plt") == NULL)
 			continue;
 		p = strchr(branch_site->symbol.name, '@');
 		copy_len = p - branch_site->symbol.name;
@@ -353,7 +354,7 @@ shiva_trace_set_handlers_valid_plt_retaddrs(struct shiva_ctx *ctx, struct shiva_
 
 static bool
 shiva_trace_patch_bp_addr(struct shiva_ctx *ctx, unsigned int type, uint64_t addr,
-    char *symname, void * (*handler_fn)(void *))
+    char *symname, void * (*handler_fn)(void *), uint64_t *orig_value)
 {
 	bool valid_address = false;
 	int i;
@@ -378,9 +379,8 @@ shiva_trace_patch_bp_addr(struct shiva_ctx *ctx, unsigned int type, uint64_t add
 				if (symname == NULL) {
 					if (RUNTIME_BASE(pltgot_entry.offset) == addr) {
 						valid_address = true;
-						printf("Patching GOT at %#lx with %p\n", addr, handler_fn);
 						gotptr = (uint64_t *)addr;
-						printf("gotptr contains value: %#lx\n", *(uint64_t *)gotptr);
+						*orig_value = *(uint64_t *)gotptr;
 						if (mprotect(gotptr, 4096, PROT_READ|PROT_WRITE) != 0) {
 							shiva_debug("mprotect failed\n");
 							return false;
@@ -395,9 +395,9 @@ shiva_trace_patch_bp_addr(struct shiva_ctx *ctx, unsigned int type, uint64_t add
 							continue;
 						if (rel.offset == pltgot_entry.offset) {
 							gotptr = (uint64_t *)RUNTIME_BASE(pltgot_entry.offset);
+							*orig_value = *(uint64_t *)addr;
 							mprotect(gotptr, 4096, PROT_READ|PROT_WRITE);
 							*(uint64_t *)gotptr = (uintptr_t)handler_fn;
-							printf("Patching symbol: %s\n", rel.symname);
 							valid_address = true;
 							break;
 						}
@@ -549,6 +549,8 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 			case SHIVA_TRACE_BP_PLTGOT:
 				if (option == NULL) {
 					struct elf_symbol dsym;
+					uint64_t o_target;
+
 					shiva_debug("setting PLTGOT breakpoint by address: %#lx\n", bp_addr);
 					/*
 					 * If option == NULL, then we are setting a PLTGOT breakpoint by the GOT address
@@ -563,7 +565,6 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 							continue;
 						if (RUNTIME_BASE(rel.offset) != bp_addr)
 							continue;
-						printf("rel.symname: %s\n", rel.symname);
 						symname = rel.symname;
 						break;
 					}
@@ -574,7 +575,9 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					}
 					shiva_debug("symname for PLTGOT address: %s\n", symname);
 					shiva_debug("calling shiva_trace_patch_bp_addr()\n");
-					if (shiva_trace_patch_bp_addr(ctx, SHIVA_TRACE_BP_PLTGOT, bp_addr, NULL, handler_fn) == false) {
+
+					if (shiva_trace_patch_bp_addr(ctx, SHIVA_TRACE_BP_PLTGOT, bp_addr, NULL,
+					    handler_fn, &o_target) == false) {
 						shiva_error_set(error, "%#lx is an invalid pltgot breakpoint address\n", bp_addr);
 						return false;
 					}
@@ -587,8 +590,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					}
 					bp->bp_type = SHIVA_TRACE_BP_PLTGOT;
 					bp->bp_addr = bp_addr;
-					bp->o_target = RUNTIME_BASE(*(uint64_t *)bp_addr); // save original GOT value
-
+					bp->o_target = o_target; // save original GOT value
 					shiva_debug("elf_symbol_by_name: %s\n", symname);
 					if (elf_symbol_by_name(&ctx->elfobj, symname, &dsym) == false) {
 						shiva_error_set(error, "elf_symbol_by_name() failed on %s\n", symname);
@@ -604,10 +606,13 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					 * in 'char *option' which should be a symbol name from .dynsym that corresponds
 					 * to a JUMPSLOT relocation record (GOT entry).
 					 */
+					uint64_t o_target;
 					struct elf_symbol dsym;
 					shiva_debug("setting pltgot breakpoint by name: %s\n", symname);
 					symname = option;
-					if (shiva_trace_patch_bp_addr(ctx, SHIVA_TRACE_BP_PLTGOT, 0, symname, handler_fn) == false) {
+
+					if (shiva_trace_patch_bp_addr(ctx, SHIVA_TRACE_BP_PLTGOT, 0, symname,
+					    handler_fn, &o_target) == false) {
 						shiva_error_set(error, "%#lx is an invalid pltgot breakpoint symbol: %s\n", symname);
 						return false;
 					}
@@ -621,7 +626,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					 * SET bp_addr
 					 */
 					bp->bp_type = SHIVA_TRACE_BP_PLTGOT;
-					bp->o_target = RUNTIME_BASE(*(uint64_t *)bp_addr); // save original GOT value
+					bp->o_target = o_target; // save original GOT value
 					/*
 					 * TODO Set bp->bp_addr
 					 */
