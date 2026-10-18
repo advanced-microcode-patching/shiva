@@ -48,13 +48,24 @@ void * pltgot_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6
 void *
 callsite_handler(void *arg)
 {
-	shiva_trace_getregs_x86_64(&ctx_global->regs.regset_x86_64);
+	void *entry_rsp;
+	__asm__ __volatile__("mov %%rsp, %0" : "=r"(entry_rsp));
 	struct shiva_ctx *ctx = ctx_global;
 	void *retaddr = __builtin_return_address(0);
 	void *frmaddr = __builtin_frame_address(1);
 	struct shiva_trace_handler *handler;
 	struct shiva_trace_bp *bp;
 	uint64_t o_target;
+	shiva_trace_jumpbuf_t jmpbuf;
+
+	shiva_trace_setjmp_x86_64(&jmpbuf);
+	shiva_trace_getregs_x86_64(&ctx->regs.regset_x86_64);
+	/*
+	 * Fixup registers clobbered by getregs
+	 * */
+	ctx->regs.regset_x86_64.rbp = (uint64_t)__builtin_frame_address(1);
+	ctx->regs.regset_x86_64.rip = (uint64_t)retaddr - 5;
+	ctx->regs.regset_x86_64.rdi = (uint64_t)arg;
 
 	handler = shiva_trace_find_handler(ctx, &callsite_handler);
 	if (handler == NULL) {
@@ -66,7 +77,11 @@ callsite_handler(void *arg)
 	 * "SHIVA_TRACE_BP_CALL" that triggered our handler.
 	 */
 	SHIVA_TRACE_BP_STRUCT(bp, handler);
-	printf("[CALL] %s@%#lx)\n", bp->call_target_symname, bp->bp_addr);
+	if (strncmp(bp->call_target_symname, "fn_0x", 5) == 0) {
+		printf("[CALL] %s\n", bp->call_target_symname);
+	} else {
+		printf("[CALL] %s@%#lx\n", bp->call_target_symname, RUNTIME_BASE(bp->symbol.value));
+	}
 	fflush(stdout);
 	SHIVA_TRACE_CALL_ORIGINAL(bp);
 }
@@ -119,8 +134,9 @@ shiva_init(shiva_ctx_t *ctx)
 	 */
 	shiva_callsite_iterator_init(ctx, &call_iter);
 	while (shiva_callsite_iterator_next(&call_iter, &branch) == ELF_ITER_OK) {
-		if (branch.branch_flags & SHIVA_BRANCH_F_PLTCALL)
+		if (branch.branch_flags & SHIVA_BRANCH_F_PLTCALL) // ignore this case we handle it later with PLTGOT breakpoints
 			continue;
+		printf("Setting breakpoint on %s\n", branch.symbol.name);
 		res = shiva_trace_set_breakpoint(ctx, (void *)&callsite_handler,
 		    RUNTIME_BASE(branch.branch_site), NULL, &error);
 		if (res == false) {
@@ -135,7 +151,7 @@ shiva_init(shiva_ctx_t *ctx)
 
 		if (pltgot_entry.flags & ELF_PLTGOT_PLT_STUB_F) {
 			res = shiva_trace_set_breakpoint(ctx, (void *)&pltgot_handler,
-		    	    got_addr, NULL, &error);
+			    got_addr, NULL, &error);
 			if (res == false) {
 				printf("shiva_trace_set_breakpoint() failed %#lx\n", got_addr);
 				return -1;

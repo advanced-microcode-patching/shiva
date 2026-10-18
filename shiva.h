@@ -727,6 +727,28 @@ bool shiva_proc_duplicate_image(shiva_ctx_t *ctx);
                (void *)ctx_global->regs.regset_x86_64.r10);	\
     } while(0); \
 }
+
+/*
+ * This version of the macro doesn't have the return
+ * statement. It simply calls o_func, without the return o_func
+ * like in the original macro above. Sometimes we need this
+ * because we want to use a longjmp to get back to our original
+ * target.
+ */
+#define SHIVA_TRACE_CALL_ORIGINAL_NO_RETURN(bp) { \
+    do {\
+        void * (*o_func)(void *, void *, void *, void *, \
+                 void *, void *, void *);	\
+        o_func = (void *)bp->o_target;				\
+        o_func((void *)ctx_global->regs.regset_x86_64.rdi,	\
+               (void *)ctx_global->regs.regset_x86_64.rsi,	\
+               (void *)ctx_global->regs.regset_x86_64.rdx,	\
+               (void *)ctx_global->regs.regset_x86_64.rcx,	\
+               (void *)ctx_global->regs.regset_x86_64.r8,	\
+               (void *)ctx_global->regs.regset_x86_64.r9,	\
+               (void *)ctx_global->regs.regset_x86_64.r10);	\
+    } while(0); \
+}
 #elif defined(__aarch64__)
 #define SHIVA_TRACE_CALL_ORIGINAL(bp) { \
     do {\
