@@ -2505,6 +2505,9 @@ analyze_binary(struct shiva_prelink_ctx *ctx)
 			tmp->branch_type = SHIVA_BRANCH_CALL;
 			tmp->branch_site = call_site;
 			tmp->branch_flags |= SHIVA_BRANCH_F_DST_SYMINFO;
+			if (tmp->o_insn[0] == 0xe8) {
+				tmp->branch_flags |= SHIVA_BRANCH_F_IMMEDIATE;
+			}
 			tmp->insn_string = get_shiva_strtab_offset(ctx);
 			char *tmp_str = shiva_xfmtstrdup("%s %s", ctx->disas.insn->mnemonic,
 			    ctx->disas.insn->op_str);

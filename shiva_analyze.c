@@ -797,6 +797,7 @@ shiva_analyze_call(struct shiva_ctx *ctx, struct elf_section text, bool *res)
 		tmp->branch_site = call_site;
 		tmp->branch_flags |= SHIVA_BRANCH_F_DST_SYMINFO;
 		if (tmp->o_insn[0] == 0xe8) {
+			shiva_debug("SHIVA_BRANCH_F_IMMEDIATE flag set on call to %#lx\n", call_addr);
 			tmp->branch_flags |= SHIVA_BRANCH_F_IMMEDIATE; // this is a relative call with immediate neocding
 		}
 		tmp->insn_string = shiva_xfmtstrdup("%s %s",

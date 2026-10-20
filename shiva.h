@@ -749,12 +749,12 @@ bool shiva_proc_duplicate_image(shiva_ctx_t *ctx);
                (void *)ctx_global->regs.regset_x86_64.r10);	\
     } while(0); \
 }
-#define SHIVA_TRACE_CALL_ORIGINAL_ARGS_NO_RETURN(bp, a1, a2, a3, a4, a5, a6, a7) { \
+#define SHIVA_TRACE_CALL_ORIGINAL_ARGS_NO_RETURN(bp, a1, a2, a3, a4, a5, a6, a7, retval) { \
     do { \
         void *(*o_func)(void *, void *, void *, void *, \
                 void *, void *, void *); \
         o_func = (void *)(bp)->o_target; \
-        o_func((void *)(a1), (void *)(a2), (void *)(a3), \
+        (retval) = o_func((void *)(a1), (void *)(a2), (void *)(a3), \
                   (void *)(a4), (void *)(a5), (void *)(a6), \
                   (void *)(a7)); \
     } while(0); \
@@ -861,6 +861,18 @@ typedef enum shiva_trace_bp_type {
 				"or %rdx, 0x100\n\t"	\
 				"push %rdx\n\t"	\
 				"popfq");
+/*
+ * We generally use these macros from a Shiva trace handler, and
+ * when we backup RBP it's generally after the handlers prologue
+ * has modified rbp. So instead of doing mov %rbp, %0, which would
+ * get the new handlers rbp, we want the old one at (%%rbp) on
+ * saved on the stack.
+ */
+#define SHIVA_TRACE_SAVE_RBP(var) \
+	__asm__ __volatile__("mov (%%rbp), %0" : "=r"(var))
+
+#define SHIVA_TRACE_RESTORE_RBP(var) \
+	 __asm__ __volatile__("mov %0, (%%rbp)" : : "r"(var))
 
 #endif
 

@@ -26,6 +26,10 @@ void * pltgot_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6
 	struct shiva_ctx *ctx = ctx_global;
 	struct shiva_trace_bp *bp;
 	struct shiva_trace_handler *handler;
+	uint64_t saved_rbp;
+	void *ret;
+
+	SHIVA_TRACE_SAVE_RBP(saved_rbp);
 
 	handler = shiva_trace_find_handler(ctx, &pltgot_handler);
 	if (handler == NULL) {
@@ -37,9 +41,19 @@ void * pltgot_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6
 	 * that triggered our pltgot_handler()
 	 */
 	SHIVA_TRACE_BP_STRUCT(bp, handler);
+	/*
+	 * Display name of function and GOT address and value
+	 */
 	printf("[CALL] %s@plt (GOT address: %#lx GOT value %#lx)\n",
 	    bp->symbol.name, bp->bp_addr, bp->o_target);
-	SHIVA_TRACE_CALL_ORIGINAL_ARGS(bp, r1, r2, r3, r4, r5, r6, r7);
+
+	/*
+	 * Call the original function without returning right away. Explicitly
+	 * set the args.
+	 */
+	SHIVA_TRACE_CALL_ORIGINAL_ARGS_NO_RETURN(bp, r1, r2, r3, r4, r5, r6, r7, ret);
+	SHIVA_TRACE_RESTORE_RBP(saved_rbp);
+	return ret;
 }
 /*
  * Handles hooked callsites. The SHIVA_TRACE_BP_CALL breakpoint type
@@ -55,8 +69,11 @@ callsite_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6, voi
 	struct shiva_trace_handler *handler;
 	struct shiva_trace_bp *bp;
 	uint64_t o_target;
-	shiva_trace_jumpbuf_t jmpbuf;
 	static size_t iter = 0;
+	void *ret;
+	uint64_t saved_rbp;
+
+	SHIVA_TRACE_SAVE_RBP(saved_rbp);
 
 	handler = shiva_trace_find_handler(ctx, &callsite_handler);
 	if (handler == NULL) {
@@ -74,10 +91,12 @@ callsite_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6, voi
 		printf("[CALL] %s@%#lx\n", bp->call_target_symname, RUNTIME_BASE(bp->symbol.value));
 	}
 
-	SHIVA_TRACE_CALL_ORIGINAL_ARGS_NO_RETURN(bp, r1, r2, r3, r4, r5, r6, r7);
+	SHIVA_TRACE_CALL_ORIGINAL_ARGS_NO_RETURN(bp, r1, r2, r3, r4, r5, r6, r7, ret);
 	if (iter++ == call_count - 1) {
 		exit(0);
 	}
+	SHIVA_TRACE_RESTORE_RBP(saved_rbp);
+	return ret;
 }
 
 int
@@ -89,6 +108,7 @@ shiva_init(shiva_ctx_t *ctx)
 	struct shiva_branch_site branch;
 	elf_pltgot_iterator_t pltgot_iter;
 	struct elf_pltgot_entry pltgot_entry;
+	struct elf_section shdr;
 
 	res = shiva_trace(ctx, 0, SHIVA_TRACE_OP_ATTACH,
 	    NULL, NULL, 0, &error);
@@ -107,7 +127,6 @@ shiva_init(shiva_ctx_t *ctx)
 		    shiva_error_msg(&error));
 		return -1;
 	}
-
 	/*
 	 * Fast breakpoints that hook the PLTGOT directly
 	 * and setup a handler, rather than use standard int3.
@@ -117,6 +136,10 @@ shiva_init(shiva_ctx_t *ctx)
 	if (res == false) {
 		printf("shiva_trace_register_handler failed: %s\n",
 		    shiva_error_msg(&error));
+		return -1;
+	}
+	if (elf_section_by_name(&ctx->elfobj, ".text", &shdr) == false) {
+		fprintf(stderr, "elf_section_by_name() on .text failed\n");
 		return -1;
 	}
 	/*
@@ -130,6 +153,17 @@ shiva_init(shiva_ctx_t *ctx)
 			continue;
 		if (branch.branch_flags & SHIVA_BRANCH_F_PLTCALL)
 			continue;
+		/*
+		 * Confirm this function exists in the .text section. There are times when libelfmaster
+		 * reconstructs some functions from PT_GNU_EH_FRAME, such as __cxa_finalize, that might
+		 * appear to be regular function calls, but they are not. Let's ignore those.
+		 */
+		if (branch.symbol.value < shdr.address || branch.symbol.value >= shdr.address + shdr.size)
+			continue;
+	
+		/*
+		 * Count how many calls we hook/breakpoint
+		 */
 		call_count++;
 		res = shiva_trace_set_breakpoint(ctx, (void *)&callsite_handler,
 		    RUNTIME_BASE(branch.branch_site), NULL, &error);
@@ -144,7 +178,6 @@ shiva_init(shiva_ctx_t *ctx)
 		uint64_t got_addr = RUNTIME_BASE(pltgot_entry.offset);
 
 		if (pltgot_entry.flags & ELF_PLTGOT_PLT_STUB_F) {
-			printf("Setting pltgot breakpoint; %#lx\n", pltgot_entry.offset);
 			res = shiva_trace_set_breakpoint(ctx, (void *)&pltgot_handler,
 			    got_addr, NULL, &error);
 			if (res == false) {
