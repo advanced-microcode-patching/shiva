@@ -74,6 +74,31 @@ shiva_trace_setregs_x86_64(struct shiva_trace_regset_x86_64 *regs)
 	);
 }
 
+void __attribute__((naked))
+shiva_trace_setregs_x86_64_rip(struct shiva_trace_regset_x86_64 *regs, uint64_t rip)
+{
+    __asm__ __volatile__(
+        "movq %rsi, %r11\n\t"		/* MUST be first — save the argument */
+        "movq 136(%rdi), %rax\n\t"
+        "pushq %rax\n\t"
+        "popfq\n\t"
+        "movq 0(%rdi), %rax\n\t"
+        "movq 8(%rdi), %rbx\n\t"
+        "movq 16(%rdi), %rcx\n\t"
+        "movq 24(%rdi), %rdx\n\t"
+        "movq 32(%rdi), %rsi\n\t"	/* safe to clobber %rsi now */
+        "movq 48(%rdi), %rbp\n\t"
+        "movq 72(%rdi), %r8\n\t"
+        "movq 80(%rdi), %r9\n\t"
+        "movq 88(%rdi), %r10\n\t"
+        "movq 104(%rdi), %r12\n\t"
+        "movq 112(%rdi), %r13\n\t"
+        "movq 120(%rdi), %r14\n\t"
+        "movq 128(%rdi), %r15\n\t"
+        "movq 56(%rdi), %rsp\n\t"
+        "jmp *%r11\n\t"			/* jump to the stashed RIP */
+    );
+}
 
 /*
  * This is primarily designed for handler functions. This will save the state
