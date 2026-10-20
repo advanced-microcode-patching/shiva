@@ -48,8 +48,6 @@ void * pltgot_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6
 void *
 callsite_handler(void *arg)
 {
-	void *entry_rsp;
-	__asm__ __volatile__("mov %%rsp, %0" : "=r"(entry_rsp));
 	struct shiva_ctx *ctx = ctx_global;
 	void *retaddr = __builtin_return_address(0);
 	void *frmaddr = __builtin_frame_address(1);
@@ -57,15 +55,6 @@ callsite_handler(void *arg)
 	struct shiva_trace_bp *bp;
 	uint64_t o_target;
 	shiva_trace_jumpbuf_t jmpbuf;
-
-	shiva_trace_setjmp_x86_64(&jmpbuf);
-	shiva_trace_getregs_x86_64(&ctx->regs.regset_x86_64);
-	/*
-	 * Fixup registers clobbered by getregs
-	 * */
-	ctx->regs.regset_x86_64.rbp = (uint64_t)__builtin_frame_address(1);
-	ctx->regs.regset_x86_64.rip = (uint64_t)retaddr - 5;
-	ctx->regs.regset_x86_64.rdi = (uint64_t)arg;
 
 	handler = shiva_trace_find_handler(ctx, &callsite_handler);
 	if (handler == NULL) {
