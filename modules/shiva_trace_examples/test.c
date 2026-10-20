@@ -15,9 +15,9 @@ static int ignore_me(void) // gASLR.o will not relocate static functions
 
 int main(void)
 {
-	printf("base address: %#lx\n", (unsigned long)&ignore_me & ~4095);
-	printf("main() is at %p\n", &main);
-	printf("test1() is at %p\n", &test1);
+	fprintf(stderr, "base address: %#lx\n", (unsigned long)&ignore_me & ~4095);
+	fprintf(stderr, "main() is at %p\n", &main);
+	fprintf(stderr, "test1() is at %p\n", &test1);
 	test1();
 }
 

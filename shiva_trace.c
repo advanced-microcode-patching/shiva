@@ -78,7 +78,7 @@ void __attribute__((naked))
 shiva_trace_setregs_x86_64_rip(struct shiva_trace_regset_x86_64 *regs, uint64_t rip)
 {
     __asm__ __volatile__(
-        "movq %rsi, %r11\n\t"		/* MUST be first — save the argument */
+        "movq %rsi, %r11\n\t"		/* save uint64_t rip */
         "movq 136(%rdi), %rax\n\t"
         "pushq %rax\n\t"
         "popfq\n\t"
@@ -86,7 +86,7 @@ shiva_trace_setregs_x86_64_rip(struct shiva_trace_regset_x86_64 *regs, uint64_t 
         "movq 8(%rdi), %rbx\n\t"
         "movq 16(%rdi), %rcx\n\t"
         "movq 24(%rdi), %rdx\n\t"
-        "movq 32(%rdi), %rsi\n\t"	/* safe to clobber %rsi now */
+        "movq 32(%rdi), %rsi\n\t"
         "movq 48(%rdi), %rbp\n\t"
         "movq 72(%rdi), %r8\n\t"
         "movq 80(%rdi), %r9\n\t"
@@ -607,6 +607,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 						return false;
 					}
 					shiva_debug("allocating breakpoint struct\n");
+
 					bp = calloc(1, sizeof(*bp));
 					if (bp == NULL) {
 						shiva_error_set(error, "memory allocation failed: %s\n",
@@ -617,6 +618,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					bp->bp_addr = bp_addr;
 					bp->o_target = o_target; // save original GOT value
 					shiva_debug("elf_symbol_by_name: %s\n", symname);
+
 					if (elf_symbol_by_name(&ctx->elfobj, symname, &dsym) == false) {
 						shiva_error_set(error, "elf_symbol_by_name() failed on %s\n", symname);
 						free(bp);
@@ -633,7 +635,7 @@ shiva_trace_set_breakpoint(struct shiva_ctx *ctx, void * (*handler_fn)(void *),
 					 */
 					uint64_t o_target;
 					struct elf_symbol dsym;
-					shiva_debug("setting pltgot breakpoint by name: %s\n", symname);
+
 					symname = option;
 
 					if (shiva_trace_patch_bp_addr(ctx, SHIVA_TRACE_BP_PLTGOT, 0, symname,
