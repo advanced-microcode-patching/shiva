@@ -749,6 +749,28 @@ bool shiva_proc_duplicate_image(shiva_ctx_t *ctx);
                (void *)ctx_global->regs.regset_x86_64.r10);	\
     } while(0); \
 }
+#define SHIVA_TRACE_CALL_ORIGINAL_ARGS_NO_RETURN(bp, a1, a2, a3, a4, a5, a6, a7) { \
+    do { \
+        void *(*o_func)(void *, void *, void *, void *, \
+                void *, void *, void *); \
+        o_func = (void *)(bp)->o_target; \
+        o_func((void *)(a1), (void *)(a2), (void *)(a3), \
+                  (void *)(a4), (void *)(a5), (void *)(a6), \
+                  (void *)(a7)); \
+    } while(0); \
+}
+
+#define SHIVA_TRACE_CALL_ORIGINAL_ARGS(bp, a1, a2, a3, a4, a5, a6, a7) { \
+    do { \
+        void *(*o_func)(void *, void *, void *, void *, \
+                void *, void *, void *); \
+        o_func = (void *)(bp)->o_target; \
+        return o_func((void *)(a1), (void *)(a2), (void *)(a3), \
+                  (void *)(a4), (void *)(a5), (void *)(a6), \
+                  (void *)(a7)); \
+    } while(0); \
+}
+
 #elif defined(__aarch64__)
 #define SHIVA_TRACE_CALL_ORIGINAL(bp) { \
     do {\

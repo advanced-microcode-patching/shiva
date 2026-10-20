@@ -39,7 +39,7 @@ void * pltgot_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6
 	SHIVA_TRACE_BP_STRUCT(bp, handler);
 	printf("[CALL] %s@plt (GOT address: %#lx GOT value %#lx)\n",
 	    bp->symbol.name, bp->bp_addr, bp->o_target);
-	SHIVA_TRACE_CALL_ORIGINAL(bp);
+	SHIVA_TRACE_CALL_ORIGINAL_ARGS(bp, r1, r2, r3, r4, r5, r6, r7);
 }
 /*
  * Handles hooked callsites. The SHIVA_TRACE_BP_CALL breakpoint type
@@ -47,7 +47,7 @@ void * pltgot_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6
  * that we wil register (As shown in shiva_init).
  */
 void *
-callsite_handler(void *arg)
+callsite_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6, void *r7)
 {
 	struct shiva_ctx *ctx = ctx_global;
 	void *retaddr = __builtin_return_address(0);
@@ -73,7 +73,8 @@ callsite_handler(void *arg)
 	} else {
 		printf("[CALL] %s@%#lx\n", bp->call_target_symname, RUNTIME_BASE(bp->symbol.value));
 	}
-	SHIVA_TRACE_CALL_ORIGINAL_NO_RETURN(bp);
+
+	SHIVA_TRACE_CALL_ORIGINAL_ARGS_NO_RETURN(bp, r1, r2, r3, r4, r5, r6, r7);
 	if (iter++ == call_count - 1) {
 		exit(0);
 	}
