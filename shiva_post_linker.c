@@ -82,6 +82,7 @@ shiva_post_linker(void)
 	 * Mark the text segment as read-only now that there won't
 	 * be any final fixups in the modules .text.
 	 */
+
 	if (mprotect(ctx_global->module.runtime->text_mem,
 	    ELF_PAGEALIGN(ctx_global->module.runtime->text_size,
 	    PAGE_SIZE),
@@ -90,6 +91,7 @@ shiva_post_linker(void)
 		perror("mprotect");
 		exit(EXIT_FAILURE);
 	}
+
 #ifdef __x86_64__
 	if (ctx_global->flags & SHIVA_F_LOAD_MODULE_INIT) {
 		test_mark();

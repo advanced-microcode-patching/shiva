@@ -24,12 +24,12 @@ void * pltgot_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6
 {
 	shiva_trace_getregs_x86_64(&ctx_global->regs.regset_x86_64);
 	struct shiva_ctx *ctx = ctx_global;
-	struct shiva_trace_bp *bp;
+	struct shiva_trace_bp *bp = NULL;
 	struct shiva_trace_handler *handler;
 	uint64_t saved_rbp;
 	void *ret;
 
-	SHIVA_TRACE_SAVE_RBP(saved_rbp);
+	//SHIVA_TRACE_SAVE_RBP(saved_rbp);
 
 	handler = shiva_trace_find_handler(ctx, &pltgot_handler);
 	if (handler == NULL) {
@@ -41,6 +41,11 @@ void * pltgot_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6
 	 * that triggered our pltgot_handler()
 	 */
 	SHIVA_TRACE_BP_STRUCT(bp, handler);
+	if (bp == NULL) {
+		fprintf(stderr, "Unable to find breakpoint ptr\n");
+		exit(-1);
+	}
+	printf("bp: %p\n", bp);
 	/*
 	 * Display name of function and GOT address and value
 	 */
@@ -52,7 +57,7 @@ void * pltgot_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6
 	 * set the args.
 	 */
 	SHIVA_TRACE_CALL_ORIGINAL_ARGS_NO_RETURN(bp, r1, r2, r3, r4, r5, r6, r7, ret);
-	SHIVA_TRACE_RESTORE_RBP(saved_rbp);
+	//SHIVA_TRACE_RESTORE_RBP(saved_rbp);
 	return ret;
 }
 /*
@@ -73,7 +78,7 @@ callsite_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6, voi
 	void *ret;
 	uint64_t saved_rbp;
 
-	SHIVA_TRACE_SAVE_RBP(saved_rbp);
+	//SHIVA_TRACE_SAVE_RBP(saved_rbp);
 
 	handler = shiva_trace_find_handler(ctx, &callsite_handler);
 	if (handler == NULL) {
@@ -95,7 +100,7 @@ callsite_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6, voi
 	if (iter++ == call_count - 1) {
 		exit(0);
 	}
-	SHIVA_TRACE_RESTORE_RBP(saved_rbp);
+	//SHIVA_TRACE_RESTORE_RBP(saved_rbp);
 	return ret;
 }
 

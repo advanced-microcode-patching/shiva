@@ -17,7 +17,7 @@ int main(void)
 {
 	fprintf(stderr, "base address: %#lx\n", (unsigned long)&ignore_me & ~4095);
 	fprintf(stderr, "main() is at %p\n", &main);
-	fprintf(stderr, "test1() is at %p\n", &test1);
+	printf("test1() is at %p\n", &test1);
 	test1();
 }
 

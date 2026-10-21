@@ -78,25 +78,25 @@ void __attribute__((naked))
 shiva_trace_setregs_x86_64_rip(struct shiva_trace_regset_x86_64 *regs, uint64_t rip)
 {
     __asm__ __volatile__(
-        "movq %rsi, %r11\n\t"		/* save uint64_t rip */
-        "movq 136(%rdi), %rax\n\t"
-        "pushq %rax\n\t"
-        "popfq\n\t"
-        "movq 0(%rdi), %rax\n\t"
-        "movq 8(%rdi), %rbx\n\t"
-        "movq 16(%rdi), %rcx\n\t"
-        "movq 24(%rdi), %rdx\n\t"
-        "movq 32(%rdi), %rsi\n\t"
-        "movq 48(%rdi), %rbp\n\t"
-        "movq 72(%rdi), %r8\n\t"
-        "movq 80(%rdi), %r9\n\t"
-        "movq 88(%rdi), %r10\n\t"
-        "movq 104(%rdi), %r12\n\t"
-        "movq 112(%rdi), %r13\n\t"
-        "movq 120(%rdi), %r14\n\t"
-        "movq 128(%rdi), %r15\n\t"
-        "movq 56(%rdi), %rsp\n\t"
-        "jmp *%r11\n\t"			/* jump to the stashed RIP */
+	"movq %rsi, %r11\n\t"		/* save uint64_t rip */
+	"movq 136(%rdi), %rax\n\t"
+	"pushq %rax\n\t"
+	"popfq\n\t"
+	"movq 0(%rdi), %rax\n\t"
+	"movq 8(%rdi), %rbx\n\t"
+	"movq 16(%rdi), %rcx\n\t"
+	"movq 24(%rdi), %rdx\n\t"
+	"movq 32(%rdi), %rsi\n\t"
+	"movq 48(%rdi), %rbp\n\t"
+	"movq 72(%rdi), %r8\n\t"
+	"movq 80(%rdi), %r9\n\t"
+	"movq 88(%rdi), %r10\n\t"
+	"movq 104(%rdi), %r12\n\t"
+	"movq 112(%rdi), %r13\n\t"
+	"movq 120(%rdi), %r14\n\t"
+	"movq 128(%rdi), %r15\n\t"
+	"movq 56(%rdi), %rsp\n\t"
+	"jmp *%r11\n\t"			/* jump to the stashed RIP */
     );
 }
 
@@ -163,6 +163,53 @@ shiva_trace_base_addr(struct shiva_ctx *ctx)
 	return ctx->ulexec.base_vaddr;
 }
 
+bool
+shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
+    const void *src, size_t len, shiva_error_t *error)
+{
+    uint8_t *s = (uint8_t *)src;
+    uint8_t *d = (uint8_t *)dst;
+    uint64_t addr = (uint64_t)dst;
+    uint64_t end = addr + len;
+    uint64_t page;
+    int ret, o_prot;
+    size_t chunk;
+
+    if (len == 0)
+        return true;
+
+    for (page = ELF_PAGESTART(addr); page < end; page += PAGE_SIZE) {
+        uint64_t page_end = page + PAGE_SIZE;
+        uint64_t chunk_start = addr > page ? addr : page;
+        uint64_t chunk_end   = end < page_end ? end : page_end;
+
+        chunk = chunk_end - chunk_start;
+
+        if (shiva_maps_prot_by_addr(ctx, page, &o_prot) == false) {
+            shiva_error_set(error, "shiva_trace_write pid(%d) at %#lx failed: "
+                "cannot find memory protection\n", pid, page);
+            return false;
+        }
+
+        ret = mprotect((void *)page, PAGE_SIZE, o_prot | PROT_WRITE);
+        if (ret < 0) {
+            shiva_error_set(error, "poke pid (%d) at %#lx failed: "
+                "mprotect failure: %s\n", pid, page, strerror(errno));
+            return false;
+        }
+
+        memcpy((void *)chunk_start, s + (chunk_start - addr), chunk);
+
+        ret = mprotect((void *)page, PAGE_SIZE, o_prot);
+        if (ret < 0) {
+            shiva_error_set(error, "shiva_trace_write pid(%d) at %#lx failed: "
+                "mprotect failure: %s\n", pid, page, strerror(errno));
+            return false;
+        }
+    }
+    return true;
+}
+#if 0
 /*
  * This function is a wrapper around shiva_trace_op_poke
  */
@@ -170,10 +217,10 @@ bool
 shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
     const void *src, size_t len, shiva_error_t *error)
 {
-	size_t aligned_len;
 	uint8_t *s = (uint8_t *)src;
 	uint8_t *d = (uint8_t *)dst;
 	uint64_t aligned_vaddr;
+	size_t aligned_len;
 	uint64_t addr = (uint64_t)dst;
 	int ret, o_prot;
 
@@ -187,6 +234,7 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 	if (addr + len > aligned_vaddr + aligned_len) {
 		aligned_len += PAGE_SIZE;
 	}
+	printf("aligned_vaddr %d len: %d\n", aligned_vaddr, aligned_len);
 	/*
 	 * Make virtual address writable if it is not.
 	 */
@@ -212,6 +260,7 @@ shiva_trace_write(struct shiva_ctx *ctx, pid_t pid, void *dst,
 	}
 	return true;
 }
+#endif
 
 struct shiva_trace_handler *
 shiva_trace_find_handler(struct shiva_ctx *ctx, void *handler)
@@ -271,6 +320,8 @@ shiva_trace_disable_jumpslot_record(struct shiva_ctx *ctx, struct shiva_trace_bp
 	struct elf_symbol symbol;
 	size_t jmprel_count = 0;
 	size_t i;
+	bool found = false;
+	size_t new_count;
 
 	if (elf_section_by_name(&ctx->elfobj, ".rela.plt", &rela_plt) == false) {
 		shiva_error_set(error, "unable to find .rela.plt section\n");
@@ -288,35 +339,42 @@ shiva_trace_disable_jumpslot_record(struct shiva_ctx *ctx, struct shiva_trace_bp
 	 * in memory, as pointed to by the dynamic tag: DT_JMPREL .
 	 * If jmprel == NULL then allocate one on the heap.
 	 */
-	if (ctx->altrelocs.jmprel == NULL)
+	if (ctx->altrelocs.jmprel == NULL) {
 		ctx->altrelocs.jmprel = shiva_malloc(rela_plt.size);
-	for (i = 0, jmprel_count = 0; i < rela_plt.size / rela_plt.entsize; i++) {
+		new_count = rela_plt.size / rela_plt.entsize;
+	} else {
+		rela_plt_ptr = ctx->altrelocs.jmprel;
+		new_count = ctx->altrelocs.jmprel_count;
+	}
+
+	for (i = 0; i < new_count; i++) {
 		if (ELF64_R_TYPE(rela_plt_ptr[i].r_info) != R_X86_64_JUMP_SLOT)
 			continue;
+
 		if (elf_symbol_by_index(&ctx->elfobj,
 		    ELF64_R_SYM(rela_plt_ptr[i].r_info),
-		    &symbol,
-		    SHT_DYNSYM) == true) {
-			if (strcmp(symbol.name, symname) == 0) {
-				memcpy(&bp->symbol, &symbol, sizeof(symbol));
-				bp->symbol_location = true;
-				continue;
-			} else {
-				memcpy(ctx->altrelocs.jmprel + jmprel_count,
-				    &rela_plt_ptr[i], sizeof(Elf64_Rela));
-				jmprel_count++;
-			}
-		} else {
+		    &symbol, SHT_DYNSYM) == false) {
 			shiva_error_set(error, "unable to find dynamic symbol index: %d\n",
 			    ELF64_R_SYM(rela_plt_ptr[i].r_info));
 			return false;
 		}
+		if (strcmp(symbol.name, symname) == 0) {
+			memcpy(&bp->symbol, &symbol, sizeof(symbol));
+			bp->symbol_location = true;
+			continue;
+		}
+		memcpy((Elf64_Rela *)ctx->altrelocs.jmprel + jmprel_count,
+		    &rela_plt_ptr[i], sizeof(Elf64_Rela));
+		jmprel_count++;
+		ctx->altrelocs.jmprel_count = jmprel_count;
 	}
+
 	if (jmprel_count >= rela_plt.size / rela_plt.entsize) {
-		shiva_error_set(error, "unable to properly de-activate relocation record"
-		    " '%s'\n", symname);
+		shiva_error_set(error, "error in de-activating relocation record '%s'\n",
+		    symname);
 		return false;
 	}
+
 	shiva_debug("Setting DT_JMPREL to %#lx - %#lx = %#lx\n",
 	    (uint64_t) ctx->altrelocs.jmprel, ctx->ulexec.base_vaddr,
 	    (uint64_t) ctx->altrelocs.jmprel - ctx->ulexec.base_vaddr);
@@ -370,7 +428,9 @@ shiva_trace_set_handlers_valid_plt_retaddrs(struct shiva_ctx *ctx, struct shiva_
 			 * FIXME: We cannot use an hcreate cache because there's
 			 * some incompatibility when using it cross module
 			 * execution. Due most likely to hcreate_r() using TLS
-			 * before libc has set it up. Do more experimentation
+			 * before libc has set it up. Although it would be compatible
+			 * with any Shiva modules that are SHIVA_MODULE_POST_LDSO (Meaning
+			 * they run after ld-linux.so and therefore after glibc initialization
 			 */
 		}
 	}
@@ -386,6 +446,8 @@ shiva_trace_patch_bp_addr(struct shiva_ctx *ctx, unsigned int type, uint64_t add
 	elf_relocation_iterator_t rel_iter;
 	struct elf_relocation rel;
 	uint64_t *gotptr = NULL;
+	uint64_t page;
+	int o_prot;
 
 	if (type == SHIVA_TRACE_BP_PLTGOT) {
 		elf_pltgot_iterator_t pltgot_iter;
@@ -406,7 +468,12 @@ shiva_trace_patch_bp_addr(struct shiva_ctx *ctx, unsigned int type, uint64_t add
 						valid_address = true;
 						gotptr = (uint64_t *)addr;
 						*orig_value = *(uint64_t *)gotptr;
-						if (mprotect(gotptr, 4096, PROT_READ|PROT_WRITE) != 0) {
+						page = ELF_PAGESTART((uint64_t)gotptr);
+						if (shiva_maps_prot_by_addr(ctx, page, &o_prot) == false) {
+							shiva_debug("shiva_maps_prot_by_addr failed\n");
+							return false;
+						}		
+						if (mprotect((void *)page, 4096, o_prot|PROT_WRITE) != 0) {
 							shiva_debug("mprotect failed\n");
 							return false;
 						}
@@ -420,8 +487,13 @@ shiva_trace_patch_bp_addr(struct shiva_ctx *ctx, unsigned int type, uint64_t add
 							continue;
 						if (rel.offset == pltgot_entry.offset) {
 							gotptr = (uint64_t *)RUNTIME_BASE(pltgot_entry.offset);
+							page = ELF_PAGESTART((uint64_t)gotptr);
+							if (shiva_maps_prot_by_addr(ctx, page, &o_prot) == false) {
+								shiva_debug("shiva_maps_prot_by_addr failed\n");
+								return false;
+							}
 							*orig_value = *(uint64_t *)addr;
-							mprotect(gotptr, 4096, PROT_READ|PROT_WRITE);
+							mprotect((void *)page, 4096, o_prot|PROT_WRITE);
 							*(uint64_t *)gotptr = (uintptr_t)handler_fn;
 							valid_address = true;
 							break;
@@ -432,12 +504,12 @@ shiva_trace_patch_bp_addr(struct shiva_ctx *ctx, unsigned int type, uint64_t add
 		}
 	}
 	if (gotptr != NULL) {
-		if (mprotect(addr, 4096, PROT_READ) != 0) {
-			shiva_debug("mprotect failed\n");
-			return false;
+	 	page = ELF_PAGESTART((uint64_t)gotptr);
+    		if (mprotect((void *)page, PAGE_SIZE, o_prot) != 0) {
+        		shiva_debug("mprotect failed\n");
+        		return false;
 		}
 	}
-
 	return valid_address;
 }
 

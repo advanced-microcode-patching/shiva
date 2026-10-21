@@ -104,6 +104,8 @@ shiva_target_dynamic_set(struct shiva_ctx *ctx, uint64_t tag, uint64_t value)
 	uint64_t phdr_vaddr = ctx->ulexec.base_vaddr + elf_phoff(&ctx->elfobj);
 	Elf64_Phdr *phdr = (Elf64_Phdr *)phdr_vaddr;
 	Elf64_Dyn *dyn = NULL;
+	uint64_t page;
+	int o_prot;
 
 	for (i = 0; i < elf_segment_count(&ctx->elfobj); i++) {
 		if (phdr[i].p_type != PT_DYNAMIC)
@@ -120,9 +122,12 @@ shiva_target_dynamic_set(struct shiva_ctx *ctx, uint64_t tag, uint64_t value)
 	for (i = 0; dyn[i].d_tag != DT_NULL; i++) {
 		if (dyn[i].d_tag == tag) {
 			shiva_debug("Set dynamic tag %d: %#lx\n", dyn[i].d_tag, value);
-			(void) mprotect((void *)dyn, 4096, PROT_READ|PROT_WRITE);
+			page = ELF_PAGESTART((uint64_t)dyn);
+			if (shiva_maps_prot_by_addr(ctx, page, &o_prot) == false)
+				return false;
+			(void) mprotect((void *)page, 4096, o_prot|PROT_WRITE);
 			dyn[i].d_un.d_val = value;
-			(void) mprotect((void *)dyn, 4096, PROT_READ);
+			(void) mprotect((void *)page, 4096, o_prot);
 			return true;
 		}
 	}
