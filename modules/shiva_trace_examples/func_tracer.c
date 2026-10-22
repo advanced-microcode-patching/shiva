@@ -27,9 +27,17 @@ void * pltgot_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6
 	struct shiva_trace_bp *bp = NULL;
 	struct shiva_trace_handler *handler;
 	uint64_t saved_rbp;
+	void *retaddr = __builtin_return_address(0);
 	void *ret;
 
 	//SHIVA_TRACE_SAVE_RBP(saved_rbp);
+
+	/*
+	 * If this is a re-entrant call iside of a nested handler then return.
+	 */
+	if ((uintptr_t)retaddr >= 0x6000000 && (uintptr_t)retaddr < 0x7000000) {
+		return NULL;
+	}
 
 	handler = shiva_trace_find_handler(ctx, &pltgot_handler);
 	if (handler == NULL) {
@@ -42,10 +50,10 @@ void * pltgot_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6
 	 */
 	SHIVA_TRACE_BP_STRUCT(bp, handler);
 	if (bp == NULL) {
-		fprintf(stderr, "Unable to find breakpoint ptr\n");
+		fprintf(stderr, "ShivaTrace2: Fatal error. Unable to find breakpoint record\n");
+		fprintf(stderr, "No matching return address for %p\n", __builtin_return_address(0));
 		exit(-1);
 	}
-	printf("bp: %p\n", bp);
 	/*
 	 * Display name of function and GOT address and value
 	 */
@@ -86,10 +94,21 @@ callsite_handler(void *r1, void *r2, void *r3, void *r4, void *r5, void *r6, voi
 		exit(-1);
 	}
 	/*
+	 * If this is a re-entrant call iside of a nested handler return.
+	 */
+	if ((uintptr_t)retaddr >= 0x6000000 && (uintptr_t)retaddr < 0x7000000) {
+		return NULL;
+	}
+	/*
 	 * Get the breakpoint struct associated with the call-hook-breakpoint
 	 * "SHIVA_TRACE_BP_CALL" that triggered our handler.
 	 */
 	SHIVA_TRACE_BP_STRUCT(bp, handler);
+	if (bp == NULL) {
+		fprintf(stderr, "ShivaTrace: Fatal error. Unable to find breakpoint record\n");
+		exit(-1);
+	}
+
 	if (strncmp(bp->call_target_symname, "fn_0x", 5) == 0) {
 		printf("[CALL] %s\n", bp->call_target_symname);
 	} else {
